@@ -1,0 +1,391 @@
+<title>Domain 設計心法</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;800&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --bg:#F4F6F5; --surface:#FFFFFF; --ink:#18201E; --muted:#56655F; --line:#D5DDD9;
+  --accent:#0D6B5E; --accent-soft:#E1F0EC; --warn:#A34A12; --warn-soft:#FBEDE3;
+  --l1:#0D6B5E; --l2:#3F5BA8; --l3:#8A5A12;
+  --serif:"Noto Serif TC","Songti TC","PMingLiU",serif;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101614; --surface:#18201D; --ink:#E3EAE7; --muted:#9BAAA4; --line:#2C3834;
+    --accent:#4DC0AB; --accent-soft:#16302A; --warn:#F0A06B; --warn-soft:#33221A;
+    --l1:#4DC0AB; --l2:#8FA6F0; --l3:#E0B062; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#18201D; --ink:#E3EAE7; --muted:#9BAAA4; --line:#2C3834;
+  --accent:#4DC0AB; --accent-soft:#16302A; --warn:#F0A06B; --warn-soft:#33221A;
+  --l1:#4DC0AB; --l2:#8FA6F0; --l3:#E0B062; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.75;padding-inline:20px;padding-block:44px 72px}
+.wrap{max-width:980px;margin:0 auto;display:grid;gap:56px}
+h1,h2,h3{text-wrap:balance;margin:0;line-height:1.3}
+h1{font-family:var(--serif);font-weight:800;font-size:clamp(30px,5vw,46px);letter-spacing:.02em}
+h2{font-size:21px;font-weight:700}
+h3{font-size:16px;font-weight:700}
+p{margin:0}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.note{color:var(--muted);font-size:14px}
+section{display:grid;gap:18px}
+
+/* hero */
+.hero{display:grid;gap:18px}
+.thesis{font-family:var(--serif);font-weight:600;font-size:clamp(19px,2.6vw,24px);line-height:1.6;max-width:36em;border-left:4px solid var(--accent);padding-left:18px}
+.hero .note{max-width:60ch}
+
+/* problem */
+.drift{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.d{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:grid;gap:6px;align-content:start}
+.d .word{font-family:var(--serif);font-weight:800;font-size:22px}
+.d p{font-size:14px;color:var(--muted)}
+.d code{font-family:var(--mono);font-size:12.5px;color:var(--warn);background:var(--warn-soft);padding:1px 6px;border-radius:4px}
+
+/* beliefs */
+.beliefs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 28px}
+.b{display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:start}
+.b .n{font-family:var(--serif);font-weight:800;font-size:24px;color:var(--accent);line-height:1.2}
+.b h3{margin-bottom:4px}
+.b p{font-size:14.5px;color:var(--muted)}
+
+/* flow */
+.flow-scroll{overflow-x:auto}
+.flow{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));min-width:740px;gap:0}
+.f{padding:10px 12px;border-top:3px solid var(--ink)}
+.f + .f{border-left:1px solid var(--line)}
+.f .k{font-family:var(--mono);color:var(--muted);font-weight:700;font-size:13px}
+.f .t{font-weight:700}
+.bands{display:grid;grid-template-columns:4fr 1fr 1fr;gap:6px;min-width:740px;margin-top:6px}
+.band{font-size:12.5px;padding:5px 10px;border-radius:4px;font-weight:700}
+.b1{background:color-mix(in srgb,var(--l1) 12%,transparent);color:var(--l1)}
+.b2{background:color-mix(in srgb,var(--l2) 14%,transparent);color:var(--l2)}
+.b3{background:color-mix(in srgb,var(--l3) 14%,transparent);color:var(--l3)}
+
+/* phases */
+.phase{display:grid;grid-template-columns:260px 1fr;gap:28px;padding-block:26px;border-top:1px solid var(--line)}
+.phase:first-of-type{border-top:0}
+.ph-head{display:grid;gap:8px;align-content:start}
+.ph-num{font-family:var(--serif);font-weight:800;font-size:40px;line-height:1;color:var(--accent)}
+.ph-name{font-family:var(--serif);font-weight:800;font-size:22px}
+.ph-q{font-size:14px;color:var(--muted)}
+.ph-core{font-family:var(--serif);font-weight:600;font-size:17px;line-height:1.65;border-left:3px solid var(--accent);padding-left:12px;margin-top:6px}
+.ph-body{display:grid;gap:14px}
+.blk{display:grid;grid-template-columns:96px 1fr;gap:12px}
+.blk .lab{font-size:12.5px;letter-spacing:.06em;color:var(--muted);padding-top:2px}
+.blk ul{margin:0;padding-left:18px}
+.blk li{margin:2px 0}
+.blk.trap .lab{color:var(--warn)}
+.done{background:var(--accent-soft);border-radius:6px;padding:8px 12px}
+.roles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.role{font-size:14px}
+.role b{display:block;font-size:12.5px;color:var(--muted);font-weight:500;letter-spacing:.06em}
+
+/* rhythm */
+.rhythm{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 28px}
+.r h3{margin-bottom:4px}
+.r p{font-size:14.5px;color:var(--muted)}
+
+/* tables */
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:14.5px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:500;letter-spacing:.06em}
+td:first-child{font-weight:700;white-space:nowrap}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:1px}
+.summary td:nth-child(2){font-family:var(--serif);font-weight:600}
+
+.closing{font-family:var(--serif);font-weight:600;font-size:18px;text-align:left;border-top:2px solid var(--ink);padding-top:18px}
+
+.xlink{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:700;color:var(--accent);text-decoration:none;border:1px solid var(--accent);border-radius:999px;padding:5px 14px;background:var(--accent-soft);width:fit-content}
+.xlink:hover,.xlink:focus-visible{text-decoration:underline}
+footer a{color:var(--accent)}
+footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px}
+code{font-family:var(--mono);font-size:12.5px}
+
+
+/* ontology section */
+.onto-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 28px}
+.onto-grid h3{margin-bottom:4px}
+.onto-grid p{font-size:14.5px;color:var(--muted)}
+.defn{font-family:var(--serif);font-weight:600;font-size:17px;line-height:1.7;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:6px;padding:14px 18px;max-width:60em}
+.io{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.io > div{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-size:14px}
+.io b{display:block;font-size:12.5px;letter-spacing:.06em;color:var(--accent);margin-bottom:4px}
+.io .no b{color:var(--warn)}
+.chain{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13.5px}
+.chain span{border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--surface)}
+.chain .on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:700}
+.chain i{font-style:normal;color:var(--muted)}
+.ph-onto{font-size:13.5px;background:var(--accent-soft);color:var(--ink);border-radius:6px;padding:6px 10px;margin-top:4px}
+.ph-onto b{color:var(--accent)}
+@media (max-width:760px){.onto-grid,.io{grid-template-columns:1fr}}
+
+@media (max-width:760px){
+  .drift,.beliefs,.rhythm,.roles{grid-template-columns:1fr}
+  .phase{grid-template-columns:1fr;gap:14px}
+  .blk{grid-template-columns:1fr;gap:2px}
+}
+
+/* v2: main thread */
+.thread{display:grid;gap:10px;max-width:760px}
+.node{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:12px 16px}
+.node.edge{background:transparent;border-style:dashed}
+.node b{font-family:var(--serif);font-size:17px}
+.node p{font-size:14px;color:var(--muted)}
+.arrow{font-size:13.5px;color:var(--muted);padding-left:22px;border-left:2px solid var(--line);margin-left:18px}
+.arrow b{color:var(--ink)}
+.onto-box2{border:2px solid var(--accent);background:var(--accent-soft);border-radius:8px;padding:12px 16px;display:grid;gap:8px}
+.onto-box2 .lbl2{font-size:12.5px;font-weight:700;color:var(--accent);letter-spacing:.06em}
+.units{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.units span{background:var(--surface);border:1px solid var(--accent);border-radius:999px;padding:3px 12px;font-weight:700;font-size:14px}
+.units i{font-style:normal;color:var(--muted)}
+.ph-purpose{font-family:var(--serif);font-weight:600;font-size:17px;line-height:1.65;border-left:3px solid var(--accent);padding-left:12px}
+.ph-purpose small{display:block;font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--accent)}
+.sub{font-size:12.5px;font-weight:700;letter-spacing:.06em;color:var(--muted);margin-top:4px}
+</style>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Domain Design · 心法</div>
+  <h1>Domain 設計心法</h1>
+  <p class="thesis">把連續的現實，切成一個個意思唯一、說得清楚、經得起檢驗的單位個體，而且這些單位個體的意思，在變成資料表、API、畫面、AI 回答的過程中不會走樣。</p>
+  <p class="note">這頁講「為什麼這樣做」。每一步要交的文件與完成標準，見《團隊開發流程》（Domain 設計規範）；那些產出都是為了達成這裡的目的而存在。產出可以調整，目的不能丟。</p>
+  <a class="xlink" href="https://claude.ai/artifact/BTkJn9DNAbTQdKB98NL4xi" target="_blank" rel="noopener">看每一步的交付物與完成標準：六步開發流程 →</a>
+  <a class="xlink" href="https://claude.ai/artifact/YJ5RrTAownYBGb28tiR1tV" target="_blank" rel="noopener">一頁版：心法精華 →</a>
+</header>
+
+<section aria-labelledby="thread">
+  <h2 id="thread">主線：把連續的現實，切成系統能使用的單位個體</h2>
+  <p style="max-width:62ch">現實是<strong>連續</strong>的：一個人每天上班、請假、換店支援、離職又回來，沒有明確的格子。數位世界是<strong>離散</strong>的：系統只能記下一筆一筆的資料、一個一個的狀態。系統要能運作，就必須用一個個<strong>單位個體</strong>來描述現實。單位個體指的是系統裡可以被指認、可以被單獨記錄的一個東西：一個人、一段僱傭關係、一筆請假申請、一個班別。它不是度量用的「單位」（公斤、小時），而是有身分的個體，會被產生、改變、結束，也會和其他單位個體互動。Sean 說「一手為陰、一手為陽」：設計者負責把現實搬進數位世界。</p>
+  <p style="max-width:62ch">轉換最常出的錯，不是程式寫錯，而是<strong>單位個體切錯了</strong>：</p>
+  <div class="drift">
+    <div class="d"><span class="word">員工</span><p><b>兩個單位個體被合成一個</b>：有時指一個人，有時指一段僱傭關係。人離職再回來，系統就亂了。</p></div>
+    <div class="d"><span class="word">核准</span><p><b>一連串變化被壓成一個</b>：主管核准了，系統就當作請假已經發生。但員工後來根本沒請。</p></div>
+    <div class="d"><span class="word">完成</span><p><b>同一個字指不同的單位個體</b>：業務說簽約就完成，財務說收到錢才完成。系統只有一個 <code>status = done</code>。</p></div>
+  </div>
+  <p class="note" style="max-width:62ch">程式完全照規格執行，結果卻是錯的，因為規格切出來的單位個體本身就對不上現實。六個階段，就是這件轉換的六個環節：</p>
+  <div class="thread" aria-label="六個階段的主線">
+    <div class="node edge"><b>連續的現實</b></div>
+    <div class="arrow"><b>① 蒐集現實資訊</b>：把要處理的現實帶進來</div>
+    <div class="onto-box2">
+      <span class="lbl2">Ontology：現實在數位世界的單位個體系統</span>
+      <div class="units"><span>② 找出獨立單位個體</span><i>→</i><span>③ 描述單位個體的變化</span><i>→</i><span>④ 描述單位個體的限制</span></div>
+    </div>
+    <div class="arrow"><b>⑤ 放進技術載體</b>：用資料表、API 承載這些單位個體</div>
+    <div class="node"><b>離散的系統</b><p><b>⑥ 回到現實驗證</b>：切出來的單位個體，對得上現實嗎？</p></div>
+  </div>
+</section>
+
+<section aria-labelledby="onto">
+  <h2 id="onto">Ontology：現實在數位世界的單位個體系統</h2>
+  <div class="onto-grid">
+    <div><h3>它不是新東西</h3><p>Ontology 是軟體與知識工程裡既有的概念：描述一個領域有哪些概念、彼此什麼關係、有哪些約束。概念模型、領域模型、DDD 的通用語言都在做相近的事。我們整理 entity、relation、event、state，本來就是在做它。用主線來說，Ontology 就是 ②③④ 切出來的那套單位個體系統。</p></div>
+    <div><h3>這次要改變的是什麼</h3><p>以前這套單位個體系統隱含在 ERD、程式和資深同事腦中。現在把它<strong>明確導入設計過程</strong>，成為一份獨立、有版本、跨 domain 共用、人和 AI 都能檢查的東西。</p></div>
+  </div>
+  <p class="defn">一份凍結、有版本的單位個體定義集：有哪些單位個體（以及邊界）、單位個體怎麼變化（以及生命週期）、單位個體之間什麼關係、依據什麼規則、什麼永遠要成立。它本身不執行任何東西。</p>
+  <div class="io">
+    <div><b>輸入</b>① 蒐集的現實資訊：範圍與邊界、規範來源、真實情境、例外與反例</div>
+    <div><b>輸出</b>詞彙表與 Entity 卡、關係清單、事件與狀態、規則表（需要對帳處含守恆式），存放在共用的 <code>core/</code></div>
+    <div class="no"><b>不產出</b>資料表、API、畫面、程式碼。它們是 ⑤ 放進技術載體的結果，每一個都要能指回它承載的單位個體</div>
+  </div>
+  <p class="note">三個作用：大家說同一種話、每個產出都追得回來、為 AI 劃界。</p>
+
+  <h3 style="margin-top:8px">Sean 的理念，以及它們在心法中的位置</h3>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Sean 的主張</th><th>意思</th><th>在心法中</th></tr></thead>
+      <tbody>
+        <tr><td>一手為陰、一手為陽</td><td>設計者負責把現實搬進數位世界</td><td>主線</td></tr>
+        <tr><td>最大公因數</td><td>共用的單位個體只定義一次</td><td>信念二、節奏「共用的東西只有一份」</td></tr>
+        <tr><td>名詞與動詞；meaning comes from relationship</td><td>單位個體的意思來自邊界與關係</td><td>②、③</td></tr>
+        <tr><td>水泥牆、韁繩</td><td>AI 擅長相似，企業需要明確</td><td>信念四</td></tr>
+        <tr><td>Representation may change. Meaning may not silently change.</td><td>載體可以換，單位個體的意思不能換</td><td>信念一、⑤</td></tr>
+        <tr><td>AI is blocked by trust</td><td>信任要靠證據建立</td><td>信念三、⑥</td></tr>
+        <tr><td>Define／Preserve／Prove</td><td>定義、守住、證明</td><td>六個階段的分組</td></tr>
+        <tr><td>先用英文訂標準</td><td>單位個體用英文識別名稱，各語言名稱由對照表映射</td><td>②</td></tr>
+        <tr><td>訊號 → 證據 → 狀態 → 建議 → 人決定</td><td>建議與決定是不同的變化</td><td>③</td></tr>
+        <tr><td>沒有 over design，但從小範圍開始</td><td>單位個體系統可以想周全，落地從小做起</td><td>節奏「一次做一條小切片」</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="beliefs">
+  <h2 id="beliefs">貫穿全程的四個信念</h2>
+  <p class="note">規範沒寫到的情況，回到這四條判斷。</p>
+  <div class="beliefs">
+    <div class="b"><span class="n">一</span><div><h3>意思先於形式</h3><p>先問「這是什麼單位個體」，再問怎麼存、怎麼顯示、怎麼呼叫。先想資料表，就會讓「好存」決定單位個體怎麼切。</p></div></div>
+    <div class="b"><span class="n">二</span><div><h3>判斷要寫下來，才能被檢查</h3><p>資深的人心裡都有的切法，沒寫下來，新人、AI、下一個專案都不知道。寫下來是為了讓判斷可以被別人挑戰。</p></div></div>
+    <div class="b"><span class="n">三</span><div><h3>經得起推翻的，才值得相信</h3><p>刻意用例外、跨店兼職、事後補單、法規修改去戳。設計者自己說沒問題不算數，要由別人、真實案例、實際執行的結果來證明。</p></div></div>
+    <div class="b"><span class="n">四</span><div><h3>AI 負責發散，人負責判斷</h3><p>AI 擅長「相似」，企業需要「明確」：Manager、Approval、Permission、Authority 在 AI 眼裡很接近，在公司裡是四個單位個體。信任來自可以檢查的結果，不是來自放手。</p></div></div>
+  </div>
+</section>
+
+<section aria-labelledby="phases">
+  <h2 id="phases">六個階段：目的與判斷方式</h2>
+  <p class="note">每個階段分兩層：<b>目的</b>明確但抽象，不規定做法；<b>怎麼判斷做到了</b>是比較具體的方法層。不是瀑布，後面發現前面漏了，回頭補是正常的。</p>
+  <div>
+    <article class="phase">
+      <div class="ph-head">
+        <span class="ph-num">①</span>
+        <span class="ph-name">蒐集現實資訊</span>
+        <p class="ph-purpose"><small>目的</small>把要處理的那部分現實，盡可能完整地帶進來，包括例外。</p>
+        <p class="ph-onto"><b>Ontology</b>　準備 Ontology 的輸入</p>
+      </div>
+      <div class="ph-body">
+        <div class="blk"><span class="lab">為什麼需要</span><p>單位個體是從資訊裡切出來的。資訊缺了，後面切出來的單位個體一定也缺；而現實沒有邊界，不先劃定範圍，資訊永遠收不完。所以這一步同時決定：這次帶進來的現實有多大，以及做完後系統要能回答哪些問題。</p></div>
+        
+        <p class="sub">怎麼判斷做到了</p>
+        <div class="blk"><span class="lab">要問自己</span><ul><li>範圍從哪裡開始、到哪裡結束？哪些明確不做？</li><li>真實發生過哪些情況，尤其是不照正常流程走的？</li><li>做完以後，系統要能回答哪些問題？答不出來就算沒做完</li></ul></div>
+        <div class="blk"><span class="lab">做好的感覺</span><p class="done">任何人都能說出「這個情況在範圍內嗎」；你知道該怎麼判斷成敗。</p></div>
+        <div class="blk trap"><span class="lab">常見陷阱</span><ul><li>用功能選單劃範圍（「請假功能」），而不是一條真實情境</li><li>只寫正常流程；系統會壞的地方都在例外</li><li>資訊全由 AI 整理，盲點一路傳到最後</li></ul></div>
+        <div class="blk"><span class="lab">產出為什麼存在</span><p>範圍、草稿 User Story、驗收問題，分別回答「帶進來的現實有多大」「現實裡真實發生什麼」「怎樣算成功」。</p></div>
+        <div class="roles"><p class="role"><b>AI</b>補充沒想到的例外；把訪談整理成情境</p><p class="role"><b>人</b>決定做與不做；從現場與 Domain 專家取得真實情況</p></div>
+      </div>
+    </article>
+    <article class="phase">
+      <div class="ph-head">
+        <span class="ph-num">②</span>
+        <span class="ph-name">找出獨立單位個體</span>
+        <p class="ph-purpose"><small>目的</small>從連續的現實中，切出一個個有自己身分、能被指認、系統能使用的個體。</p>
+        <p class="ph-onto"><b>Ontology</b>　產生 Ontology 的<b>單位個體與邊界</b>，這是它最核心的部分</p>
+      </div>
+      <div class="ph-body">
+        <div class="blk"><span class="lab">為什麼需要</span><p>系統只能處理離散的東西，必須先決定「一個」是什麼。後面的混亂，幾乎都源自這裡把兩個單位個體當成一個（人和僱傭關係、請假申請和請假事實、角色和權限），或把算出來的數字當成單位個體。一個單位個體的意思，取決於它和其他單位個體的邊界。</p></div>
+        <div class="blk"><span class="lab">名稱與單位個體</span><p>名稱只是形式。單位個體用英文識別名稱，讓程式與 AI 穩定指到同一個單位個體；各語言名稱是映射出去的標籤。換語言，標籤會變，單位個體不能變；不同國家的同名概念（台灣特休、日本年次有給休暇）是不同的單位個體。</p></div>
+        <p class="sub">怎麼判斷做到了</p>
+        <div class="blk"><span class="lab">要問自己</span><ul><li>它有自己的開始和結束嗎？還是只是屬性或分類？</li><li>刪掉它，能從別的資料算回來嗎？算得回來的是推導值，不是單位個體</li><li>兩個很像的東西，結束的時間會不會不一樣？會，就是兩個單位個體</li><li>它<strong>不是</strong>什麼？</li></ul></div>
+        <div class="blk"><span class="lab">做好的感覺</span><p class="done">每個單位個體都能一句話說清楚，並說出它和最像的那個單位個體差在哪；換專案、換人看也不會誤解。</p></div>
+        <div class="blk trap"><span class="lab">常見陷阱</span><ul><li>為了資料庫好設計而合併單位個體；看到 <code>is_xxx</code> 旗標通常是兩個單位個體被壓成一個</li><li>把算出來的數字（餘額、總計）當單位個體管理</li><li>同一單位個體在不同 domain 各自重新定義</li></ul></div>
+        <div class="blk"><span class="lab">產出為什麼存在</span><p>詞彙表、Entity 卡、「不是 Entity」清單，把「是什麼、不是什麼、跟誰不能合併」固定下來，讓人能挑戰、讓下個專案能沿用。</p></div>
+        <div class="roles"><p class="role"><b>AI</b>列出候選單位個體，換成懷疑者攻擊自己的結果</p><p class="role"><b>人</b>判斷邊界切得對不對；把邊界問題翻成業務語言問專家</p></div>
+      </div>
+    </article>
+    <article class="phase">
+      <div class="ph-head">
+        <span class="ph-num">③</span>
+        <span class="ph-name">描述單位個體的變化</span>
+        <p class="ph-purpose"><small>目的</small>描述單位個體會因為什麼而產生、改變、結束，以及每次變化之後處在什麼狀態。</p>
+        <p class="ph-onto"><b>Ontology</b>　產生 Ontology 的<b>變化與生命週期</b>：有哪些變化、由什麼觸發、改變什麼狀態、由人推動時誰有權做</p>
+      </div>
+      <div class="ph-body">
+        <div class="blk"><span class="lab">為什麼需要</span><p>現實是連續的過程，系統只能記下離散的變化點。變化點切得太粗就會失真：請假只有一個「已核准」，就分不出「核准了」和「真的請了」。這一步仍然是在紙上描述現實，還沒有寫程式。</p></div>
+        <div class="blk"><span class="lab">變化從哪來</span><ul><li><strong>人的動作</strong>：員工提出請假、主管核准</li><li><strong>其他單位個體的變化</strong>：員工離職，連帶觸發未休特休結算</li><li><strong>外部系統或訊息</strong>：銀行回報退匯、政府回覆投保生效</li><li><strong>時間或條件到達</strong>：年資滿一年取得特休；特休到期失效</li></ul></div>
+        <div class="blk"><span class="lab">兩個重點</span><ul><li><strong>可能停在半路的地方要分開記。</strong>請假：提出申請 → 系統建議 → 主管核准（或駁回）→ 實際請假（或取消）→ 當月扣薪。每個箭頭都可能停下</li><li><strong>建議和決定是不同的變化。</strong>系統或 AI 依證據提出建議（「這週人力吃緊，建議改到下週」），由有權的人決定</li></ul></div>
+        <p class="sub">怎麼判斷做到了</p>
+        <div class="blk"><span class="lab">要問自己</span><ul><li>這個單位個體從產生到結束經過哪些變化？每次變化後是什麼狀態？</li><li>每次變化由什麼觸發？人、其他單位個體、外部系統，還是時間或條件？</li><li>哪一步可能停下、沒有下一步？那一步要單獨記</li><li>由人推動的變化，誰有權做？需要什麼證據？</li><li>做錯了，業務上發生什麼？誰發現、誰核准更正？</li></ul></div>
+        <div class="blk"><span class="lab">做好的感覺</span><p class="done">① 的每個情境（含例外）都能在這些變化上從頭走到尾；每次變化都說得出由什麼觸發、改變了什麼、何時；由人推動的說得出是誰、憑什麼。</p></div>
+        <div class="blk trap"><span class="lab">常見陷阱</span><ul><li>一個 <code>status</code> 承載好幾次變化</li><li>只描述正常流程，沒有取消、駁回、更正</li><li>只描述人的操作，漏了時間、外部系統或其他單位個體觸發的變化（特休到期、銀行退匯）</li><li>只把申請程序做對，沒有幫人做決定（9/30：「程序 OK、整體不 OK」）</li></ul></div>
+        <div class="blk"><span class="lab">產出為什麼存在</span><p>事件與狀態目錄記下變化、狀態與權責；決策流程記下建議怎麼產生、誰決定；正式 Use Case 回頭驗證每個草稿情境都走得通。</p></div>
+        <div class="roles"><p class="role"><b>AI</b>推演各種路徑與例外</p><p class="role"><b>人</b>拿正式 Use Case 對照現實：真的是這樣走嗎？</p></div>
+      </div>
+    </article>
+    <article class="phase">
+      <div class="ph-head">
+        <span class="ph-num">④</span>
+        <span class="ph-name">描述單位個體的限制</span>
+        <p class="ph-purpose"><small>目的</small>描述單位個體與變化必須遵守的條件：什麼情況下允許、數值怎麼算、得出什麼結論、什麼關係永遠要成立。</p>
+        <p class="ph-onto"><b>Ontology</b>　產生 Ontology 的<b>規則與約束</b>；到這裡 Ontology 定義完成，可以凍結</p>
+      </div>
+      <div class="ph-body">
+        <div class="blk"><span class="lab">為什麼需要</span><p>現實裡有很多隱含的規矩，人會自然遵守，系統不會。這些規矩必須明確寫出來，系統才能一致地執行；寫成獨立、可閱讀的清單，而不是散在程式的 if/else 裡，人才能審查。</p></div>
+        <div class="blk"><span class="lab">四種限制（依管什麼）</span><ul><li><strong>前提條件</strong>：年滿 18 歲才能建立資料；額度足夠才能核准請假</li><li><strong>計算</strong>：加班費依時薪與倍率計算</li><li><strong>判定</strong>：補假被駁回的缺勤列為曠職；某次缺勤是否屬於職災</li><li><strong>永遠成立的關係</strong>：假的取得與使用要能對帳</li></ul><p style="margin-top:6px">另外標出<strong>系統能不能自己判斷</strong>：可自動判斷、看條件、需要解釋，或交給人判斷（例：是否屬於職災）；交給人判斷的，系統只能建議。</p></div><div class="blk"><span class="lab">每條要說得出</span><p>套用在哪裡（哪個單位個體或變化）、從哪來（法規、政策、業務需求）、違反時怎麼辦（擋下、提醒、交給人）。<strong>版本只在需要時才加</strong>：會隨時間改變、且舊結果要依當時規則解釋的（例：法定費率），才記版本與生效日。</p></div>
+        <p class="sub">怎麼判斷做到了</p>
+        <div class="blk"><span class="lab">要問自己</span><ul><li>哪些事需要先滿足條件？哪些數值要計算？哪些關係必須永遠成立？</li><li>違反時要擋下、提醒，還是交給人判斷？</li><li>會不會隨時間改變？改變後舊結果照舊還是重算？</li><li>判斷需要的資料，② 的單位個體存得下嗎？（判斷 18 歲就要有出生日期）</li></ul></div>
+        <div class="blk"><span class="lab">做好的感覺</span><p class="done">每條限制都說得出套用在哪裡、從哪來、違反時會怎樣、誰來判斷；需要的資料都存得下；會變的已標出版本與生效日。</p></div>
+        <div class="blk trap"><span class="lab">常見陷阱</span><ul><li>規則散在程式各處，沒人說得出全貌</li><li>有解釋空間的問題被包裝成確定公式</li><li>相信 AI 給的條號與數字；一律對照原文</li><li>每條規則都加版本管理，徒增負擔</li></ul></div>
+        <div class="blk"><span class="lab">產出為什麼存在</span><p>規則表讓所有限制集中一處、說得出依據、能被審查；需要對帳的地方，守恆式是檢查系統有沒有算錯的尺。</p></div>
+        <div class="roles"><p class="role"><b>AI</b>從法規、政策、訪談整理出可能的限制</p><p class="role"><b>人</b>確認來源與適用範圍；法規逐條對照原文；專家決定哪些需要人判斷</p></div>
+      </div>
+    </article>
+    <article class="phase">
+      <div class="ph-head">
+        <span class="ph-num">⑤</span>
+        <span class="ph-name">放進技術載體</span>
+        <p class="ph-purpose"><small>目的</small>用資料表、API 等技術形式承載這些單位個體、變化與限制，而且意思不跑掉。</p>
+        <p class="ph-onto"><b>Ontology</b>　把 Ontology <b>投影</b>到技術載體；對照表是投影的契約，不屬於 Ontology</p>
+      </div>
+      <div class="ph-body">
+        <div class="blk"><span class="lab">為什麼需要</span><p>單位個體系統要有載體才能運作。但載體有自己的形狀（表、欄位、外鍵、API），很容易反過來扭曲單位個體，例如為了少一張表把兩個單位個體合成一個。所以要寫下「哪個單位個體落在哪裡」的對照，日後才查得出意思有沒有跑掉。</p></div>
+        <div class="blk"><span class="lab">只對照業務意思</span><p>一個單位個體不一定對到一張表。主鍵、建立時間、樂觀鎖版本等技術欄位，或 outbox、稽核紀錄等平台表，不代表業務單位個體，標成「技術」並依《平台架構約定》處理即可。</p></div>
+        <p class="sub">怎麼判斷做到了</p>
+        <div class="blk"><span class="lab">要問自己</span><ul><li>每個單位個體落在哪幾張表、哪幾支 API？</li><li>每張業務表、每個業務欄位承載哪個單位個體？說不出來又不是技術用途的，就是多出來的</li><li>推導值怎麼存？每次變化、每條限制由誰把關？</li><li>每個 Use Case 都能用一組 API 完成嗎？</li></ul></div>
+        <div class="blk"><span class="lab">做好的感覺</span><p class="done">任意指一個業務欄位，說得出它承載哪個單位個體；任意指一個單位個體，找得到它落在哪裡；其餘都標明是技術用途。</p></div>
+        <div class="blk trap"><span class="lab">常見陷阱</span><ul><li>讓載體的方便回頭改寫單位個體；單位個體真的切錯了就回前面正式修改</li><li>每個 domain 各自決定歷史怎麼存、API 怎麼設計（見《平台架構約定》）</li><li>要求每個技術欄位都對應業務單位個體，徒增負擔</li></ul></div>
+        <div class="blk"><span class="lab">產出為什麼存在</span><p>概念對照表記下每個單位個體落在哪裡，是之後檢查「意思沒有走樣」的依據。</p></div>
+        <div class="roles"><p class="role"><b>AI</b>依對照表與平台約定產生 schema 和 API</p><p class="role"><b>人</b>檢查對照表，確認每個單位個體都有落點</p></div>
+      </div>
+    </article>
+    <article class="phase">
+      <div class="ph-head">
+        <span class="ph-num">⑥</span>
+        <span class="ph-name">回到現實驗證</span>
+        <p class="ph-purpose"><small>目的</small>拿現實去對照離散的系統，確認切出來的單位個體與描述沒有失真。</p>
+        <p class="ph-onto"><b>Ontology</b>　<b>證明</b>放進載體後，單位個體的意思仍和 Ontology 一致，而 Ontology 也仍對得上現實</p>
+      </div>
+      <div class="ph-body">
+        <div class="blk"><span class="lab">為什麼需要</span><p>單位個體怎麼切、變化怎麼描述，都是人和 AI 的判斷，有可能切錯。唯一可靠的檢驗是回到現實：用真實的案例、① 寫下的問題、懂現實的人來對照系統。AI 說「測試全過」不算數，設計者自己說「應該沒問題」也不算數。</p></div>
+        
+        <p class="sub">怎麼判斷做到了</p>
+        <div class="blk"><span class="lab">要問自己</span><ul><li>① 寫的驗收問題，系統真的答得出來嗎？</li><li>用獨立於系統的方式算出的答案（人手算、試算表、專家提供），和系統一樣嗎？</li><li>④ 的限制：該擋下的有擋下嗎？有守恆式的地方都成立嗎？</li><li>③ 的例外路徑（取消、駁回、更正）都試過了嗎？</li><li>沒跑過的項目，有沒有被當成「通過」？</li></ul></div>
+        <div class="blk"><span class="lab">做好的感覺</span><p class="done">把證據攤在桌上給一個懷疑的人看，他找不到理由不相信。</p></div>
+        <div class="blk trap"><span class="lab">常見陷阱</span><ul><li>同一個 AI 自己出題、自己作答、自己改考卷</li><li>用測試數量代替測試的有效性</li><li>只測正常流程</li><li>把「未執行」寫成「通過」</li></ul></div>
+        <div class="blk"><span class="lab">產出為什麼存在</span><p>黃金案例、驗收問題回答表、實際執行結果，是「切出來的單位個體對得上現實」的證明，也是下一個人能信任這份設計的依據。</p></div>
+        <div class="roles"><p class="role"><b>AI</b>產生大量合成資料，測量大、情況多時會不會壞</p><p class="role"><b>人</b>用獨立於系統的方式算出黃金案例的答案；專家確認「這就是我要的」；執行與簽核分開</p></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section aria-labelledby="rhythm">
+  <h2 id="rhythm">節奏</h2>
+  <div class="rhythm">
+    <div class="r"><h3>來回，而不是一次走完</h3><p>後面發現前面漏了就回頭補。這是設計本來的樣子，重點是補的時候說得出原因。</p></div>
+    <div class="r"><h3>一次做一條小切片</h3><p>單位個體系統可以想得周全，落地一次只走一條從頭到尾的情境。Sean 說「沒有 over design」，同時要求「從小範圍開始」。</p></div>
+    <div class="r"><h3>凍結是改動要留紀錄</h3><p>定案後就凍結；要改，說得出是哪個驗收問題或反例逼你改的。「覺得比較好」不構成理由。</p></div>
+    <div class="r"><h3>共用的東西只有一份</h3><p>人、組織、僱傭關係只定義一次，所有 domain 共用。換專案不必重想 entity。</p></div>
+  </div>
+</section>
+
+<section aria-labelledby="sean">
+  <h2 id="sean">和 Sean 三層方法論的關係</h2>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Sean 的三層</th><th>對應階段</th><th>真正在守的事</th></tr></thead>
+      <tbody>
+        <tr><td><span class="dot" style="background:var(--l1)"></span>Define Meaning</td><td>① ② ③ ④</td><td>單位個體被切清楚、說清楚</td></tr>
+        <tr><td><span class="dot" style="background:var(--l2)"></span>Preserve Meaning</td><td>⑤，以及每個階段的凍結</td><td>單位個體的意思在轉換中不走樣</td></tr>
+        <tr><td><span class="dot" style="background:var(--l3)"></span>Prove Meaning</td><td>⑥</td><td>單位個體對得上現實</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="sum">
+  <h2 id="sum">一頁記住</h2>
+  <div class="tbl summary">
+    <table>
+      <thead><tr><th>階段</th><th>目的</th><th>怎麼判斷做到了</th></tr></thead>
+      <tbody>
+        <tr><td>① 蒐集現實資訊</td><td>把要處理的那部分現實帶進來，包括例外</td><td>有人問「這在範圍內嗎」，你答得出來</td></tr>
+        <tr><td>② 找出獨立單位個體</td><td>從連續的現實中，切出有身分、能被指認的個體</td><td>每個單位個體都說得出它「不是什麼」</td></tr>
+        <tr><td>③ 描述單位個體的變化</td><td>單位個體因為什麼而產生、改變、結束，變化後處在什麼狀態</td><td>每次變化都說得出由什麼觸發、改變了什麼</td></tr>
+        <tr><td>④ 描述單位個體的限制</td><td>什麼情況允許、數值怎麼算、得出什麼結論、什麼必須成立</td><td>每條限制都說得出套用在哪裡、從哪來、違反時怎麼辦</td></tr>
+        <tr><td>⑤ 放進技術載體</td><td>用資料表、API 承載單位個體，意思不跑掉</td><td>任何業務欄位都追得回它承載的單位個體</td></tr>
+        <tr><td>⑥ 回到現實驗證</td><td>確認切出來的單位個體與描述沒有失真</td><td>懷疑的人看完證據也找不到理由不信</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="closing">把連續的現實切成離散的單位個體・意思先於形式・判斷要寫下來・經得起推翻才可信・AI 發散而人判斷</p>
+</section>
+
+<footer>本頁對應 <code>Domain設計心法.md</code>。每一步的交付物與完成標準見 <a href="https://claude.ai/artifact/BTkJn9DNAbTQdKB98NL4xi" target="_blank" rel="noopener">六步開發流程</a>（<code>團隊開發流程_精簡版.md</code>）；平台層級的決定見 <code>平台架構約定.md</code>。</footer>
+
+</div>
