@@ -56,7 +56,7 @@ argument-hint: "<1-6> [切片代號]"
 | 步驟 | 讀取 | 產出 | 挑錯角度 |
 |---|---|---|---|
 | ① | `slices/PLAN.md` 中這條切片的列、`inputs/<切片>/`、`inputs/shared/`、`core/` | `01_scope.md`、`questions.md` | 領域實務 |
-| ② | `01_scope.md`、`core/` | `02_entities.md` | 本體懷疑者 |
+| ② | `01_scope.md`、`core/`、`slices/ENTITY_SKETCH.md` | `02_entities.md`；必要時更新 `slices/ENTITY_SKETCH.md` | 本體懷疑者 |
 | ③ | `01_scope.md`、`02_entities.md` | `03_flows.md`、`03_use_cases.md` | 時間與帳務、隱私與濫用 |
 | ④ | `02_entities.md`、`03_flows.md`、`03_use_cases.md`、`inputs/` 的法規與政策原文 | `04_rules.md`；回填 `03_flows.md`、`03_use_cases.md` | 領域實務、時間與帳務 |
 | ⑤ | 已凍結的 ②③④、`docs/03` | `05_mapping.md`、`schema.sql`、`api.yaml` | 隱私與濫用 |
@@ -69,6 +69,8 @@ argument-hint: "<1-6> [切片代號]"
 
 ### ② 名詞盤點
 - 先查 `core/entities.md`：有的放「引用」，候選的加 `[引用候選]`。
+- 對照 `slices/ENTITY_SKETCH.md`：本切片要正式定義的名詞，查草圖上「會用到的切片」，確認定義撐得起那些切片（例：僱傭關係要能表達跨國轉任）。挑錯時把這些後續切片也交給子代理當攻擊角度。
+- 和草圖不同的地方（要拆、合、改層、改由別條切片定義）：更新草圖，並在草圖與 `slices/PLAN.md` 的變更紀錄各記一筆，在回報中列出。
 - 每個候選概念用三問判斷（`docs/01` ②）。不是 Entity 的放「不是 Entity」表。
 - 新識別名稱取名前，搜尋 `core/glossary.md` 避免重複。
 - 詞彙對照表新增區，要包含本步所有新的 Entity、屬性、關係。

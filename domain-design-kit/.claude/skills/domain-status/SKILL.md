@@ -8,7 +8,7 @@ argument-hint: "[切片代號]"
 
 你沒有之前對話的記憶，所有狀態都從檔案讀出。不要猜。
 
-1. 讀 `slices/PLAN.md`：地圖狀態（討論中／已同意）、各切片的狀態與建議順序、未回覆的「待釐清」。沒有這個檔案 → 下一步是 `/domain-plan`。
+1. 讀 `slices/PLAN.md`：地圖狀態（討論中／已同意）、各切片的狀態與建議順序、未回覆的「待釐清」。沒有這個檔案 → 下一步是 `/domain-plan`。也讀 `slices/ENTITY_SKETCH.md`：狀態，以及「草圖」「已定義」的名詞數；沒有草圖但已有地圖 → 建議先用 `/domain-plan` 補上草圖。
 2. 列出 `slices/` 下的切片資料夾；有指定 `$ARGUMENTS` 就只看那一條。
 3. 對每條切片：
    - 讀每份交付物開頭區的「狀態」「版本」（`01_scope.md`～`05_mapping.md`、`06_evidence/signoff.md`）。檔案不存在＝尚未開始。

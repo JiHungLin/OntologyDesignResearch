@@ -26,13 +26,14 @@ argument-hint: "<1-6> [切片代號]"
    - 詞彙對照表新增區併入 `core/glossary.md`。
    - 規則編號與 `core/rules.md` 撞號時，停下來請人決定重編哪一方。
    - `core/CHANGELOG.md` 新增一筆。
+   - 第 ② 步：本切片正式定義的名詞，在 `slices/ENTITY_SKETCH.md` 改為「已定義」，「一句意思」改為「見 core/entities.md」，草圖的變更紀錄記一筆。
 5. **第 ⑥ 步：升級核心項目**
    - 本切片出處的 `core/` 項目，若相關的驗收問題、規則、黃金案例都經專家確認 → `[已驗證]`；有 `[暫代]` → `[已驗證（暫代）]`；仍有 `[待專家確認]` → 維持 `[候選]`，並在回報列出原因。
    - `core/CHANGELOG.md` 記一筆（類型：升為已驗證）。
    - `slices/PLAN.md` 中這條切片的狀態改為「完成」，變更紀錄記一筆。
 
 ## 3. git
-1. 列出要提交的檔案給人看（含本切片新增的 `inputs/` 檔案與 `slices/PLAN.md`）。
+1. 列出要提交的檔案給人看（含本切片新增的 `inputs/` 檔案、`slices/PLAN.md`、`slices/ENTITY_SKETCH.md`）。
 2. `core/` 有修改時：依 `docs/01` 0.3，核心的修改要由**核心負責人**核准。
    - repo 有遠端且可用 `gh`：問人要不要開 PR（分支 `core/<切片>-0N-vK`）；同意才開。
    - 沒有遠端：在回報中提醒核心負責人審閱 `core/` 的 diff。
