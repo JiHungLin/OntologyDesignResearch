@@ -50,6 +50,7 @@ AI 會先和你一起整理切片地圖；同意後說「開始做第一條」�
         │
         ▼
 /domain-freeze N    AI：寫 CHANGELOG → commit → 打 tag → ②③④ 合併進 core/（候選）
+                    做到 ⑤ 凍結＝設計完成（待驗證），可以開始下一條；⑥ 在有系統時再做
         │
         ▼
 /domain-step N+1

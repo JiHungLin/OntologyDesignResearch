@@ -131,7 +131,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
 <header>
   <div class="eyebrow">Team Process · v4　Domain 設計規範</div>
   <h1>六步開發流程</h1>
-  <p class="lede">從需求到可運作的系統：先定義「是什麼」（Ontology），再決定「怎麼存」，最後在真的資料庫上、用專家確認過的案例證明它能動。開始前先為整個 domain 規劃切片地圖與名詞草圖；之後一次做一條情境切片，每一步都有交付物和完成標準。範例用人資請假，流程適用任何領域。</p>
+  <p class="lede">從需求到可運作的系統：先定義「是什麼」（Ontology），再決定「怎麼存」，最後在真的資料庫上、用專家確認過的案例證明它能動。開始前先為整個 domain 規劃切片地圖與名詞草圖；之後一次推進一條情境切片：做到 ⑤ 就是一個設計版本，⑥ 在有系統時再驗證；每一步都有交付物和完成標準。範例用人資請假，流程適用任何領域。</p>
   <p class="lede">這不是新方法：我們原本就從訪談、User Story、Use Case 整理出 entity、relation、event、state。本規範沿用這條主軸，把設計判斷寫成可審查的文件，並加入 LLM 協作。事件、歷史保存、API 形式等平台層級的決定另見《平台架構約定》。</p>
   <a class="xlink" href="https://claude.ai/artifact/NYTNBtchjCAE4ZLZXy2JkY" target="_blank" rel="noopener">先讀心法：每個階段為什麼要這樣做 →</a>
 </header>
@@ -158,6 +158,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
 
 <section aria-labelledby="flow">
   <h2 id="flow">流程（每條情境切片）</h2>
+  <p class="note">兩個循環：設計循環 ①～⑤，一條切片做到 ⑤ 凍結就是一個設計版本（設計完成，待驗證），接著換下一個範圍；切片之間互相影響時回頭修改（第 0 級，記 CHANGELOG）。驗證循環 ⑥ 在有系統時進行，可逐條或累積幾條一起做；所以 ⑤ 先做紙上驗證，提早抓錯。</p>
   <div class="flow-scroll">
     <div class="flow">
       <div class="stage"><div class="n">①</div><div class="t">範圍與驗收問題</div><div class="q">做到哪裡？做完要能回答什麼？</div></div>
@@ -229,7 +230,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
     <div class="row" role="row">
       <div class="name"><span>⑤</span>投影到實作</div>
       <div><div class="lbl">交付物</div>對照表五區：概念→表與欄位、事件→API、規則→落實位置、推導值與歷史需求→資料身分與保存方式、技術欄位；AI 依此與平台約定產生 schema 與 API<div class="files"><span class="file">05_mapping.md</span><span class="file">schema.sql</span><span class="file">api.yaml</span></div></div>
-      <div><div class="lbl">關卡</div><ul><li>每張業務表、每支 API 指得回概念；技術欄位與平台表標明「技術」即可</li><li>推導值已決定身分、歷史需求已決定保存方式；動作與規則都有落實位置（依平台約定）</li><li>每個正式 Use Case 都能用一組 API 完成</li></ul></div>
+      <div><div class="lbl">關卡</div><ul><li>每張業務表、每支 API 指得回概念；技術欄位與平台表標明「技術」即可</li><li>推導值已決定身分、歷史需求已決定保存方式；動作與規則都有落實位置（依平台約定）</li><li>每個正式 Use Case 都能用一組 API 完成</li><li>紙上驗證（預設）：人工算好的黃金案例，照設計推演一遍，結果一致</li></ul></div>
     </div>
 
     <div class="row" role="row">
