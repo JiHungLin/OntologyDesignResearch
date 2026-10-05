@@ -1,6 +1,6 @@
 ---
 name: domain-check
-description: 從 Markdown 交付物轉出 .build/ 的 YAML，執行 tools/ 的檢查與推導，並逐條執行輸入輸出規範第七節的引用檢查。
+description: 從 Markdown 交付物轉出 .build/ 的 YAML，跑檢查工具與引用檢查。使用者說「檢查一下」「有沒有漏」「有沒有衝突」時使用；第 ②～④ 步自評前也會自動使用。
 argument-hint: "[切片代號]"
 ---
 

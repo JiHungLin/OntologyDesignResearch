@@ -1,12 +1,12 @@
 ---
 name: domain-freeze
-description: 人審查通過後凍結某一步：確認審查者已打勾、寫 CHANGELOG、打 git tag，第 ②③④ 步把新項目以候選狀態合併進 core/，第 ⑥ 步升級核心項目狀態。
+description: 人審查通過後凍結某一步：確認審查者已打勾、寫 CHANGELOG、commit、打 git tag，第 ②③④ 步合併進 core/。使用者說「審查好了」「我打勾了」「這步通過」「可以凍結」時使用；先確認檢查紀錄已由審查者填寫。
 argument-hint: "<1-6> [切片代號]"
 ---
 
 # 凍結一個步驟
 
-參數：`$ARGUMENTS`（步驟編號 N、切片代號）。
+參數：`$ARGUMENTS`（步驟編號 N、切片代號）。沒有參數時，找出狀態為「待檢查」的交付物；只有一個就用它，有多個就問。
 
 ## 1. 確認可以凍結（任何一項不符就停下來說明，不要凍結）
 - 交付物狀態是「待檢查」。第 ③ 步要同時看 `03_flows.md` 與 `03_use_cases.md`；第 ⑥ 步看 `06_evidence/signoff.md`。

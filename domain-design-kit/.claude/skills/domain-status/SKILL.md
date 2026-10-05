@@ -1,6 +1,6 @@
 ---
 name: domain-status
-description: 從檔案重建 Domain 設計的目前狀態（各切片各步驟的狀態、tag、待回覆的專家問題、下一步）。每次新 session 開始工作前先執行。
+description: 從檔案重建 Domain 設計的目前狀態（切片地圖、各切片各步驟的狀態、tag、待回覆的專家問題、下一步）。每次新 session 開始工作前先自動執行；使用者問「現在做到哪」「接下來要做什麼」「進度如何」，或說「繼續」但不清楚要繼續什麼時，也使用。
 argument-hint: "[切片代號]"
 ---
 
