@@ -131,13 +131,33 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
 <header>
   <div class="eyebrow">Team Process · v4　Domain 設計規範</div>
   <h1>六步開發流程</h1>
-  <p class="lede">從需求到可運作的系統：先定義「是什麼」（Ontology），再決定「怎麼存」，最後在真的資料庫上、用專家確認過的案例證明它能動。一次做一條情境切片，每一步都有交付物和完成標準。範例用人資請假，流程適用任何領域。</p>
+  <p class="lede">從需求到可運作的系統：先定義「是什麼」（Ontology），再決定「怎麼存」，最後在真的資料庫上、用專家確認過的案例證明它能動。開始前先為整個 domain 規劃切片地圖與名詞草圖；之後一次做一條情境切片，每一步都有交付物和完成標準。範例用人資請假，流程適用任何領域。</p>
   <p class="lede">這不是新方法：我們原本就從訪談、User Story、Use Case 整理出 entity、relation、event、state。本規範沿用這條主軸，把設計判斷寫成可審查的文件，並加入 LLM 協作。事件、歷史保存、API 形式等平台層級的決定另見《平台架構約定》。</p>
   <a class="xlink" href="https://claude.ai/artifact/NYTNBtchjCAE4ZLZXy2JkY" target="_blank" rel="noopener">先讀心法：每個階段為什麼要這樣做 →</a>
 </header>
 
+<section aria-labelledby="plan">
+  <h2 id="plan">開始前：規劃（每個 domain 一次，之後持續更新）</h2>
+  <p class="lede">六步是每條情境切片都要走的。在第一條切片之前，先為整個 domain 做一次規劃：它就是一次粗略的 ①②，順序同樣是先蒐集現實、再切情境、再列名詞。使用者不需要事先知道切片怎麼切，由 AI 和人一起討論出來。</p>
+  <div class="grid2">
+    <div class="pr"><span class="k">1</span><p><strong>盤點現實資料。</strong>AI 先列出這個領域通常有哪些資料（表單、規章、法規、常出問題的案例），標出已有、待提供、找不到。</p></div>
+    <div class="pr"><span class="k">2</span><p><strong>切片地圖（slices/PLAN.md）。</strong>有哪些情境（起點 → 可驗證的結果）、屬於哪個領域、依賴與建議順序；第一條選正常流程，用來建立共用核心。</p></div>
+    <div class="pr"><span class="k">3</span><p><strong>全局名詞草圖（slices/ENTITY_SKETCH.md）。</strong>所有切片會用到的名詞、預計由哪條切片正式定義。只是參考，正式定義在每條切片的第 ② 步。</p></div>
+    <div class="pr"><span class="k">4</span><p><strong>人同意後才開始第一條。</strong>地圖、草圖由人明確同意；它們引用的推想草稿都要先被接受為假設。</p></div>
+  </div>
+  <div class="tbl">
+    <table>
+      <tr><th>依據</th><th>是什麼</th><th>放在</th></tr>
+      <tr><td>現場資料</td><td>客戶、使用者、專家提供的實際做法</td><td>inputs/shared/、inputs/&lt;切片&gt;/</td></tr>
+      <tr><td>公開來源</td><td>AI 實際讀過的官方或公開資料，附網址與原文摘錄；原文由人核對一次</td><td>inputs/research/</td></tr>
+      <tr><td>推想</td><td>AI 依一般知識寫的參考資料；要人接受為假設才能用，有真實資料後取代</td><td>inputs/drafts/</td></tr>
+    </table>
+  </div>
+  <p class="note">地圖與草圖的每一列都標依據；三級各有多少一眼看得到，推想太多時先補資料。</p>
+</section>
+
 <section aria-labelledby="flow">
-  <h2 id="flow">流程</h2>
+  <h2 id="flow">流程（每條情境切片）</h2>
   <div class="flow-scroll">
     <div class="flow">
       <div class="stage"><div class="n">①</div><div class="t">範圍與驗收問題</div><div class="q">做到哪裡？做完要能回答什麼？</div></div>
