@@ -54,7 +54,7 @@ argument-hint: "<1-6> [切片代號]"
 
 | 步驟 | 讀取 | 產出 | 挑錯角度 |
 |---|---|---|---|
-| ① | `inputs/<切片>/`、`inputs/shared/`、`core/` | `01_scope.md`、`questions.md` | 領域實務 |
+| ① | `slices/PLAN.md` 中這條切片的列、`inputs/<切片>/`、`inputs/shared/`、`core/` | `01_scope.md`、`questions.md` | 領域實務 |
 | ② | `01_scope.md`、`core/` | `02_entities.md` | 本體懷疑者 |
 | ③ | `01_scope.md`、`02_entities.md` | `03_flows.md`、`03_use_cases.md` | 時間與帳務、隱私與濫用 |
 | ④ | `02_entities.md`、`03_flows.md`、`03_use_cases.md`、`inputs/` 的法規與政策原文 | `04_rules.md`；回填 `03_flows.md`、`03_use_cases.md` | 領域實務、時間與帳務 |
@@ -62,7 +62,7 @@ argument-hint: "<1-6> [切片代號]"
 | ⑥ | `01_scope.md`、`03_use_cases.md`、`04_rules.md`、`02_entities.md`、`05_mapping.md`、實作 | `06_evidence/` | 領域實務 |
 
 ### ① 範圍與驗收問題
-- 先確認切片大小（`docs/01` 0.3）與模式（完整／輕量，判斷不出來用完整）。
+- 以切片地圖的情境為起點細化範圍；確認切片大小（`docs/01` 0.3）與模式（完整／輕量，判斷不出來用完整）。範圍細化後和地圖不一致（例：其實要拆成兩條），停下來請人決定，再用 `/domain-plan` 更新地圖。
 - 驗收問題至少 8 條（預設），含至少 1 條維運類。來源照實填：你想出來的寫 `AI`；從 `inputs/` 的訪談或人提供的寫對應來源。非 AI 來源不足 2 種、或沒有 Domain 專家／客戶端使用者時，在回報中明確指出，**不要自己補標來源**。
 - P0 問題的「確認」欄，沒有專家確認過的一律 `[待專家確認: EQ-nnn]`。
 
