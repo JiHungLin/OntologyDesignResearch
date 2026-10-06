@@ -37,8 +37,8 @@ section{display:grid;gap:18px}
 
 /* hero */
 .hero{display:grid;gap:18px}
-.thesis{font-family:var(--serif);font-weight:600;font-size:clamp(19px,2.6vw,24px);line-height:1.6;max-width:36em;border-left:4px solid var(--accent);padding-left:18px}
-.hero .note{max-width:60ch}
+.thesis{font-family:var(--serif);font-weight:600;font-size:clamp(19px,2.6vw,24px);line-height:1.6;border-left:4px solid var(--accent);padding-left:18px}
+.hero .note{}
 
 /* problem */
 .drift{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
@@ -163,14 +163,14 @@ code{font-family:var(--mono);font-size:12.5px}
 
 <section aria-labelledby="thread">
   <h2 id="thread">主線：把連續的現實，切成系統能使用的單位個體</h2>
-  <p style="max-width:62ch">現實是<strong>連續</strong>的：一個人每天上班、請假、換店支援、離職又回來，沒有明確的格子。數位世界是<strong>離散</strong>的：系統只能記下一筆一筆的資料、一個一個的狀態。系統要能運作，就必須用一個個<strong>單位個體</strong>來描述現實。單位個體指的是系統裡可以被指認、可以被單獨記錄的一個東西：一個人、一段僱傭關係、一筆請假申請、一個班別。它不是度量用的「單位」（公斤、小時），而是有身分的個體，會被產生、改變、結束，也會和其他單位個體互動。Sean 說「一手為陰、一手為陽」：設計者負責把現實搬進數位世界。</p>
-  <p style="max-width:62ch">轉換最常出的錯，不是程式寫錯，而是<strong>單位個體切錯了</strong>：</p>
+  <p>現實是<strong>連續</strong>的：一個人每天上班、請假、換店支援、離職又回來，沒有明確的格子。數位世界是<strong>離散</strong>的：系統只能記下一筆一筆的資料、一個一個的狀態。系統要能運作，就必須用一個個<strong>單位個體</strong>來描述現實。單位個體指的是系統裡可以被指認、可以被單獨記錄的一個東西：一個人、一段僱傭關係、一筆請假申請、一個班別。它不是度量用的「單位」（公斤、小時），而是有身分的個體，會被產生、改變、結束，也會和其他單位個體互動。Sean 說「一手為陰、一手為陽」：設計者負責把現實搬進數位世界。</p>
+  <p>轉換最常出的錯，不是程式寫錯，而是<strong>單位個體切錯了</strong>：</p>
   <div class="drift">
     <div class="d"><span class="word">員工</span><p><b>兩個單位個體被合成一個</b>：有時指一個人，有時指一段僱傭關係。人離職再回來，系統就亂了。</p></div>
     <div class="d"><span class="word">核准</span><p><b>一連串變化被壓成一個</b>：主管核准了，系統就當作請假已經發生。但員工後來根本沒請。</p></div>
     <div class="d"><span class="word">完成</span><p><b>同一個字指不同的單位個體</b>：業務說簽約就完成，財務說收到錢才完成。系統只有一個 <code>status = done</code>。</p></div>
   </div>
-  <p class="note" style="max-width:62ch">程式完全照規格執行，結果卻是錯的，因為規格切出來的單位個體本身就對不上現實。六個階段，就是這件轉換的六個環節：</p>
+  <p class="note">程式完全照規格執行，結果卻是錯的，因為規格切出來的單位個體本身就對不上現實。六個階段，就是這件轉換的六個環節：</p>
   <div class="thread" aria-label="六個階段的主線">
     <div class="node edge"><b>連續的現實</b></div>
     <div class="arrow"><b>① 蒐集現實資訊</b>：把要處理的現實帶進來</div>
