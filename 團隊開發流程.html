@@ -264,11 +264,12 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
         <tr><td><span class="lv">0</span> 切片內</td><td>切片還沒通過 ⑥，發現前面漏了</td><td>直接改，記一行原因</td></tr>
         <tr><td><span class="lv">1</span> 新增規則</td><td>模型不用動，多一條規則</td><td>新增規則＋黃金案例，跑測試</td></tr>
         <tr><td><span class="lv">2</span> 擴充模型</td><td>加屬性、關係或 Entity，既有意思不變</td><td>變更提案（次要版本），受影響切片重跑 ⑥</td></tr>
-        <tr><td><span class="lv">3</span> 改變意思</td><td>概念要拆、要合，或幾對幾要改</td><td>變更提案（主要版本），舊紀錄保留原意，新意思從生效日起適用</td></tr>
+        <tr><td><span class="lv">3</span> 改變意思</td><td>概念要拆、要合，或幾對幾要改</td><td>變更提案（主要版本），舊紀錄保留原意，新意思從生效日起適用；舊項目標「已取代」，不刪除</td></tr>
       </tbody>
     </table>
   </div>
   <p class="note">處理順序：先寫成驗收問題＋黃金案例 → 判定等級 → 修改 → 受影響切片重跑 ⑥ → 合併進 core/。大部分特例應該落在第 1 級。</p>
+  <p class="note">新需求先判斷擴充還是開新切片：同一個情境多了例外或細節（起點、終點不變）且切片還沒通過 ⑥ → 回該切片的 ① 補上；另一個情境，或切片已通過 ⑥ → 在地圖新增切片；只是某家客戶的公司規定不同 → 通常是第 1 級，新增公司政策規則。由 AI 建議、人決定。</p>
 </section>
 
 <section aria-labelledby="rules">
@@ -282,7 +283,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
         <li>共用名詞只有一份，放 <code>core/</code>，第一條切片建立它</li>
         <li class="bad">切片可新增，不可重新定義；改 core/ 一律走 PR，由核心負責人核准</li>
       </ul>
-      <div class="chips"><span class="chip st">候選：②③④ 凍結後進 core/</span><span class="chip st">已驗證：⑥ 通過且專家確認</span><span class="chip st">已驗證（暫代）：專家缺席時由團隊暫代確認</span></div>
+      <div class="chips"><span class="chip st">候選：②③④ 凍結後進 core/</span><span class="chip st">已驗證：⑥ 通過且專家確認</span><span class="chip st">已驗證（暫代）：專家缺席時由團隊暫代確認</span><span class="chip st">已取代／已停用：保留不刪，新設計不能引用</span></div>
     </div>
     <div class="panel">
       <h3>完整模式與輕量模式</h3>
