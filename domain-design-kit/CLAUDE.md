@@ -41,6 +41,7 @@
 - `core/`：共用核心（Ontology）。只在 `/domain-freeze` 時寫入。
 - `slices/PLAN.md`：切片地圖。
 - `slices/ENTITY_SKETCH.md`：全局名詞草圖（規劃用參考，不是 Ontology；正式定義只在 `core/`）。
+- `slices/CHANGELOG.md`：規劃的變更紀錄，地圖與草圖的每次變動都記在這裡（兩份文件本身不放紀錄）。
 - `slices/<切片代號>/`：每條切片的交付物。
 - `.build/`：工具用 YAML，由你從 Markdown 轉出，不手改、不提交。
 
@@ -73,7 +74,7 @@
 | 「繼續」「下一步」「開始寫規則」「這部分重做」 | `domain-step` |
 | 「審查好了」「我打勾了」「這步過了」 | `domain-freeze` |
 | 「專家回覆了」「人資說其實是…」「客戶覺得…」 | `domain-expert-reply` |
-| 「上線後發現一個特例」「這裡設計錯了」 | `domain-change` |
+| 「上線後發現一個特例」「這裡設計錯了」「客戶多了一個需求」 | `domain-change`（新需求先判斷擴充現有切片還是開新切片） |
 | 「檢查一下有沒有漏」「有沒有衝突」 | `domain-check` |
 
 - 判斷不出來時，先執行 `domain-status`，依目前狀態提出一兩個選項讓使用者選。
