@@ -21,7 +21,7 @@ argument-hint: "[切片代號，或一句粗略描述]"
 1. `slices/<代號>/` 已存在 → 停下來，改用 `/domain-status`。
 2. `core/` 不存在 → 把 `templates/core/` 複製成 `core/`（第一條切片）。
 3. 把 `templates/slice/` 整個複製到 `slices/<代號>/`，所有檔案中的 `{{切片}}` 換成代號。
-4. 在 `slices/PLAN.md` 把這條切片的狀態改為「進行中」，「變更紀錄」記一筆。
+4. 在 `slices/PLAN.md` 把這條切片的狀態改為「進行中」，在 `slices/CHANGELOG.md` 記一筆（PLAN）。
 
 ## 3. 確認輸入
 1. 列出 `inputs/<代號>/` 與 `inputs/shared/` 的檔案。
