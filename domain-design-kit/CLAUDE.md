@@ -41,6 +41,7 @@
 - `core/`：共用核心（Ontology）。只在 `/domain-freeze` 時寫入。
 - `slices/PLAN.md`：切片地圖。
 - `slices/ENTITY_SKETCH.md`：全局名詞草圖（規劃用參考，不是 Ontology；正式定義只在 `core/`）。
+- `slices/CHANGELOG.md`：規劃的變更紀錄，地圖與草圖的每次變動都記在這裡（兩份文件本身不放紀錄）。
 - `slices/<切片代號>/`：每條切片的交付物。
 - `.build/`：工具用 YAML，由你從 Markdown 轉出，不手改、不提交。
 
