@@ -211,8 +211,8 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
 
     <div class="row" role="row">
       <div class="name"><span>②</span>名詞盤點</div>
-      <div><div class="lbl">交付物</div>Entity 卡（含主要屬性）、關係清單、「不是 Entity」清單<div class="files"><span class="file">02_entities.md</span></div></div>
-      <div><div class="lbl">關卡</div><ul><li>每張卡寫「不是什麼」「不能跟誰合併」</li><li>模型元素用英文識別名稱，分類值用穩定代碼；各語言名稱登錄在詞彙對照表</li><li>不重新定義 core/；引用候選要標註</li><li>每個新增的 Entity 都被某條驗收問題用到</li></ul></div>
+      <div><div class="lbl">交付物</div>Entity 卡（含身分、主要屬性）、關係清單、「不是 Entity」清單（事件交給 ③、規則資料交給 ④）<div class="files"><span class="file">02_entities.md</span></div></div>
+      <div><div class="lbl">關卡</div><ul><li>每個候選依六問判斷：分流、身分、被指到、推導、持續、不能合併</li><li>每張卡寫「身分」「不是什麼」「不能跟誰合併」</li><li>模型元素用英文識別名稱，分類值用穩定代碼；各語言名稱登錄在詞彙對照表</li><li>不重新定義 core/；引用候選要標註</li><li>每個新增的 Entity 都被某條驗收問題用到</li></ul></div>
     </div>
 
     <div class="row" role="row">
@@ -246,7 +246,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
   <h2 id="principles">六條原則</h2>
   <div class="grid2">
     <div class="pr"><span class="k">1</span><p><strong>先講「是什麼」，才談「怎麼存」。</strong>①～④ 不出現資料表名；Entity 名稱不等於表名。</p></div>
-    <div class="pr"><span class="k">2</span><p><strong>算得出來的不是事實。</strong>餘額、總計是推導值，在模型裡標出來，不當 Entity。</p></div>
+    <div class="pr"><span class="k">2</span><p><strong>算得出來的不是事實。</strong>餘額、總計是推導值，在模型裡標出來，不當 Entity；但人決定、申報或凍結使用的值，即使算得出來，也是事實。</p></div>
     <div class="pr"><span class="k">3</span><p><strong>流程的每個階段分開記。</strong>申請、建議、核准、發生、付款各一筆；AI 的建議不能直接變成決定。</p></div>
     <div class="pr"><span class="k">4</span><p><strong>更正是一個業務動作。</strong>誰發現、誰核准、原紀錄與更正後的關係要寫進模型；怎麼保存依平台約定。</p></div>
     <div class="pr"><span class="k">5</span><p><strong>規則要有來源；會變的要有版本。</strong>只有會隨時間改變、舊結果要依當時規則解釋的，才記版本。</p></div>
