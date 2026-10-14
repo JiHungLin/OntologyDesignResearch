@@ -259,10 +259,10 @@ repo/
         ├── 05_mapping.md
         ├── schema.sql、api.yaml
         └── 06_evidence/
-.build/                      工具用的 YAML（由 AI 從 md 產生，不手改、不提交）
+.build/                      工具用的 YAML（由 tools/md2build.py 從 md 產生，不手改、不提交）
 ```
 
-**以 Markdown 為準**：`core/` 與切片文件都以 Markdown 撰寫與審查，這是唯一的真相。要跑《本體論設計指南》附錄 A 的檢查工具時，由 AI 從 md 轉出 YAML 放進 `.build/`（加入 `.gitignore`）；YAML 不手改，md 改了就重新產生。
+**以 Markdown 為準**：`core/` 與切片文件都以 Markdown 撰寫與審查，這是唯一的真相。要跑《本體論設計指南》附錄 A 的檢查工具時，用 `tools/md2build.py` 從 md 轉出 YAML 放進 `.build/`（加入 `.gitignore`）；YAML 不手改，md 改了就重新產生。轉換程式依《Domain設計輸入輸出規範》的格式解析，格式錯的列會逐一列出。
 
 切片的第 ②③④ 步凍結後，以 PR 把新增的 Entity、關係、流程、規則以「候選」狀態合併進 `core/`；第 ⑥ 步通過後，再以 PR 升為「已驗證」。
 

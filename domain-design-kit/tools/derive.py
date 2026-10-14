@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""由宣告推導結構不變量。讀取 .build/（由 AI 從 Markdown 交付物轉出）。
+"""由宣告推導結構不變量。讀取 .build/（由 tools/md2build.py 從 Markdown 交付物轉出）。
 用法：python tools/derive.py > .build/invariants.derived.yaml"""
 import sys, yaml
 

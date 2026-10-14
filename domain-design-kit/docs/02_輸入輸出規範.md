@@ -5,7 +5,7 @@
 > - 《團隊開發流程_精簡版.md》（Domain 設計規範）：每一步**要交什麼、怎樣算完成**。內容要求以它為準。
 > - 本文件：那些交付物**長什麼樣子**。格式以本文件為準。
 > - `templates/`：本文件的具體化，每份交付物一個空白範本。範本與本文件不一致時，以本文件為準並修正範本。
-> - 《本體論設計指南.md》：判斷準則與 YAML 格式（YAML 由 AI 從本文件規定的 Markdown 轉出）。
+> - 《本體論設計指南.md》：判斷準則與 YAML 格式（YAML 由 `tools/md2build.py` 從本文件規定的 Markdown 轉出；本文件的格式改了，轉換程式與它的測試要一起改）。
 
 ---
 
@@ -16,7 +16,7 @@ repo/
 ├── CLAUDE.md                 給 LLM 的工作規則（自動載入）
 ├── docs/                     規範文件（唯讀）
 ├── templates/                交付物範本（唯讀）
-├── tools/                    check.py、derive.py、impact.py
+├── tools/                    md2build.py、check.py、derive.py、impact.py、tests/
 ├── inputs/                   原始輸入（既有檔案不修改；AI 可新增使用者在對話中提供的資料）
 │   ├── shared/               跨切片共用：法規與政策原文、既有系統資料
 │   ├── research/             AI 從公開來源蒐集的資料（公開來源）
