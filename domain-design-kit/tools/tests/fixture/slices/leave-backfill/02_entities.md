@@ -63,3 +63,10 @@
 | Employment | Entity | 一段僱傭關係 | 僱傭關係 | |
 | LeaveOccurrence | Entity | 員工在已排定班次實際未出勤 | 請假事實 | |
 | LeaveRequest | Entity | 等待核准的請假 | 請假申請 | |
+| Employment.start_date | 屬性 | 到職日 | 到職日 | |
+| LeaveOccurrence.hours | 屬性 | 請假時數 | 時數 | |
+| LeaveOccurrence.leave_type | 屬性 | 假別 | 假別 | |
+| LeaveOccurrence.balance_after | 屬性 | 扣除後餘額 | 扣除後餘額 | |
+| LeaveRequest.requested_hours | 屬性 | 申請時數 | 申請時數 | |
+| requestedVia | 關係 | 請假事實由哪張申請提出 | 由…申請 | |
+| of | 關係 | 屬於 | 屬於 | |

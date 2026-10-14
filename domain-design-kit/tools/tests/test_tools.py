@@ -113,5 +113,91 @@ class TestCheck(Base):
         code, out = self.check('--step', '4')
         self.assertEqual(code, 0, out)
 
+class TestLint(Base):
+    def lint(self, *args):
+        return run('lint.py', SLICE, *args, cwd=self.dir)
+
+    def test_fixture_passes(self):
+        code, out = self.lint()
+        self.assertEqual(code, 0, out)
+        self.assertIn('引用檢查：紅燈 0 項', out)
+
+    def test_cancelled_rule_still_referenced(self):
+        self.edit(self.slice_file('03_flows.md'), '| 額度足夠 | R01 |', '| 額度足夠 | R01、R03 |')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('R03 已取消，仍被引用：03_flows.md', out)
+
+    def test_cancelled_decision_still_referenced(self):
+        self.edit(self.slice_file('01_scope.md'), '| Q03 | 這次請假是誰核准的？',
+                  '| Q03 | 這次請假是誰核准的？（見 D-02）')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('01_scope.md 的 D-02 已取消', out)
+
+    def test_decision_of_another_file_is_not_confused(self):
+        self.edit(self.slice_file('01_scope.md'), '| Q03 | 這次請假是誰核准的？',
+                  '| Q03 | 這次請假是誰核准的？（見 PLAN.md D-02）')
+        code, out = self.lint()
+        self.assertEqual(code, 0, out)
+
+    def test_use_case_uses_undeclared_event(self):
+        self.edit(self.slice_file('03_use_cases.md'), '- 用到的事件：SubmitLeaveRequest、ApproveLeave',
+                  '- 用到的事件：SubmitLeaveRequest、ApproveLeave、CancelLeave')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('UC-01 用到的事件 CancelLeave 沒有宣告', out)
+
+    def test_missing_expert_question(self):
+        self.edit(self.slice_file('01_scope.md'), '[待專家確認: EQ-001]', '[待專家確認: EQ-009]')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('EQ-009 不在 questions.md', out)
+
+    def test_term_missing_from_glossary(self):
+        self.edit(self.slice_file('03_flows.md'), '| RejectLeave | 事件 | 駁回請假 | 駁回請假 | |\n', '')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('事件 1 個不在詞彙對照表：RejectLeave', out)
+
+    def test_unknown_marker(self):
+        self.edit(self.slice_file('02_entities.md'), '| Person | [候選] [引用候選] |', '| Person | [候選] [待確認] |')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('「[待確認]」不是規定的標記', out)
+
+    def test_missing_input_file(self):
+        os.remove(os.path.join(self.dir, 'inputs', SLICE, '訪談_0930.md'))
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('訪談_0930.md 不存在', out)
+
+    def test_proposal_event_changes_state(self):
+        self.edit(self.slice_file('03_flows.md'), '| 建議 | LeaveRequest | 不改變狀態 |', '| 建議 | LeaveRequest | Pending → Approved |')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('ProposeLeaveTiming 是建議層，卻改變狀態', out)
+
+    def test_renamed_attribute_left_behind(self):
+        base = os.path.join(self.dir, 'baseline')
+        shutil.copytree(os.path.join(self.dir, 'slices', SLICE), base)
+        p = os.path.join(base, '02_entities.md')
+        with open(p, encoding='utf-8') as f:
+            s = f.read()
+        with open(p, 'w', encoding='utf-8') as f:
+            f.write(s.replace('`hours`（時數）', '`minutes`（分鐘數）'))
+        self.edit(self.slice_file('03_flows.md'), '| 額度足夠 |', '| 額度足夠（看 minutes） |')
+        code, out = self.lint('--baseline', base)
+        self.assertEqual(code, 1, out)
+        self.assertIn('屬性 LeaveOccurrence.minutes 已不在目前的定義中，仍出現在 03_flows.md', out)
+
+    def test_pending_decision_blocks_freeze(self):
+        self.edit(self.slice_file('01_scope.md'), 'AI／○○（2026-10-06） |\n| D-02', 'AI／待確認 |\n| D-02')
+        code, out = self.lint()
+        self.assertEqual(code, 0, out)
+        self.assertIn('D-01 待確認', out)
+        code, out = self.lint('--freeze')
+        self.assertEqual(code, 1, out)
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
