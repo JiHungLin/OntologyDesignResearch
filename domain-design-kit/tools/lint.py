@@ -303,15 +303,13 @@ class Lint:
         self.done('編號', n, '個引用')
 
     def check_glossary(self):
-        print("\n[詞彙對照表] 本切片定義的 Entity、屬性、關係、事件、狀態、規則、分類值都在詞彙對照表")
+        print("\n[詞彙對照表] 本切片定義的 Entity、屬性、關係、事件、狀態、分類值都在詞彙對照表")
         terms = {t['id'] for t in self.data.get('glossary') or []}
         defs = self.slice_defs(self.dir)
-        rules = [r['id'] for r in (self.data.get('rules') or {}).get('rules', [])
-                 if r.get('status') != 'cancelled' and r['id'] in self.slice_rule_ids()]
         want = ([('Entity', e) for e in defs['entity']] +
                 [('屬性', f'{e}.{a}') for e, a in defs['attribute']] +
                 [('關係', r) for r in defs['relation']] + [('事件', e) for e in defs['event']] +
-                [('狀態', f'{e}.{s}') for e, s in defs['state']] + [('規則', r) for r in rules] +
+                [('狀態', f'{e}.{s}') for e, s in defs['state']] +
                 [('分類值', c) for c in defs['code']])
         missing = {}
         for kind, i in want:
@@ -320,14 +318,6 @@ class Lint:
             shown = '、'.join(sorted(ids)[:8]) + ('…' if len(ids) > 8 else '')
             self.red('詞彙', f"{kind} {len(ids)} 個不在詞彙對照表：{shown}")
         self.done('詞彙', len(want), '個名稱')
-
-    def slice_rule_ids(self):
-        d = self.docs.get('04_rules.md')
-        if not d: return set()
-        saved = list(mb.problems)
-        r, _, _ = mb.parse_rules(d)
-        mb.problems[:] = saved
-        return {x['id'] for x in r}
 
     def check_proposal(self):
         print("\n[建議層] 「建議」層的事件不改變狀態")

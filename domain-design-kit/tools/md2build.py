@@ -25,7 +25,7 @@ KIND = {'前提條件': 'precondition', '計算': 'calculation', '判定': 'dete
 DECIDE = {'可自動判斷': 'automatic', '看條件': 'conditional', '需解釋': 'interpretive', '需人工判斷': 'human'}
 VIOLATION = {'擋下': 'block', '提醒': 'warn', '交給人判斷': 'escalate', '—': 'none'}
 TERM_KIND = {'Entity': 'entity', '屬性': 'attribute', '關係': 'relation', '事件': 'event',
-             '狀態': 'state', '規則': 'rule', '分類值': 'classification_value'}
+             '狀態': 'state', '分類值': 'classification_value'}
 CARD_KEYS = {'定義': 'definition', '身分': 'identity_basis', '何時開始': 'begins_when',
              '何時結束': 'ends_when', '不是什麼': 'not_used_for', '不能跟誰合併': 'not_mergeable_with',
              '主要屬性': 'attributes', '對應驗收問題': 'required_by_cq',
@@ -277,6 +277,8 @@ def parse_glossary(doc):
         cd, cz, cn, cst = col(header, '定義'), col(header, 'zh-TW'), col(header, '對照備註'), col(header, '狀態')
         for no, c in rows:
             kind = TERM_KIND.get(c[1])
+            if c[1] == '規則':
+                warn(doc.path, no, f'規則不登錄在詞彙對照表（規則表本身就是登錄處），「{c[0]}」這列可以刪除'); continue
             if not kind:
                 problem(doc.path, no, f'詞彙「{c[0]}」的種類「{c[1]}」不在固定選項內'); continue
             t = {'id': c[0].strip('`'), 'kind': kind}
