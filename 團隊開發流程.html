@@ -224,19 +224,19 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
     <div class="row" role="row">
       <div class="name"><span>④</span>規則與限制</div>
       <div><div class="lbl">交付物</div>規則表（種類、套用對象、判斷方式、來源、違反時、版本、<span class="ex">核對</span>）、守恆式<div class="files"><span class="file">04_rules.md</span></div></div>
-      <div><div class="lbl">關卡</div><ul><li>每條規則由人對照原文核對；原文沒寫、由解讀補上的條件標「解讀」；AI 給的條號一律視為未核對；未核對的可先凍結，但 ⑥ 受影響的案例不算通過</li><li>判斷方式為「需人工判斷」的經專家確認，系統只給建議</li><li>③ 每個前提條件都對應到規則編號</li></ul></div>
+      <div><div class="lbl">關卡</div><ul><li>每條規則由人對照原文核對；原文沒寫、由解讀補上的條件標「解讀」；AI 給的條號一律視為未核對；未核對的可先凍結，但 ⑥ 受影響的案例不算通過</li><li>判定類規則寫出每一種結果，包括條件不成立時；不知道的開專家問題</li><li>判斷方式為「需人工判斷」的經專家確認，系統只給建議</li><li>③ 每個前提條件都對應到規則編號</li></ul></div>
     </div>
 
     <div class="row" role="row">
       <div class="name"><span>⑤</span>投影到實作</div>
-      <div><div class="lbl">交付物</div>對照表五區：概念→表與欄位、事件→API、規則→落實位置、推導值與歷史需求→資料身分與保存方式、技術欄位；AI 依此與平台約定產生 schema 與 API<div class="files"><span class="file">05_mapping.md</span><span class="file">schema.sql</span><span class="file">api.yaml</span></div></div>
-      <div><div class="lbl">關卡</div><ul><li>每張業務表、每支 API 指得回概念；技術欄位與平台表標明「技術」即可</li><li>推導值已決定身分、歷史需求已決定保存方式；動作與規則都有落實位置（依平台約定）</li><li>每個正式 Use Case 都能用一組 API 完成</li><li>紙上驗證（預設）：人工算好的黃金案例，照設計推演一遍，結果一致</li></ul></div>
+      <div><div class="lbl">交付物</div>對照表六區：概念→表與欄位、事件→API、規則→落實位置、推導值與歷史需求→資料身分與保存方式、技術欄位、Use Case 走一遍；AI 依此與平台約定產生 schema 與 API（請求與回應寫到欄位層級）<div class="files"><span class="file">05_mapping.md</span><span class="file">schema.sql</span><span class="file">api.yaml</span></div></div>
+      <div><div class="lbl">關卡</div><ul><li>每張業務表、每支 API 指得回概念；技術欄位與平台表標明「技術」即可</li><li>推導值已決定身分、歷史需求已決定保存方式；動作與規則都有落實位置（依平台約定）</li><li>每個正式 Use Case 照步驟走一遍 API：每一步的輸入都拿得到（例：建立的項目有回傳編號）</li><li>紙上驗證（預設）：人工算好的黃金案例，照設計推演一遍，結果一致</li></ul></div>
     </div>
 
     <div class="row" role="row">
       <div class="name"><span>⑥</span>跑起來驗證</div>
       <div><div class="lbl">交付物</div><span class="ex">黃金案例</span>（獨立於系統算出，3～5 筆）、合成資料（AI 產生）、實際執行結果、驗收問題回答表、簽核紀錄<div class="files"><span class="file">06_evidence/</span><span class="file">golden_cases.md</span><span class="file">signoff.md</span></div></div>
-      <div><div class="lbl">關卡</div><ul><li>黃金案例結果與人工預期一致，專家看過</li><li>P0 驗收問題 100% 可回答；未執行 ≠ 通過</li><li>執行者與簽核者不同人</li><li>守恆式、黃金案例等檢查交給平台 CI 自動重跑</li></ul></div>
+      <div><div class="lbl">關卡</div><ul><li>黃金案例結果與人工預期一致，專家看過</li><li>P0 驗收問題 100% 可回答；未執行 ≠ 通過</li><li>執行者與簽核者不同人</li><li>實作時發現的設計問題不在程式裡自己補：列在簽核紀錄，回頭修改設計</li><li>守恆式、黃金案例等檢查交給平台 CI 自動重跑</li></ul></div>
     </div>
   </div>
   <p class="note">01～05 每份交付物末尾都有「決定與理由」區：重要判斷、沒採用的做法、處理過的反例；每個決定標出誰提出、誰同意，AI 提出、還沒有人同意的不能凍結。每個產出都用編號（Qnn、UC-nn、Rnn、GCnn）指回上游，檢查會沿著編號確認沒有漏。</p>
