@@ -66,6 +66,13 @@ class TestMd2build(Base):
         code, out = self.build()          # R02 寫「看條件（年齡）」
         self.assertEqual(code, 0, out)
 
+    def test_rule_in_glossary_is_a_warning(self):
+        self.edit(self.slice_file('04_rules.md'), '| ID | 種類 | 定義 | zh-TW | 對照備註 |\n|---|---|---|---|---|\n',
+                  '| ID | 種類 | 定義 | zh-TW | 對照備註 |\n|---|---|---|---|---|\n| R01 | 規則 | 事假一年上限 | 事假上限 | |\n')
+        code, out = self.build()
+        self.assertEqual(code, 0, out)
+        self.assertIn('規則不登錄在詞彙對照表', out)
+
     def test_column_count_mismatch(self):
         self.edit(self.slice_file('02_entities.md'), '| 0..1 | 無 | 急診可以沒有事前申請 |',
                   '| 0..1 | 急診可以沒有事前申請 |')
