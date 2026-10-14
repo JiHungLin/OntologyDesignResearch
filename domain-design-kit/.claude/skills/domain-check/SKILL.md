@@ -6,9 +6,11 @@ argument-hint: "[切片代號]"
 
 # 檢查
 
-1. **轉出 YAML**：讀 `docs/05` 2.1 的對照表與各階段的 YAML 格式，把 `core/` 與目前切片的 Markdown 合併轉成：
-   `.build/cq.yaml`、`.build/entities.yaml`、`.build/relations.yaml`、`.build/glossary.yaml`、`.build/flows.yaml`、`.build/rules.yaml`、`.build/mappings.yaml`（只轉已有內容的）。
-   - 只轉換，不補內容。Markdown 沒寫的欄位就不寫；需要推測的欄位（例：驗收問題的 `subject`、`answer_type`），在回報中列出你的推測，請人確認。
+1. **轉出 YAML**：執行 `python3 tools/md2build.py <切片>`，把 `core/` 與這條切片的 01～04 合併轉成 `.build/` 的 YAML。不要自己寫轉換程式。
+   - 程式列出的「看不懂或不合格式的列」是交付物的格式錯誤，照樣寫進回報（檔案:行號、建議怎麼改）；「提醒」是格式以外的寫法，列出即可。
+   - 程式本身轉錯（Markdown 符合 `docs/02` 卻被判錯，或該抓的沒抓到）：在回報中寫明，不要繞過；工具包由研究 repo 修正。
+   - 驗收問題的 `subject`、`answer_type` 不在 Markdown 裡。要檢查「能力問題走得到答案」時，你可以在 `.build/cq.yaml` 補上推測，並在回報中列出每一條推測，請人確認。
+   - 第 ⑤ 步的 `.build/mappings.yaml` 還沒有轉換程式，依 `docs/05` 的格式由你轉出。
    - 不修改任何 Markdown。
 2. **執行工具**：
    ```bash

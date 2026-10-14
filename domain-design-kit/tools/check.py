@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""本體論宣告一致性檢查（結構檢查）。讀取 .build/（由 AI 從 Markdown 交付物轉出）。
+"""本體論宣告一致性檢查（結構檢查）。讀取 .build/（由 tools/md2build.py 從 Markdown 交付物轉出）。
 用法：python tools/check.py [--step N]
   --step N：目前做到第 N 步（1～6）。這一步之前應有的 .build/ 檔案缺少時亮紅燈。
 只檢查結構對不對得起來，不檢查內容是否正確。"""
@@ -99,9 +99,11 @@ def main():
         tgts = r['range'] if isinstance(r['range'], list) else [r['range']]
         for t in tgts:
             adj[r['domain']].add(t); adj[t].add(r['domain'])
-    walked = 0
+    walked, untyped = 0, 0
     for cq in cqs:
         subj = cq.get('subject')
+        if not subj or not cq.get('answer_type'):
+            untyped += 1; continue   # Markdown 沒有這兩欄，要另外補上才檢查得了
         want = cq['answer_type'].replace('list<','').replace('>','').strip()
         if want in ('decimal','boolean','timestamp','scalar') or want.startswith('struct'):
             continue   # 純值或結構型答案，不檢查路徑
@@ -112,9 +114,11 @@ def main():
                 seen.add(n); stack.append(n)
         if want not in seen:
             print(f"    ✗ {cq['id']} subject={subj} 走不到 {want}"); fails.append('D')
+    if untyped:
+        print(f"    – {untyped} 個能力問題沒有 subject 或 answer_type，未檢查")
     result('D', walked, '個能力問題',
            missing(('cq.yaml', has_cq), ('relations.yaml', has_rel)),
-           empty='沒有答案是 Entity 的能力問題')
+           empty='沒有能力問題寫了 subject 與 answer_type' if untyped else '沒有答案是 Entity 的能力問題')
 
     print("\n[少做了] 每個事件須標觸發來源")
     for ev in evts:
