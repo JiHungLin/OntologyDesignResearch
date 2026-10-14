@@ -21,6 +21,18 @@
 | RejectLeave（駁回請假） | 人的動作 | 決定 | LeaveRequest | Pending → Rejected | 駁回理由 | 不可撤銷 | 發生、得知 |
 | ProposeLeaveTiming（產生休假建議） | 時間或條件到達 | 建議 | LeaveRequest | 不改變狀態 | 剩餘天數 | 可作廢 | 得知 |
 
+## 詞彙對照表新增
+
+| ID | 種類 | 定義 | zh-TW | 對照備註 |
+|---|---|---|---|---|
+| SubmitLeaveRequest | 事件 | 員工提出請假 | 提出請假 | |
+| ApproveLeave | 事件 | 核准請假 | 核准請假 | |
+| RejectLeave | 事件 | 駁回請假 | 駁回請假 | |
+| ProposeLeaveTiming | 事件 | 產生休假建議 | 產生休假建議 | |
+| LeaveRequest.Pending | 狀態 | 待審 | 待審 | |
+| LeaveRequest.Approved | 狀態 | 已核准 | 已核准 | |
+| LeaveRequest.Rejected | 狀態 | 已駁回 | 已駁回 | |
+
 ## 更正方式
 
 | 對象 | 更正事件 | 誰發現 | 誰核准 | 與原紀錄的關係 |

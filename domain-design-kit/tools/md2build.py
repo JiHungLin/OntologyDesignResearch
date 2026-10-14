@@ -401,7 +401,9 @@ def parse_rules(doc):
                     if v is None: continue
                     if option(v, table): r[key] = option(v, table)
                     else: problem(doc.path, no, f'{c[0]} 的{k}「{v}」不在固定選項內')
-                if get('套用對象'): r['applies_to'] = ids_in(get('套用對象'))
+                if get('套用對象'):
+                    r['applies_to'] = ids_in(get('套用對象'))
+                    r['applies_to_text'] = get('套用對象')
                 if get('來源'): r['source'] = {'ref': get('來源')}
                 ver = get('版本')
                 if ver and ver not in EMPTY:

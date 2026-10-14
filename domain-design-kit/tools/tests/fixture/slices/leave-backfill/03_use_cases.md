@@ -7,3 +7,9 @@
 - 用到的 Entity：LeaveOccurrence、LeaveRequest
 - 用到的事件：SubmitLeaveRequest、ApproveLeave
 - 規則：R01
+
+## 草稿涵蓋檢查
+
+| 草稿 US | 涵蓋它的 UC |
+|---|---|
+| US-D01 | UC-01 |
