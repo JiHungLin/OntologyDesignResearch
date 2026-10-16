@@ -60,9 +60,9 @@ argument-hint: "<1-6> [切片代號]"
 |---|---|---|---|
 | ① | `slices/PLAN.md` 中這條切片的列、`inputs/<切片>/`、`inputs/shared/`、`core/` | `01_scope.md`、`questions.md` | 領域實務 |
 | ② | `01_scope.md`、`core/`、`slices/ENTITY_SKETCH.md` | `02_entities.md`；必要時更新 `slices/ENTITY_SKETCH.md` | 本體懷疑者 |
-| ③ | `01_scope.md`、`02_entities.md` | `03_flows.md`、`03_use_cases.md` | 時間與帳務、隱私與濫用 |
-| ④ | `02_entities.md`、`03_flows.md`、`03_use_cases.md`、`inputs/` 的法規與政策原文 | `04_rules.md`；回填 `03_flows.md`、`03_use_cases.md` | 領域實務、時間與帳務 |
-| ⑤ | 已凍結的 ②③④、`docs/03` | `05_mapping.md`、`schema.sql`、`api.yaml` | 隱私與濫用 |
+| ③ | `01_scope.md`、`02_entities.md` | `03_flows.md`、`03_use_cases.md` | 時間與帳務、隱私與濫用、實作者 |
+| ④ | `02_entities.md`、`03_flows.md`、`03_use_cases.md`、`inputs/` 的法規與政策原文 | `04_rules.md`；回填 `03_flows.md`、`03_use_cases.md` | 領域實務、時間與帳務、實作者 |
+| ⑤ | 已凍結的 ②③④、`docs/03` | `05_mapping.md`、`schema.sql`、`api.yaml` | 隱私與濫用、實作者 |
 | ⑥ | `01_scope.md`、`03_use_cases.md`、`04_rules.md`、`02_entities.md`、`05_mapping.md`、實作 | `06_evidence/` | 領域實務 |
 
 ### ① 範圍與驗收問題
@@ -97,7 +97,7 @@ argument-hint: "<1-6> [切片代號]"
 - 規則編號：取 `core/rules.md` 與所有切片 `04_rules.md` 的最大號加一。
 - 你給的條號與數字一律 `[未核對]`；`inputs/` 有原文的（含 `inputs/research/`），引用原文位置與網址，仍由人核對。這條切片需要、但還沒蒐集的法規，先去公開來源找並照 `docs/02` 的格式存進 `inputs/research/`（同主題加進同一份檔案，更新 `INDEX.md`）。規則表的「來源」附上證據條目編號（例：`勞保加保#01`）。規則表的「核對」是**解讀**的核對；條文原文的核對看 research 條目的「核對」欄。兩者都已核對，規則才算已核對；在回報中列出引用了哪些原文仍 `[未核對]` 的條目，方便人一次核對。規則有多個版本時，每個版本引用各自的證據條目。
 - 規則文字用到的屬性寫成 `` `Entity.attribute` ``；條文原文沒有直接寫、是你解讀補上的條件，寫成 `[解讀: …]`，不要寫得像原文。取消的規則保留編號，「規則」欄開頭加 `[已取消: <依據>]`，並把狀態機、UC、回填紀錄中對它的引用拿掉。
-- 判定類規則寫出每一種結果，包括條件不成立時（例：強制／可自願／不適用）；不知道的開 EQ，標 `[待專家確認: EQ-nnn]`，不省略。
+- 判定類規則寫出每一種結果，包括條件不成立時（例：強制／可自願／不適用），以及需要的屬性未知時（資料不足，`docs/03` P12）；不知道的開 EQ，標 `[待專家確認: EQ-nnn]`，不省略。
 - 每條規則判斷時用到的屬性，要存在於 `02_entities.md`。不存在 → 這是回頭修改（回到 ②，第 0 級）：停下來向人提出，同意後再改 ②，並記 CHANGELOG。
 - 回填 `03_flows.md` 狀態轉換的「規則」欄與 `03_use_cases.md` 的「規則」，並在「回填紀錄」列出。被回填的檔案若已凍結，記 CHANGELOG。
 
