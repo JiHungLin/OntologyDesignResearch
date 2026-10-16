@@ -224,7 +224,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
     <div class="row" role="row">
       <div class="name"><span>④</span>規則與限制</div>
       <div><div class="lbl">交付物</div>規則表（種類、套用對象、判斷方式、來源、違反時、版本、<span class="ex">核對</span>）、守恆式<div class="files"><span class="file">04_rules.md</span></div></div>
-      <div><div class="lbl">關卡</div><ul><li>每條規則由人對照原文核對；原文沒寫、由解讀補上的條件標「解讀」；AI 給的條號一律視為未核對；未核對的可先凍結，但 ⑥ 受影響的案例不算通過</li><li>判定類規則寫出每一種結果，包括條件不成立時；不知道的開專家問題</li><li>判斷方式為「需人工判斷」的經專家確認，系統只給建議</li><li>③ 每個前提條件都對應到規則編號</li></ul></div>
+      <div><div class="lbl">關卡</div><ul><li>每條規則由人對照原文核對；原文沒寫、由解讀補上的條件標「解讀」；AI 給的條號一律視為未核對；未核對的可先凍結，但 ⑥ 受影響的案例不算通過</li><li>判定類規則寫出每一種結果，包括條件不成立時與需要的資料未知時；不知道的開專家問題</li><li>判斷方式為「需人工判斷」的經專家確認，系統只給建議</li><li>③ 每個前提條件都對應到規則編號</li></ul></div>
     </div>
 
     <div class="row" role="row">
@@ -261,9 +261,9 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
     <table>
       <thead><tr><th>等級</th><th>性質</th><th>處理</th></tr></thead>
       <tbody>
-        <tr><td><span class="lv">0</span> 切片內</td><td>切片還沒通過 ⑥，發現前面漏了（來自專家、紙上驗證、實作或其他切片都算）</td><td>直接改，記 CHANGELOG；被改的步驟重新審查、打新 tag，後面的步驟和實作程式碼依回歸範圍跟著改</td></tr>
+        <tr><td><span class="lv">0</span> 切片內</td><td>切片還沒通過 ⑥，發現前面漏了（來自專家、紙上驗證、實作或其他切片都算）</td><td>直接改，記 CHANGELOG；被改的步驟重新審查、打新 tag，後面的步驟和實作程式碼依回歸範圍跟著改；已有資料時依平台 P12 處理</td></tr>
         <tr><td><span class="lv">1</span> 新增規則</td><td>模型不用動，多一條規則</td><td>新增規則＋黃金案例，跑測試</td></tr>
-        <tr><td><span class="lv">2</span> 擴充模型</td><td>加屬性、關係或 Entity，既有意思不變</td><td>變更提案（次要版本），受影響切片重跑 ⑥</td></tr>
+        <tr><td><span class="lv">2</span> 擴充模型</td><td>加屬性、關係或 Entity，既有意思不變</td><td>變更提案（次要版本）；舊資料的新屬性為「未知」，規則遇到未知判「資料不足」（平台 P12）；受影響切片重跑 ⑥</td></tr>
         <tr><td><span class="lv">3</span> 改變意思</td><td>概念要拆、要合，或幾對幾要改</td><td>變更提案（主要版本），舊紀錄保留原意，新意思從生效日起適用；舊項目標「已取代」，不刪除</td></tr>
       </tbody>
     </table>
@@ -309,6 +309,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
         <span class="chip">領域實務 ④⑥</span>
         <span class="chip">時間與帳務 ③④</span>
         <span class="chip">隱私與濫用 ③⑤</span>
+        <span class="chip">實作者 ③④⑤</span>
         <span class="chip">關卡判定：由人擔任</span>
       </div>
     </div>
@@ -349,6 +350,8 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
         <tr><td>P8 追溯</td><td>每張表、每支 API 指回概念的統一格式</td></tr>
         <tr><td>P9 自動化檢查</td><td>守恆、重算、權限、追溯、黃金案例放進 CI</td></tr>
         <tr><td>P10 名稱與多語</td><td>英文識別名稱、分類值穩定代碼；各語言名稱另存，依使用者語言顯示</td></tr>
+        <tr><td>P11 識別範圍與存放</td><td>在什麼範圍內認「同一個」、要不要標資料性質、資料放哪裡，由平台決定一次</td></tr>
+        <tr><td>P12 模型演進與既有資料</td><td>新屬性在舊資料上是「未知」，不當成「否」；規則遇到未知判「資料不足」；補值與遷移都要留事件</td></tr>
       </tbody>
     </table>
   </div>
