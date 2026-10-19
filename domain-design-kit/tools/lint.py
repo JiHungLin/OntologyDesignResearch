@@ -403,10 +403,18 @@ class Lint:
             print(f"    – 舊格式（沒有「提出／同意」欄）：{'、'.join(sorted(set(old)))}")
         self.done('待確認', n, '個決定', skipped=None if n else ('都是舊格式' if old else None))
 
-    def run(self):
+    def check_parse(self):
+        print("[格式] 每一列都看得懂（md2build 的解析：表格欄數、固定選項、卡片結構）")
+        for path, no, msg in self.parse_problems:
+            self.red("格式", f"{os.path.normpath(self.rel(path) if os.path.isabs(path) else path)}:{no} {msg}")
         if self.parse_problems:
-            print(f"注意：md2build 有 {len(self.parse_problems)} 處看不懂或不合格式的列，"
-                  "這些列沒有納入以下檢查（先執行 md2build.py 看清單）。\n")
+            print("    看不懂的列沒有納入以下檢查。")
+        else:
+            print("    ✓ 通過")
+        print()
+
+    def run(self):
+        self.check_parse()
         self.check_residue(); self.check_cancelled(); self.check_ids(); self.check_glossary()
         self.check_proposal(); self.check_markers(); self.check_paths(); self.check_versions()
         self.check_pending()

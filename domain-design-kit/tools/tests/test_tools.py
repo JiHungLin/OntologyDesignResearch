@@ -198,6 +198,13 @@ class TestLint(Base):
         self.assertEqual(code, 1, out)
         self.assertIn('屬性 LeaveOccurrence.minutes 已不在目前的定義中，仍出現在 03_flows.md', out)
 
+    def test_extra_table_column_is_red(self):
+        self.edit(self.slice_file('01_scope.md'), '| Q01 | ', '| Q01 | | ')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('欄數不對', out)
+        self.assertNotIn('引用檢查：紅燈 0 項', out)
+
     def test_pending_decision_blocks_freeze(self):
         self.edit(self.slice_file('01_scope.md'), 'AI／○○（2026-10-06） |\n| D-02', 'AI／待確認 |\n| D-02')
         code, out = self.lint()
