@@ -62,6 +62,7 @@
 | Domain 設計心法 | https://claude.ai/artifact/NYTNBtchjCAE4ZLZXy2JkY | `Domain設計心法.html` |
 | 心法精華版 | https://claude.ai/artifact/YJ5RrTAownYBGb28tiR1tV | `Domain設計心法_精華版.html` |
 | 流程演進判斷（0.10 四個問題＋10/07 會議提案的建議結論） | https://claude.ai/artifact/GeQFc5kyihoQcnvCPEvR9G | `流程演進判斷.html` |
+| 第二條切片成效分析（hire-employee vs annual-leave-grant，10/07 決議的成效） | https://claude.ai/artifact/MTv1Wk1tFAwq47d5vxtkXk | `流程成效分析.html`（正本 `20261021流程成效分析.md`） |
 | 人資 Domain 設計計畫（一頁投影片，給 Sean） | https://claude.ai/artifact/YAC1AoDadBYi6DjF7sUmea | 不在 repo，需要時用 Artifact read 取回 |
 | 人資計畫海報（Double Diamond，交付到 ⑤ 含紙上驗證） | https://claude.ai/artifact/1vTGniL2vFGFZpkJXkzNgB | 同上 |
 | AI 協作方式海報 | https://claude.ai/artifact/LcPWoaxiroNAZmLtSWmeJS | 同上 |
