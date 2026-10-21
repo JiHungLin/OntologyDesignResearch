@@ -289,6 +289,16 @@ class TestLint(Base):
         code, out = self.lint('--freeze')
         self.assertEqual(code, 1, out)
 
+    def test_rule_applies_only_to_other_slice_use_case(self):
+        self.edit(self.slice_file('04_rules.md'), '| 前提條件 | ApproveLeave | 看條件（年齡）',
+                  '| 前提條件 | 查看個資（hire-employee:UC-14、hire-employee:UC-15） | 看條件（年齡）')
+        code, out = self.lint()
+        self.assertEqual(code, 0, out)
+        self.edit(self.slice_file('04_rules.md'), '查看個資（hire-employee:UC-14、hire-employee:UC-15）', '查看個資')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('R02 的套用對象「查看個資」沒有寫', out)
+
 class TestTable(Base):
     def test_empty_cells_are_not_merged(self):
         self.edit(self.slice_file('questions.md'), '| 待問 | | |', '| 待問 | | 2026-10-21 |')
