@@ -94,7 +94,7 @@ AI 會先和你一起整理切片地圖；同意後說「開始做第一條」�
 | `.claude/skills/` | 上面八個指令 |
 | `docs/` | 規範文件（唯讀），從研究資料夾複製 |
 | `templates/` | 交付物範本（唯讀） |
-| `tools/` | `md2build.py`（Markdown 轉 YAML）、`check.py`（結構檢查）、`lint.py`（引用檢查）、`derive.py`、`impact.py`；`tests/`（工具的測試與範例切片） |
+| `tools/` | `md2build.py`（Markdown 轉 YAML）、`check.py`（結構檢查）、`lint.py`（引用檢查）、`table.py`（讀表格）、`derive.py`、`impact.py`；`tests/`（工具的測試與範例切片） |
 | `inputs/` | 原始輸入：現場資料（`shared/`、`<切片>/`）、AI 蒐集的公開來源（`research/`）、AI 推想草稿（`drafts/`，要你同意）；也可以直接在對話中貼上 |
 
 ## 維護（在 OntologyResearch 內）

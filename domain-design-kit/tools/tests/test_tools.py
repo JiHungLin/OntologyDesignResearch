@@ -213,5 +213,91 @@ class TestLint(Base):
         code, out = self.lint('--freeze')
         self.assertEqual(code, 1, out)
 
+    def write(self, rel, text):
+        p = os.path.join(self.dir, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, 'w', encoding='utf-8') as f:
+            f.write(text)
+
+    def test_placeholder_left_in_slice(self):
+        self.edit(self.slice_file('01_scope.md'), '## 驗收問題', '## 驗收問題\n\n{{切片}} 的問題')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('還有範本的佔位符', out)
+
+    def test_expert_question_impact_not_backfilled(self):
+        self.edit(self.slice_file('questions.md'), '| 01_scope Q02 |', '| 02_entities Employment |')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('01_scope.md:14 的 EQ-001 在 Q02，questions.md 的「影響」沒有列出', out)
+
+    def test_impact_range_counts(self):
+        self.edit(self.slice_file('questions.md'), '| 01_scope Q02 |', '| 01_scope Q01～Q03；內文未標：02_entities Employment |')
+        code, out = self.lint()
+        self.assertEqual(code, 0, out)
+
+    def test_table_broken_by_blank_line(self):
+        self.edit(self.slice_file('01_scope.md'), '\n| Q02 |', '\n\n| Q02 |')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('這列不屬於任何表格', out)
+
+    def test_question_status_outside_options(self):
+        self.edit(self.slice_file('questions.md'), '| 待問 |', '| 待回覆 |')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('「狀態」的值「待回覆」不在規定的選項', out)
+
+    def test_out_of_scope_owner_must_be_on_map(self):
+        self.write('slices/PLAN.md', '# 切片地圖\n\n## 切片\n\n| 切片 | 情境 | 狀態 |\n|---|---|---|\n'
+                   '| annual-leave | 事前請特休 | 候選 |\n| leave-backfill | 事後補單 | 進行中 |\n')
+        self.edit(self.slice_file('01_scope.md'), '## 草稿 User Story',
+                  '## 範圍外但會用到\n\n| 會用到的東西 | 歸屬的切片 | 目前狀態 | 本切片怎麼處理 |\n|---|---|---|---|\n'
+                  '| 人 | annual-leave | 候選 | 直接引用 |\n| 薪資扣款 | monthly-payroll 的第 ④ 步 | — | [靜態替代] 扣日薪 |\n\n## 草稿 User Story')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('沒有寫切片地圖上的切片代號', out)
+        self.assertEqual(out.count('沒有寫切片地圖上的切片代號'), 1, out)
+
+    GC = ('# leave-backfill 黃金案例\n\n## GC01 正常流程\n- 驗證：Q01\n- 情境：…\n- 紙上判定：{}\n- 判定：{}\n\n'
+          '## GC02 候選\n- 驗證：Q02\n- 紙上判定：一致（2026-10-21）\n- 判定：[未執行]\n')
+
+    def test_golden_case_not_adopted(self):
+        self.write(self.slice_file('06_evidence/golden_cases.md'), self.GC.format('不採用', '不採用'))
+        code, out = self.lint()
+        self.assertEqual(code, 0, out)
+        self.write(self.slice_file('06_evidence/golden_cases.md'), self.GC.format('不採用', '[未執行]'))
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('GC01 只有一欄寫「不採用」', out)
+        self.write(self.slice_file('06_evidence/golden_cases.md'), self.GC.format('沒挑', '沒挑'))
+        code, out = self.lint()
+        self.assertIn('GC01 的「紙上判定」是「沒挑」', out)
+
+    def test_core_question_without_slice_prefix(self):
+        self.edit('core/entities.md', '- 對應驗收問題：annual-leave:Q01', '- 對應驗收問題：Q01')
+        code, out = self.lint()
+        self.assertEqual(code, 0, out)
+        self.assertIn('Q01 沒有切片前綴', out)
+        code, out = self.lint('--freeze')
+        self.assertEqual(code, 1, out)
+
+    def test_core_referenced_by_missing(self):
+        self.edit('core/entities.md', '- 被引用：leave-backfill', '- 被引用：（無）')
+        code, out = self.lint()
+        self.assertIn('Person 被本切片引用，「被引用」沒有 leave-backfill', out)
+        code, out = self.lint('--freeze')
+        self.assertEqual(code, 1, out)
+
+class TestTable(Base):
+    def test_empty_cells_are_not_merged(self):
+        self.edit(self.slice_file('questions.md'), '| 待問 | | |', '| 待問 | | 2026-10-21 |')
+        code, out = run('table.py', self.slice_file('questions.md'), '--row', 'EQ-001',
+                        '--col', '答覆', '--col', '答覆日', '--col', '影響', cwd=self.dir)
+        self.assertEqual(code, 0, out)
+        self.assertIn('答覆：（空）', out)
+        self.assertIn('答覆日：2026-10-21', out)
+        self.assertIn('影響：01_scope Q02', out)
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

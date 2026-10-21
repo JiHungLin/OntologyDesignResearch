@@ -4,6 +4,8 @@
 用法：python tools/lint.py <切片代號> [--root <repo 根目錄>] [--freeze] [--baseline <目錄>]
   --freeze：準備凍結時使用，「提出／同意」有「待確認」就亮紅燈（平常只列出）。
   --baseline：上一版的切片資料夾（預設取各步驟最新的 git tag），用來找被刪除或改名的名稱。
+  表格、EQ 影響、範圍外、佔位符、黃金案例、core 前綴（--freeze 時亮紅燈）、被引用也在這裡檢查；
+  「用在」與「舊版上游」只列提醒，不算紅燈。
 只檢查引用與結構對不對得起來，不代表內容正確。"""
 import os, re, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -24,7 +26,7 @@ QUALIFIED_RE = re.compile(r'(?:\b0\d(?:_[a-z_]+)?(?:\.md)?|PLAN(?:\.md)?|ENTITY_
 def targets(text):
     """套用對象中的識別名稱、規則編號（展開 R22～R28）、UC 編號。
     `Entity.attribute` 算 Entity；括號裡的說明文字只取其中的規則與 UC 編號。"""
-    text = text or ''
+    text = re.sub(r'[a-z][a-z0-9-]*:(?:UC-\d+|US-D\d+|Q\d+)', ' ', text or '')   # 其他切片的編號（hire-employee:UC-14）
     inner = ' '.join(re.findall(r'[（(]([^）)]*)[）)]', text))
     outer = re.sub(r'[（(][^）)]*[）)]', ' ', text)
     out = []
@@ -413,11 +415,318 @@ class Lint:
             print("    ✓ 通過")
         print()
 
+    # ---------- 2026-10-21 新增（流程待處理清單 #1、#2、#11～#18） ----------
+    def md_files(self):
+        """表格檢查的範圍：本切片、slices/ 根目錄、core/、inputs/ 的所有 Markdown。"""
+        out = []
+        for base, recursive in ((self.dir, True), (os.path.join(self.root, 'slices'), False),
+                                (os.path.join(self.root, 'core'), True), (os.path.join(self.root, 'inputs'), True)):
+            if not os.path.isdir(base): continue
+            if recursive:
+                for d, _, fs in os.walk(base):
+                    out += [os.path.join(d, f) for f in sorted(fs) if f.endswith('.md')]
+            else:
+                out += [os.path.join(base, f) for f in sorted(os.listdir(base)) if f.endswith('.md')]
+        return out
+
+    def quiet_tables(self, path):
+        """讀表格但不把問題記進 md2build 的全域清單：回傳 (表格, 欄數不對的列)。"""
+        saved = list(mb.problems)
+        doc = mb.Doc(path)
+        tables = doc.tables()
+        bad = [(no, msg) for p, no, msg in mb.problems[len(saved):]]
+        mb.problems[:] = saved
+        # 不屬於任何表格的「| …」列（例：表格中間多一行空行，後面的列就斷開了）
+        lines = [(no, l) for no, h2, h3, l in doc.items if l is not None]
+        inside = set()
+        for i, (no, l) in enumerate(lines):
+            nxt = lines[i + 1][1] if i + 1 < len(lines) else ''
+            if l.strip().startswith('|') and re.match(r'^\s*\|[\s:|-]+\|\s*$', nxt) and '-' in nxt:
+                j = i
+                while j < len(lines) and lines[j][1].strip().startswith('|'):
+                    inside.add(lines[j][0]); j += 1
+        for no, l in lines:
+            if l.strip().startswith('|') and l.strip().endswith('|') and no not in inside:
+                bad.append((no, '這列不屬於任何表格（前面可能多了空行，或少了表頭與分隔列）'))
+        return tables, bad
+
+    OPTIONS = {   # (檔名, h2, 欄名) → 允許的值（開頭符合，後面可接括號說明）
+        ('questions.md', None, '狀態'): ['待問', '已問', '已回覆'],
+        ('PLAN.md', '現實資料盤點', '狀態'): ['已有', '已蒐集', '推想草稿', '待提供', '找不到'],
+        ('PLAN.md', '切片', '大小估計'): ['太小', '剛好', '太大'],
+        ('PLAN.md', '切片', '狀態'): ['候選', '進行中', '設計完成（待驗證）', '完成', '擱置', '已拆分', '已合併'],
+        ('ENTITY_SKETCH.md', '名詞', '層'): ['core', 'shared', 'domain'],
+        ('ENTITY_SKETCH.md', '名詞', '狀態'): ['草圖', '已定義', '已取消'],
+    }
+
+    def check_tables(self):
+        print("\n[表格] slices/、core/、inputs/ 所有表格的欄數等於表頭；固定選項欄位只用規定的值")
+        seen = {(os.path.normpath(p if os.path.isabs(p) else os.path.join(self.root, p)), no)
+                for p, no, _ in self.parse_problems}
+        n = 0
+        for path in self.md_files():
+            tables, bad = self.quiet_tables(path)
+            for no, msg in bad:
+                if (os.path.normpath(path), no) in seen: continue      # 「格式」已列過
+                self.red('表格', f"{self.rel(path)}:{no} {msg}")
+            name = os.path.basename(path)
+            for h2, h3, header, rows in tables:
+                n += len(rows) + 1
+                for (fname, sec, colname), allowed in self.OPTIONS.items():
+                    if fname != name or (sec and h2 != sec): continue
+                    if fname == 'questions.md' and header[0] != '編號': continue
+                    k = header.index(colname) if colname in header else None
+                    if k is None: continue
+                    for no, c in rows:
+                        v = c[k].strip()
+                        if v in allowed or any(v.startswith(a) and v[len(a):len(a) + 1] in '（(；; ' for a in allowed):
+                            continue
+                        self.red('表格', f"{self.rel(path)}:{no} 「{colname}」的值「{v}」不在規定的選項（{'、'.join(allowed)}）")
+        self.done('表格', n, '列')
+
+    def check_placeholders(self):
+        print("\n[佔位符] 切片檔案沒有殘留範本的 {{切片}}")
+        n = 0
+        for d, _, fs in os.walk(self.dir):
+            for f in sorted(fs):
+                if not f.endswith(('.md', '.yaml', '.sql')): continue
+                path = os.path.join(d, f)
+                n += 1
+                with open(path, encoding='utf-8') as fh:
+                    for no, line in enumerate(fh, 1):
+                        if re.search(r'\{\{?切片\}?\}', line):
+                            self.red('佔位符', f"{self.rel(path)}:{no} 還有範本的佔位符：{line.strip()[:60]}")
+        self.done('佔位符', n, '個檔案')
+
+    ID_RE = r'(?<![A-Za-z0-9_-])((?:US-D|UC-|D-|X-|GC|Q|R)\d+|[A-Z][a-z]+(?:[A-Z][a-z0-9]*)+)(?![A-Za-z0-9_])'
+    ITEM_RE = re.compile(r'\s*`?((?:US-D|UC-|EQ-|CR-|D-|X-|P-|GC|Q|R|C)\d+|[A-Za-z][A-Za-z0-9_]*)')
+
+    @staticmethod
+    def expand(text):
+        """「R65～R67」「Q01～Q14」展開成每個編號，其餘照原樣。"""
+        def rep(m):
+            p, a, b = m.group(1), m.group(2), m.group(4)
+            w = len(a)
+            return '、'.join(f'{p}{i:0{w}d}' for i in range(int(a), int(b) + 1)) if int(b) - int(a) < 200 else m.group(0)
+        return re.sub(r'((?:US-D|UC-|EQ-|D-|X-|GC|Q|R|C))(\d+)～(\1)?(\d+)', rep, text)
+
+    def check_eq_impact(self):
+        print("\n[EQ 影響] 每個 [待專家確認: EQ-nnn] 所在的項目，都列在該 EQ 的「影響」")
+        qpath = os.path.join(self.dir, 'questions.md')
+        if not os.path.exists(qpath):
+            return self.done('EQ影響', 0, '')
+        impact = {}
+        for h2, h3, header, rows in self.quiet_tables(qpath)[0]:
+            k = header.index('影響') if '影響' in header else None
+            if header[0] != '編號' or k is None: continue
+            for no, c in rows:
+                segs = {}
+                for seg in re.split(r'[；;]', self.expand(c[k])):
+                    seg = re.sub(r'^\s*內文未標[：:]\s*', '', seg.strip())
+                    m = re.match(r'(0\d(?:_[a-z_]+)?)(?:\.md)?\s*(.*)$', seg)
+                    if m: segs.setdefault(m.group(1)[:2] + ('u' if 'use_cases' in m.group(1) else ''), []).append(m.group(2))
+                impact[c[0]] = segs
+        if not impact:
+            return self.done('EQ影響', 0, '', skipped='questions.md 沒有「影響」欄')
+        n = 0
+        for f, d in self.docs.items():
+            fkey = f[:2] + ('u' if 'use_cases' in f else '')
+            for no, h2, h3, line in d.items:
+                text = h3 if line is None else line
+                eqs = re.findall(r'\[待專家確認[:：]\s*(EQ-\d+)\]', text or '')
+                if not eqs or (h2 or '') in ('檢查紀錄', '回填紀錄'): continue
+                cands, label = [], None                      # 項目：這一列的編號與英文名稱、所屬標題
+                if line is not None and line.strip().startswith('|'):
+                    cells = mb.split_row(line)
+                    m = self.ITEM_RE.match(cells[0])
+                    if m: cands.append(m.group(1)); label = m.group(1)
+                    cands += re.findall(self.ID_RE, line)
+                for h in (h3, h2):
+                    if h:
+                        m = self.ITEM_RE.match(h); cands += [m.group(1)] if m else []
+                        cands += re.findall(self.ID_RE, h)
+                        cands.append(re.sub(r'[（(].*$', '', h).strip())
+                        label = label or (m.group(1) if m else cands[-1])
+                for eq in sorted(set(eqs)):
+                    if eq not in impact: continue            # 不存在的 EQ 由 [編號存在] 檢查
+                    n += 1
+                    seg = ' '.join(impact[eq].get(fkey, []))
+                    if not any(c and word(c).search(seg) for c in cands):
+                        self.red('EQ影響', f"{f}:{no} 的 {eq} 在 {label}，questions.md 的「影響」沒有列出（{f[:-3]} {label}）")
+        self.done('EQ影響', n, '個標記')
+
+    def plan_slices(self):
+        path = os.path.join(self.root, 'slices', 'PLAN.md')
+        if not os.path.exists(path): return None
+        out = set()
+        for h2, h3, header, rows in self.quiet_tables(path)[0]:
+            if h2 == '切片' and header[0] == '切片':
+                out |= {c[0].strip('` ') for no, c in rows}
+        return out
+
+    def check_out_of_scope(self):
+        print("\n[範圍外] ①「範圍外但會用到」的歸屬切片存在於切片地圖")
+        d = self.docs.get('01_scope.md')
+        plan = self.plan_slices()
+        if d is None:
+            return self.done('範圍外', 0, '')
+        if plan is None:
+            return self.done('範圍外', 0, '', skipped='沒有 slices/PLAN.md')
+        n = 0
+        for h2, h3, header, rows in d.tables():
+            if h2 != '範圍外但會用到': continue
+            k = mb.col(header, '歸屬')
+            if k is None: continue
+            for no, c in rows:
+                words = re.findall(r'(?<![\w/.-])([a-z][a-z0-9]*(?:-[a-z0-9]+)*)(?![\w.-])', c[k])
+                n += 1
+                if not [w for w in words if w in plan]:
+                    self.red('範圍外', f"01_scope.md:{no} 歸屬「{c[k]}」沒有寫切片地圖上的切片代號")
+        self.done('範圍外', n, '列')
+
+    GC_VALUES = {'紙上判定': ['一致', '不一致', '[未執行]', '不採用'], '判定': ['通過', '失敗', '[未執行]', '不採用']}
+
+    def check_golden(self):
+        print("\n[黃金案例] 「紙上判定」「判定」只用規定的值；不採用的兩欄一致")
+        path = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
+        if not os.path.exists(path):
+            return self.done('黃金案例', 0, '')
+        cases, cur = [], None
+        for no, h2, h3, line in mb.Doc(path).items:
+            if h3 is None and h2 and re.match(r'GC\d+', h2) and (cur is None or cur['id'] != h2.split()[0]):
+                cur = {'id': h2.split()[0], 'no': no}; cases.append(cur)
+            m = re.match(r'^- (紙上判定|判定)[：:]\s*(.*)$', line or '')
+            if cur and m: cur[m.group(1)] = (no, m.group(2).strip())
+        for gc in cases:
+            for key, allowed in self.GC_VALUES.items():
+                if key not in gc:
+                    self.red('黃金案例', f"golden_cases.md {gc['id']} 沒有「{key}」"); continue
+                no, v = gc[key]
+                if not any(v == a or (v.startswith(a) and v[len(a):len(a) + 1] in '（(；;。，: ') for a in allowed):
+                    self.red('黃金案例', f"golden_cases.md:{no} {gc['id']} 的「{key}」是「{v}」，只能是 {'、'.join(allowed)}")
+            vals = [gc[k][1] for k in self.GC_VALUES if k in gc]
+            if any(v.startswith('不採用') for v in vals) and not all(v.startswith('不採用') for v in vals):
+                self.red('黃金案例', f"golden_cases.md {gc['id']} 只有一欄寫「不採用」，兩欄要一致")
+        self.done('黃金案例', len(cases), '個案例')
+
+    def check_core_prefix(self):
+        print("\n[core 前綴] core/ 中沒有不帶切片前綴的 Qnn、US-Dnn、UC-nn" + ("（準備凍結）" if self.freeze else "（凍結時要清空）"))
+        base = os.path.join(self.root, 'core')
+        if not os.path.isdir(base):
+            return self.done('core前綴', 0, '')
+        n = 0
+        for d, _, fs in os.walk(base):
+            for f in sorted(fs):
+                if not f.endswith('.md') or f == 'CHANGELOG.md': continue
+                path = os.path.join(d, f)
+                n += 1
+                with open(path, encoding='utf-8') as fh:
+                    in_comment = False
+                    for no, line in enumerate(fh, 1):
+                        if '<!--' in line: in_comment = '-->' not in line; continue
+                        if in_comment:
+                            in_comment = '-->' not in line; continue
+                        for m in re.finditer(r'(?<![\w:-])(US-D\d+|UC-\d+|Q\d{2,})(?![\w-])', line):
+                            msg = f"{self.rel(path)}:{no} 的 {m.group(1)} 沒有切片前綴（寫成 <切片>:{m.group(1)}）"
+                            if self.freeze: self.red('core前綴', msg)
+                            else: print(f"    • {msg}")
+        self.done('core前綴', n, '個檔案')
+
+    def check_referenced_by(self):
+        print("\n[被引用] 本切片引用的 core/ Entity，「被引用」有列出本切片")
+        d = self.docs.get('02_entities.md')
+        if d is None:
+            return self.done('被引用', 0, '')
+        status = None
+        for h2, h3, header, rows in d.tables():
+            if header[:2] == ['項目', '內容']:
+                status = next((c[1] for no, c in rows if c[0] == '狀態'), None); break
+        saved = list(mb.problems)
+        refs = mb.parse_refs(d)
+        mb.problems[:] = saved
+        core = {e['name']: e for e in self.data.get('entities') or [] if 'source' in e}
+        n = 0
+        for name in refs:
+            e = core.get(name)
+            if not e or (e.get('source') or '').startswith(self.slice): continue
+            n += 1
+            if not any(x.startswith(self.slice) for x in e.get('referenced_by') or []):
+                msg = f"core/entities.md 的 {name} 被本切片引用，「被引用」沒有 {self.slice}"
+                if status == '已凍結' or self.freeze: self.red('被引用', msg)
+                else: print(f"    • {msg}（② 凍結時補上）")
+        self.done('被引用', n, '個引用（目前只比對 Entity）')
+
+    def check_used_in(self):
+        print("\n[用在] 本切片引用的 research 條目，「用在」有寫本切片（提醒，不算紅燈）")
+        rdir = os.path.join(self.root, 'inputs', 'research')
+        if not os.path.isdir(rdir):
+            return self.done('用在', 0, '')
+        topics = {f[:-3] for f in os.listdir(rdir) if f.endswith('.md') and f != 'INDEX.md'}
+        cited = set()
+        for f, no, h2, h3, text in self.lines(history=True):
+            for t, num in re.findall(r'([^\s（(「」、，；：:|`*]+)#(\d+)', text or ''):
+                if t in topics: cited.add((t, num))
+        used = {}
+        for t in topics:
+            cur = None
+            with open(os.path.join(rdir, t + '.md'), encoding='utf-8') as fh:
+                for line in fh:
+                    m = re.match(rf'^#+\s*{re.escape(t)}#(\d+)', line)
+                    if m: cur = m.group(1)
+                    m = re.match(r'^- 用在[：:]\s*(.*)$', line)
+                    if m and cur: used[(t, cur)] = m.group(1)
+        miss = sorted(k for k in cited if k in used and self.slice not in used[k])
+        for t, num in miss:
+            print(f"    • {t}#{num} 的「用在」沒有 {self.slice}（只可追加，INDEX.md 一起改）")
+        if cited and not miss:
+            print(f"    ✓ 通過（檢查了 {len(cited)} 個條目）")
+        elif not cited:
+            self.done('用在', 0, '')
+        else:
+            print(f"    （檢查了 {len(cited)} 個條目，{len(miss)} 個要追加）")
+
+    def check_stale_frozen(self):
+        print("\n[舊版上游] 已凍結交付物讀的是舊版上游時列出來，作為回歸判斷的清單（提醒，不擋凍結）")
+        tags = self.tags()
+        if tags is None:
+            return self.done('舊版上游', 0, '', skipped='不是 git repo')
+        log = os.path.join(self.dir, 'CHANGELOG.md')
+        heads = [l.strip() for l in open(log, encoding='utf-8')] if os.path.exists(log) else []
+        heads = [h for h in heads if h.startswith('## ')]
+        n = hits = 0
+        for f, d in self.docs.items():
+            status = inputs = None
+            for h2, h3, header, rows in d.tables():
+                if header[:2] == ['項目', '內容']:
+                    for no, c in rows:
+                        if c[0] == '狀態': status = c[1]
+                        if c[0] == '讀取的輸入': inputs = (no, c[1])
+                    break
+            if not inputs or status != '已凍結': continue
+            for step, ver in re.findall(rf'{re.escape(self.slice)}/0(\d)-v(\d+)', inputs[1]):
+                n += 1
+                latest = self.latest_tag(int(step), tags)
+                if not latest or int(latest.split('-v')[-1]) <= int(ver): continue
+                hits += 1
+                print(f"    • {f}（已凍結）讀 0{step}-v{ver}，上游最新是 {latest}；上游之後的紀錄：")
+                newer = [f'{self.slice}/0{step}-v{v}' for v in range(int(ver) + 1, int(latest.split('-v')[-1]) + 1)]
+                for h in heads:
+                    if any(t in h for t in newer): print(f"        {h[3:]}")
+        if n == 0:
+            self.done('舊版上游', 0, '')
+        elif hits == 0:
+            print(f"    ✓ 通過（檢查了 {n} 個版本引用）")
+        else:
+            print(f"    （{hits} 處；依 docs/01 0.9 回歸範圍判斷要不要回頭，不用回頭的不必改）")
+
     def run(self):
         self.check_parse()
         self.check_residue(); self.check_cancelled(); self.check_ids(); self.check_glossary()
         self.check_proposal(); self.check_markers(); self.check_paths(); self.check_versions()
         self.check_pending()
+        self.check_tables(); self.check_placeholders(); self.check_eq_impact(); self.check_out_of_scope()
+        self.check_golden(); self.check_core_prefix(); self.check_referenced_by()
+        self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")
         print("只代表引用與結構對得起來，不代表內容正確；docs/02 第七節標「AI 判斷」的項目要另外判斷。")
