@@ -586,6 +586,26 @@ class Lint:
                     self.red('範圍外', f"01_scope.md:{no} 歸屬「{c[k]}」沒有寫切片地圖上的切片代號")
         self.done('範圍外', n, '列')
 
+    def check_param_storage(self):
+        print("\n[參數存放] ⑤「參數放在哪裡」列出 ④ 參數表的每個參數")
+        d4, d5 = self.docs.get('04_rules.md'), self.docs.get('05_mapping.md')
+        if d4 is None or d5 is None:
+            return self.done('參數存放', 0, '')
+        names = []
+        for h2, h3, header, rows in d4.tables():
+            k = mb.col(header, '參數')
+            if h2 != '參數' or h3 or k is None: continue
+            names += [(no, c[k].strip().strip('`')) for no, c in rows if c[k].strip().strip('`')]
+        text = '\n'.join('｜'.join(c) for h2, h3, header, rows in d5.tables()
+                         if '參數放在哪裡' in (h3 or h2 or '') for _, c in rows)
+        if names and not text:
+            self.red('參數存放', f"05_mapping.md 沒有「參數放在哪裡」表（④ 參數表有 {len(names)} 個參數）")
+        else:
+            for no, name in names:
+                if not word(name).search(text):
+                    self.red('參數存放', f"04_rules.md:{no} 參數 {name} 沒有列在 05_mapping.md「參數放在哪裡」")
+        self.done('參數存放', len(names), '個參數')
+
     GC_VALUES = {'紙上判定': ['一致', '不一致', '[未執行]', '不採用'], '判定': ['通過', '失敗', '[未執行]', '不採用']}
 
     def check_golden(self):
@@ -727,7 +747,7 @@ class Lint:
         self.check_proposal(); self.check_markers(); self.check_paths(); self.check_versions()
         self.check_pending()
         self.check_tables(); self.check_placeholders(); self.check_eq_impact(); self.check_out_of_scope()
-        self.check_golden(); self.check_core_prefix(); self.check_referenced_by()
+        self.check_golden(); self.check_param_storage(); self.check_core_prefix(); self.check_referenced_by()
         self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")

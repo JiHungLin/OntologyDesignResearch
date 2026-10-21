@@ -259,6 +259,24 @@ class TestLint(Base):
         self.assertIn('沒有寫切片地圖上的切片代號', out)
         self.assertEqual(out.count('沒有寫切片地圖上的切片代號'), 1, out)
 
+    def test_parameter_storage_in_mapping(self):
+        self.edit(self.slice_file('04_rules.md'), '## 分類值',
+                  '## 參數\n\n| 參數 | 意義 | 資料類型 | 合理範圍 | 預設值 | 依什麼條件變化 | 用在 | 來源 | 核對 |\n'
+                  '|---|---|---|---|---|---|---|---|---|\n'
+                  '| `personal_leave_max_days` | 事假上限 | 天數 | 不少於 14 | 14 | 公司 | R01 | 勞工請假規則 §7 | [未核對] |\n'
+                  '| notice_days | 告知期限 | 天數 | — | 30 | — | R01 | 業務需求 | — |\n\n## 分類值')
+        mapping = ('# leave-backfill 對照表\n\n## 三、規則 → 落實位置\n\n| 規則 | 落實位置 | 說明 |\n|---|---|---|\n'
+                   '| R01 | service | 跨表加總 |\n\n### 參數放在哪裡（P5）\n\n'
+                   '| 參數 | 放在 | 沒有設定時的預設值 | 說明 |\n|---|---|---|---|\n'
+                   '| `personal_leave_max_days` | 公司規定的版本 | 規則版本（R01）的參數 | 依公司 |\n')
+        self.write(self.slice_file('05_mapping.md'), mapping)
+        code, out = self.lint()
+        self.assertIn('參數 notice_days 沒有列在 05_mapping.md', out)
+        self.assertNotIn('參數 personal_leave_max_days 沒有列在', out)
+        self.write(self.slice_file('05_mapping.md'), mapping.split('### 參數')[0])
+        code, out = self.lint()
+        self.assertIn('05_mapping.md 沒有「參數放在哪裡」表（④ 參數表有 2 個參數）', out)
+
     GC = ('# leave-backfill 黃金案例\n\n## GC01 正常流程\n- 驗證：Q01\n- 情境：…\n- 紙上判定：{}\n- 判定：{}\n\n'
           '## GC02 候選\n- 驗證：Q02\n- 紙上判定：一致（2026-10-21）\n- 判定：[未執行]\n')
 
