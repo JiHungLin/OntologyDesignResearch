@@ -23,10 +23,12 @@ MARKER_RE = re.compile(r'^(?:' + '|'.join(MARKERS) + r')$')
 QUALIFIED_RE = re.compile(r'(?:\b0\d(?:_[a-z_]+)?(?:\.md)?|PLAN(?:\.md)?|ENTITY_SKETCH(?:\.md)?)\s*'
                           r'(?:D-\d+\s*[、，,～]\s*)*$')
 
+OTHER_SLICE_ID = r'[a-z][a-z0-9-]*:(?:UC-\d+|US-D\d+|Q\d+)'   # 其他切片的編號（hire-employee:UC-14）
+
 def targets(text):
     """套用對象中的識別名稱、規則編號（展開 R22～R28）、UC 編號。
     `Entity.attribute` 算 Entity；括號裡的說明文字只取其中的規則與 UC 編號。"""
-    text = re.sub(r'[a-z][a-z0-9-]*:(?:UC-\d+|US-D\d+|Q\d+)', ' ', text or '')   # 其他切片的編號（hire-employee:UC-14）
+    text = re.sub(OTHER_SLICE_ID, ' ', text or '')   # 其他切片的編號不在本切片比對
     inner = ' '.join(re.findall(r'[（(]([^）)]*)[）)]', text))
     outer = re.sub(r'[（(][^）)]*[）)]', ' ', text)
     out = []
@@ -268,7 +270,7 @@ class Lint:
         for r in rules:
             if r.get('status') == 'cancelled' or not r.get('applies_to_text'): continue
             ts = targets(r['applies_to_text'])
-            if not ts:
+            if not ts and not re.search(OTHER_SLICE_ID, r['applies_to_text']):
                 self.red('編號', f"{r['id']} 的套用對象「{r['applies_to_text']}」沒有寫 Entity、事件、規則或 UC 的編號")
             for a in ts:
                 n += 1
