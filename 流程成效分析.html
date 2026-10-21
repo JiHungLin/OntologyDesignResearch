@@ -77,23 +77,24 @@ footer { padding-top: 28px; color: var(--muted); font-size: 13px; display: grid;
     <h1>10/07 設計方向套用後的第一條切片：成效分析</h1>
     <div class="meta">
       <span>比較：<b>hire-employee</b>（10/07 之前的流程）vs <b>annual-leave-grant</b>（套用 10/07 決議與 10/19 修改）</span>
-      <span>資料：HR <code>design/main</code> @ <code>c7987b0</code></span>
+      <span>資料：HR <code>design/main</code> @ <code>c7987b0</code>；實作 <code>impl/annual-leave-grant</code> @ <code>405330b</code></span>
+      <span>更新：實作完成後補第七節</span>
       <span>讀者：自己與團隊內部</span>
     </div>
   </header>
 
-  <p class="verdict">決策表、紙上驗證、差異審查這次有證據證明有用；參數表要等實作才能判斷；審查重點沒有讓人真的去看細節。另外，切片之間的交接開始出問題，10/07 暫緩的「整體流程圖」該拿出來重新判斷了。</p>
+  <p class="verdict">參數表、決策表、差異審查有證據證明有用。紙上驗證抓得到問題，但涵蓋的案例太少，實作時的設計問題總數沒有減少（22 個對 21 個）。審查重點沒有讓人真的去看細節。另外，切片之間的交接開始出問題，10/07 暫緩的「整體流程圖」該拿出來重新判斷了。</p>
 
   <section>
     <div class="tag">一 · 結論</div>
     <div>
       <h2>八個結論</h2>
       <div class="findings">
-        <div class="finding"><span class="n">1</span><span class="t">設計問題在實作前就被抓到的比例變高</span><span class="e">第一條切片有 24 個反例到實作才出現；這次紙上驗證就抓到 2 個要改設計的問題（GC04、GC06 → ④ D-24、D-25，⑤ D-22）。第一條的紙上驗證只更正了人工預期，沒有改到設計。</span></div>
+        <div class="finding"><span class="n">1</span><span class="t">紙上驗證多抓到 2 個問題，但實作時的設計問題沒有變少</span><span class="e">紙上驗證在實作前抓到 GC04、GC06 兩個問題。實作時仍發現 22 個（第一條 21 個），換算成每條規則反而較多。差別在性質：這次幾乎都是「寫了但不夠精確」，第一條有 API 接不起來、條件沒有結果。</span></div>
         <div class="finding"><span class="n">2</span><span class="t">決策表有用</span><span class="e">④ 寫了 6 張；挑錯 X-12、X-26 直接指出「組合漏了」，GC04 推演時也用 R93 決策表判斷。</span></div>
-        <div class="finding"><span class="n">3</span><span class="t">參數表做得出來，有沒有用要看實作</span><span class="e">④ 寫了 18 個參數；X-27 抓到「依雇主」的參數沒有地方存。有沒有用的條件是「實作不再自己取參數」，這條切片還沒實作。</span></div>
+        <div class="finding"><span class="n">3</span><span class="t">參數表有用</span><span class="e">18 個參數名稱全部照 ④，程式直接從參數表讀預設值，沒有自取名稱（第一條自取了 min_age、compare_basis 等）。和參數有關的問題由 7/21 降到 5/22，剩下的是格式、代碼、存放處沒寫清楚。</span></div>
         <div class="finding"><span class="n">4</span><span class="t">差異審查省事，已改為採納</span><span class="e">已凍結後的回頭修改只審了 16 列差異；第一條切片每輪要清空再填回 28 格。</span></div>
-        <div class="finding"><span class="n">5</span><span class="t">審查重點沒有讓人的審查變得更實質</span><span class="e">74 列全部只打勾，沒有一列寫意見；人的實質意見都在對話裡提出，不在表上。使用者自己的感覺也一樣：「還是容易不看細節直接打勾」。</span></div>
+        <div class="finding"><span class="n">5</span><span class="t">審查重點沒有讓人的審查變得更實質</span><span class="e">74 列全部只打勾，沒有一列寫意見；人的實質意見都在對話裡提出。實作時還發現 3 個規則邏輯錯誤（R83、C01、又休又領），都一路通過了審查。</span></div>
         <div class="finding"><span class="n">6</span><span class="t">「整體流程圖」的重新判斷條件已經出現</span><span class="e">做到一半，地圖新增了 3 條切片（D-36、D-37、D-39）；⑤ 還要在 hire-employee 的 API 掛特休的連鎖處理（D-04）。</span></div>
         <div class="finding"><span class="n">7</span><span class="t">流程的漏洞主要是 AI 的斷言錯誤</span><span class="e">18 項流程問題中 7 項屬於這類，靠另開 context 的挑錯和使用者才抓到。</span></div>
         <div class="finding"><span class="n">8</span><span class="t">速度快了，但不能全歸功於流程</span><span class="e">① 到 ⑤ 用了 3 天，第一條約 9 天；不過這條切片規模較小，人介入也比較少。</span></div>
@@ -108,7 +109,7 @@ footer { padding-top: 28px; color: var(--muted); font-size: 13px; display: grid;
       <div class="scroll"><table>
         <thead><tr><th>項目</th><th>10/07 決議</th><th>這次的情況</th><th>判斷</th></tr></thead>
         <tbody>
-          <tr><td>參數表</td><td>先試用（④）</td><td>寫了 18 個參數，規則用名稱引用；X-27 抓到參數沒有地方存</td><td><span class="chip wait">待實作</span></td></tr>
+          <tr><td>參數表</td><td>先試用（④）</td><td>18 個參數名稱實作都照用，程式直接讀參數表；自取了 3 個做法代碼、1 張表的欄位名稱，2 處預設值沒地方放</td><td><span class="chip good">有用，要補三點</span></td></tr>
           <tr><td>決策表</td><td>採納為 ④ 的寫法</td><td>6 張；X-12、X-26 指出漏掉的組合；GC04 推演時用上</td><td><span class="chip good">有效</span></td></tr>
           <tr><td>NFR → 平台約定 P13</td><td>歸到別處；地圖可選填「規模與尖峰」</td><td>地圖沒填規模與尖峰，P13 也沒人填目標值</td><td><span class="chip idle">還沒用到</span></td></tr>
           <tr><td>整體流程圖（BPMN、Journey）</td><td>暫緩，第二條切片做完或出現交接問題時再判斷</td><td>兩個條件都出現了：新增 3 條切片、歸屬寫錯（清單 #1、#10）、hire-employee 要掛特休的連鎖處理</td><td><span class="chip flag">該重新判斷</span></td></tr>
@@ -121,9 +122,9 @@ footer { padding-top: 28px; color: var(--muted); font-size: 13px; display: grid;
       <div class="scroll"><table>
         <thead><tr><th>項目</th><th>這次的情況</th><th>判斷</th></tr></thead>
         <tbody>
-          <tr><td>審查重點＋抽查</td><td>第一次審查列了 58 列，比 ①～⑤ 的完成標準 49 條還多；抽查列都寫了自選的完成標準；沒有一列寫意見</td><td><span class="chip wait">繼續試用</span></td></tr>
+          <tr><td>審查重點＋抽查</td><td>第一次審查列了 58 列，比 ①～⑤ 的完成標準 49 條還多；沒有一列寫意見；實作的設計問題換算後較多</td><td><span class="chip flag">兩個條件都沒證據</span></td></tr>
           <tr><td>回頭修改只審差異</td><td>16 列差異；手續明顯變少</td><td><span class="chip good">已採納</span></td></tr>
-          <tr><td>挑錯的「實作者」角度</td><td>反例來源一律記「AI 挑錯」，分不出是哪個角度抓到的</td><td><span class="chip wait">待實作</span></td></tr>
+          <tr><td>挑錯的「實作者」角度</td><td>四類問題由 7 個降到約 4 個（AI 分類）；反例分不出是哪個角度抓到的</td><td><span class="chip wait">弱證據</span></td></tr>
           <tr><td>白話寫法條</td><td>② 之後都照做；沒有再出現看不懂條號的情況</td><td><span class="chip good">已照做</span></td></tr>
         </tbody>
       </table></div>
@@ -161,7 +162,7 @@ footer { padding-top: 28px; color: var(--muted); font-size: 13px; display: grid;
           <tr><td>審查者在審查表上提出</td><td class="num">1</td><td class="num">0</td></tr>
           <tr><td>使用者在對話中指出</td><td>沒有記錄</td><td>4：① D-07、D-11 沒寫後續；要求逐條對照原文；③ 問答覆回來能不能找全</td></tr>
           <tr><td>紙上驗證</td><td>3 處，都是人工預期要更正</td><td>3 處：1 處人工預期要更正，2 處設計要改</td></tr>
-          <tr><td>實作</td><td>24 個反例（21 個設計問題）</td><td>還沒實作</td></tr>
+          <tr><td>實作</td><td>24 個反例（21 個設計問題）</td><td>22 個設計問題（見第七節）</td></tr>
           <tr><td>程式檢查（事後的新 lint）</td><td>決定表斷開、EQ 影響 44 處、core 編號沒前綴</td><td>EQ 影響 3 處、黃金案例的值、「用在」</td></tr>
         </tbody>
       </table></div>
@@ -176,7 +177,7 @@ footer { padding-top: 28px; color: var(--muted); font-size: 13px; display: grid;
       <div class="limits">
         <div class="limit"><b>規模不同</b><span>Entity 6 對 18、規則 35 對 64；所以另外列了「每條規則」的比值。</span></div>
         <div class="limit"><b>第一條也在建流程</b><span>它的回頭修改有一部分來自流程本身在改。</span></div>
-        <div class="limit"><b>還沒實作</b><span>只能比到 ⑤；「實作時的問題有沒有變少」還無法判斷。</span></div>
+        <div class="limit"><b>實作方式不同</b><span>第一條分四輪，每輪先改設計；這條一次寫完，22 個問題都還待處理。</span></div>
         <div class="limit"><b>人介入較少</b><span>從 ③ 起是「8～9 成交給 Claude」的實驗，人審查的資料偏少。</span></div>
         <div class="limit"><b>沒有 HC</b><span>兩條切片共 38 題專家問題，沒有一題由人資專家回答。</span></div>
         <div class="limit"><b>早期在 cloud 做</b><span>第一條的 ①② 在 cloud session 完成，只能看凍結日期。</span></div>
@@ -207,11 +208,53 @@ footer { padding-top: 28px; color: var(--muted); font-size: 13px; display: grid;
       <h2>下一步</h2>
       <ol class="recs">
         <li><b>重新判斷「整體流程圖」。</b>範圍先限定在切片之間的交接：每條切片的起點和終點接到哪條切片、要掛哪些上游事件。不一定要用正式的 BPMN。</li>
-        <li><b>實作 annual-leave-grant，把三個試用項目一起判斷完</b>：參數表、實作者角度、審查重點的後半。實作時發現的設計問題照第一條的做法記在 <code>signoff.md</code>，才能和第一條的 21 個比較。</li>
+        <li><b>判斷三個試用項目</b>（實作已完成，資料見第七節）：參數表、實作者角度、審查重點。</li>
         <li><b>記下人的貢獻。</b>人在對話中指出的問題也記成 X-nn，來源寫「審查者」，下一輪才量得出人審查的效果。</li>
         <li><b>處理「只勾不看」。</b>兩個方向：照 10/07 決議加「AI 出題」；或把審查重點縮小到「AI 提出、沒有依據的決定」和紙上驗證的差異，這次真正改到設計的都出自這兩處。</li>
+        <li><b>處理實作回報的 22 個設計問題。</b>多數是回 ④⑤ 的第 0 級；#6 時區要先決定放在 core 還是平台設定。</li>
         <li><b>讓 HC 回答一部分專家問題。</b>至少回答 P0 的幾題；否則「設計對不對」只有 AI 和使用者檢查過。</li>
       </ol>
+    </div>
+  </section>
+
+  <section>
+    <div class="tag">七 · 實作後</div>
+    <div>
+      <h2>實作完成後的結果</h2>
+      <p>實作在 <code>impl/annual-leave-grant</code> @ <code>405330b</code>，一次寫完。54 個自動測試都通過；P0 驗收問題 5/5 答得出來；挑的 3 個黃金案例系統結果和人算的一致，但規則都還沒核對，所以不算通過。實作時發現 22 個設計問題，全部待處理。</p>
+      <div class="scroll"><table>
+        <thead><tr><th>項目</th><th class="num">hire-employee</th><th class="num">annual-leave-grant</th></tr></thead>
+        <tbody>
+          <tr><td>實作時發現的設計問題</td><td class="num">21</td><td class="num">22</td></tr>
+          <tr><td>每條規則</td><td class="num">0.33</td><td class="num">0.63</td></tr>
+          <tr><td>每個正式 Use Case</td><td class="num">1.4</td><td class="num">1.8</td></tr>
+          <tr><td>卡住 Use Case 走不下去的</td><td>有（錄用沒回傳人的編號、帶不進約定薪資）</td><td>沒有（UC-03、UC-10 的例外沒實作）</td></tr>
+          <tr><td>和參數有關的</td><td class="num">7</td><td class="num">5</td></tr>
+          <tr><td>實作者角度的四類</td><td class="num">7</td><td class="num">約 4</td></tr>
+        </tbody>
+      </table></div>
+      <h3>22 個問題的性質</h3>
+      <div class="scroll"><table>
+        <thead><tr><th>類別</th><th class="num">數量</th><th>例</th></tr></thead>
+        <tbody>
+          <tr><td>⑤ 對照與 api.yaml 不夠精確</td><td class="num">7</td><td>查詢「某一天有哪幾筆」沒寫含不含作廢的；「受影響的僱傭關係」沒定義</td></tr>
+          <tr><td>參數</td><td class="num">5</td><td>天數表沒寫欄位格式；可選做法沒有代碼；有預設值卻沒地方放</td></tr>
+          <tr><td>④ 規則邏輯</td><td class="num">5</td><td><b>R83 年度終結後一定成立；C01 和待確認的負數差額矛盾；遞延進來的可以先休、扣回的錢卻還在待確認</b></td></tr>
+          <tr><td>名稱與代碼沒定義</td><td class="num">2</td><td>警告的訊息代碼由程式自取</td></tr>
+          <tr><td>平台與 core</td><td class="num">2</td><td>管轄區沒有時區；變更紀錄不記值，還原不了</td></tr>
+          <tr><td>③⑤ 不一致</td><td class="num">1</td><td>通知的觸發來源少一個事件</td></tr>
+        </tbody>
+      </table></div>
+      <p>數量沒有減少，性質卻變了：第一條切片有 API 接不起來、條件沒有結果；這次多數是「寫了，但不夠精確，實作沒辦法直接照做」，回 ④⑤ 補一句就能解決。最值得注意的是 3 個規則邏輯錯誤，它們通過了挑錯、人的審查和紙上驗證。紙上驗證挑的 3 個案例，沒有走到它們牽涉的情境。</p>
+      <h3>試用項目：資料與建議（由人判斷）</h3>
+      <div class="scroll"><table>
+        <thead><tr><th>項目</th><th>實作後的資料</th><th>建議</th></tr></thead>
+        <tbody>
+          <tr><td>參數表</td><td>名稱 18/18 照 ④，預設值由程式直接讀參數表；自取了 3 個做法代碼和 1 張表的欄位名稱</td><td><span class="chip good">採納</span> 並補三點：可選做法寫代碼、表格型參數寫欄位、⑤ 寫每個預設值的存放處</td></tr>
+          <tr><td>實作者角度</td><td>四類問題由 7 個降到約 4 個；分類由 AI 判斷，反例看不出是哪個角度抓到的</td><td><span class="chip wait">延長</span> 下一條切片的反例來源改記角度；或因成本低直接採納</td></tr>
+          <tr><td>審查重點＋抽查</td><td>74 列只打勾；設計問題換算後較多；3 個規則邏輯錯誤都通過了審查</td><td><span class="chip flag">改做法</span> 不回到逐條打勾（第一條逐條打勾也只抓到 1 個）：人的意見記成反例、範圍縮小到「AI 提出、沒有依據的決定」和紙上驗證的差異，並考慮 AI 出題</td></tr>
+        </tbody>
+      </table></div>
     </div>
   </section>
 
