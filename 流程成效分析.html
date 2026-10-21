@@ -1,0 +1,222 @@
+<title>第二條切片成效分析</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* 版面：單欄報告，左側窄欄放章節標記；結論表在前，數字表在後 */
+:root {
+  --bg: #f6f7f5; --surface: #ffffff; --fg: #1d2421; --muted: #5d6863; --line: #d9ded9;
+  --accent: #2f6f62; --accent-soft: #e2efeb;
+  --good: #2e7d4f; --good-bg: #e3f2e8; --wait: #8a6100; --wait-bg: #fbf0d6;
+  --flag: #a3402d; --flag-bg: #f8e3dd; --idle: #5d6863; --idle-bg: #eceeec;
+  --display: "Noto Serif TC", "Songti TC", serif;
+  --body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141917; --surface: #1c2320; --fg: #e3e8e5; --muted: #9aa6a0; --line: #2e3833;
+  --accent: #7cc3b2; --accent-soft: #1f322d;
+  --good: #7fd19e; --good-bg: #1d3326; --wait: #e8c06a; --wait-bg: #3a2f14;
+  --flag: #f09a85; --flag-bg: #3d2420; --idle: #a9b3ae; --idle-bg: #262e2a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141917; --surface: #1c2320; --fg: #e3e8e5; --muted: #9aa6a0; --line: #2e3833;
+  --accent: #7cc3b2; --accent-soft: #1f322d;
+  --good: #7fd19e; --good-bg: #1d3326; --wait: #e8c06a; --wait-bg: #3a2f14;
+  --flag: #f09a85; --flag-bg: #3d2420; --idle: #a9b3ae; --idle-bg: #262e2a; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.7; }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { display: grid; gap: 10px; padding-bottom: 24px; border-bottom: 2px solid var(--fg); }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; color: var(--accent); }
+h1 { font-family: var(--display); font-size: clamp(26px, 4vw, 36px); line-height: 1.3; margin: 0; text-wrap: balance; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--muted); font-size: 13px; }
+.meta b { color: var(--fg); font-weight: 500; }
+.verdict { margin: 28px 0 0; font-size: 17px; line-height: 1.8; max-width: 62ch; }
+section { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 0 28px; padding-block: 36px; border-bottom: 1px solid var(--line); }
+section > .tag { font-family: var(--mono); font-size: 12px; color: var(--muted); padding-top: 6px; letter-spacing: .04em; }
+section > div { min-width: 0; display: grid; gap: 16px; }
+h2 { font-family: var(--display); font-size: 22px; margin: 0; text-wrap: balance; }
+h3 { font-size: 15px; margin: 8px 0 0; font-weight: 700; }
+p { margin: 0; max-width: 68ch; }
+.note { color: var(--muted); font-size: 13.5px; }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+th { font-weight: 500; color: var(--muted); font-size: 12.5px; letter-spacing: .03em; background: var(--bg); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.num { font-family: var(--mono); font-size: 13.5px; }
+.chip { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.good { color: var(--good); background: var(--good-bg); }
+.wait { color: var(--wait); background: var(--wait-bg); }
+.flag { color: var(--flag); background: var(--flag-bg); }
+.idle { color: var(--idle); background: var(--idle-bg); }
+.findings { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.finding { display: grid; grid-template-columns: 2.2em minmax(0, 1fr); gap: 4px 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.finding:last-child { border-bottom: 0; }
+.finding .n { font-family: var(--mono); color: var(--accent); font-size: 13px; padding-top: 2px; }
+.finding .t { font-weight: 700; }
+.finding .e { grid-column: 2; color: var(--muted); font-size: 13.5px; }
+.limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.limit { padding: 12px 14px; border-left: 3px solid var(--wait); background: var(--surface); border-radius: 0 6px 6px 0; }
+.limit b { display: block; font-size: 14px; }
+.limit span { color: var(--muted); font-size: 13.5px; }
+ol.recs { margin: 0; padding-left: 1.4em; display: grid; gap: 12px; max-width: 70ch; }
+ol.recs li::marker { font-family: var(--mono); color: var(--accent); }
+code { font-family: var(--mono); font-size: .9em; background: var(--accent-soft); padding: 0 4px; border-radius: 3px; }
+.callout { padding: 12px 16px; background: var(--accent-soft); border-radius: 6px; font-size: 14px; max-width: 72ch; }
+footer { padding-top: 28px; color: var(--muted); font-size: 13px; display: grid; gap: 6px; }
+@media (max-width: 640px) {
+  section { grid-template-columns: 1fr; gap: 8px; }
+  .verdict { font-size: 16px; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">HR 試跑 · 2026-10-21</div>
+    <h1>10/07 設計方向套用後的第一條切片：成效分析</h1>
+    <div class="meta">
+      <span>比較：<b>hire-employee</b>（10/07 之前的流程）vs <b>annual-leave-grant</b>（套用 10/07 決議與 10/19 修改）</span>
+      <span>資料：HR <code>design/main</code> @ <code>c7987b0</code></span>
+      <span>讀者：自己與團隊內部</span>
+    </div>
+  </header>
+
+  <p class="verdict">決策表、紙上驗證、差異審查這次有證據證明有用；參數表要等實作才能判斷；審查重點沒有讓人真的去看細節。另外，切片之間的交接開始出問題，10/07 暫緩的「整體流程圖」該拿出來重新判斷了。</p>
+
+  <section>
+    <div class="tag">一 · 結論</div>
+    <div>
+      <h2>八個結論</h2>
+      <div class="findings">
+        <div class="finding"><span class="n">1</span><span class="t">設計問題在實作前就被抓到的比例變高</span><span class="e">第一條切片有 24 個反例到實作才出現；這次紙上驗證就抓到 2 個要改設計的問題（GC04、GC06 → ④ D-24、D-25，⑤ D-22）。第一條的紙上驗證只更正了人工預期，沒有改到設計。</span></div>
+        <div class="finding"><span class="n">2</span><span class="t">決策表有用</span><span class="e">④ 寫了 6 張；挑錯 X-12、X-26 直接指出「組合漏了」，GC04 推演時也用 R93 決策表判斷。</span></div>
+        <div class="finding"><span class="n">3</span><span class="t">參數表做得出來，有沒有用要看實作</span><span class="e">④ 寫了 18 個參數；X-27 抓到「依雇主」的參數沒有地方存。有沒有用的條件是「實作不再自己取參數」，這條切片還沒實作。</span></div>
+        <div class="finding"><span class="n">4</span><span class="t">差異審查省事，已改為採納</span><span class="e">已凍結後的回頭修改只審了 16 列差異；第一條切片每輪要清空再填回 28 格。</span></div>
+        <div class="finding"><span class="n">5</span><span class="t">審查重點沒有讓人的審查變得更實質</span><span class="e">74 列全部只打勾，沒有一列寫意見；人的實質意見都在對話裡提出，不在表上。使用者自己的感覺也一樣：「還是容易不看細節直接打勾」。</span></div>
+        <div class="finding"><span class="n">6</span><span class="t">「整體流程圖」的重新判斷條件已經出現</span><span class="e">做到一半，地圖新增了 3 條切片（D-36、D-37、D-39）；⑤ 還要在 hire-employee 的 API 掛特休的連鎖處理（D-04）。</span></div>
+        <div class="finding"><span class="n">7</span><span class="t">流程的漏洞主要是 AI 的斷言錯誤</span><span class="e">18 項流程問題中 7 項屬於這類，靠另開 context 的挑錯和使用者才抓到。</span></div>
+        <div class="finding"><span class="n">8</span><span class="t">速度快了，但不能全歸功於流程</span><span class="e">① 到 ⑤ 用了 3 天，第一條約 9 天；不過這條切片規模較小，人介入也比較少。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="tag">二 · 10/07 決議</div>
+    <div>
+      <h2>逐項看成效</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>項目</th><th>10/07 決議</th><th>這次的情況</th><th>判斷</th></tr></thead>
+        <tbody>
+          <tr><td>參數表</td><td>先試用（④）</td><td>寫了 18 個參數，規則用名稱引用；X-27 抓到參數沒有地方存</td><td><span class="chip wait">待實作</span></td></tr>
+          <tr><td>決策表</td><td>採納為 ④ 的寫法</td><td>6 張；X-12、X-26 指出漏掉的組合；GC04 推演時用上</td><td><span class="chip good">有效</span></td></tr>
+          <tr><td>NFR → 平台約定 P13</td><td>歸到別處；地圖可選填「規模與尖峰」</td><td>地圖沒填規模與尖峰，P13 也沒人填目標值</td><td><span class="chip idle">還沒用到</span></td></tr>
+          <tr><td>整體流程圖（BPMN、Journey）</td><td>暫緩，第二條切片做完或出現交接問題時再判斷</td><td>兩個條件都出現了：新增 3 條切片、歸屬寫錯（清單 #1、#10）、hire-employee 要掛特休的連鎖處理</td><td><span class="chip flag">該重新判斷</span></td></tr>
+          <tr><td>BRD 指標</td><td>暫緩</td><td>沒有出現「說不出支撐哪個目標」</td><td><span class="chip idle">維持暫緩</span></td></tr>
+          <tr><td>AI 出題問人懂不懂</td><td>併入審查重點；人只勾不看時再加</td><td>74 列只打勾；條件出現了，使用者決定先維持</td><td><span class="chip flag">條件已出現</span></td></tr>
+          <tr><td>Behavior Tree</td><td>暫不採納</td><td>系統仍沒有 AI 自動執行的動作</td><td><span class="chip idle">維持</span></td></tr>
+        </tbody>
+      </table></div>
+      <h3>同時期導入的 10/19 修改</h3>
+      <div class="scroll"><table>
+        <thead><tr><th>項目</th><th>這次的情況</th><th>判斷</th></tr></thead>
+        <tbody>
+          <tr><td>審查重點＋抽查</td><td>第一次審查列了 58 列，比 ①～⑤ 的完成標準 49 條還多；抽查列都寫了自選的完成標準；沒有一列寫意見</td><td><span class="chip wait">繼續試用</span></td></tr>
+          <tr><td>回頭修改只審差異</td><td>16 列差異；手續明顯變少</td><td><span class="chip good">已採納</span></td></tr>
+          <tr><td>挑錯的「實作者」角度</td><td>反例來源一律記「AI 挑錯」，分不出是哪個角度抓到的</td><td><span class="chip wait">待實作</span></td></tr>
+          <tr><td>白話寫法條</td><td>② 之後都照做；沒有再出現看不懂條號的情況</td><td><span class="chip good">已照做</span></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="tag">三 · 數字</div>
+    <div>
+      <h2>兩條切片對照</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>項目</th><th class="num">hire-employee</th><th class="num">annual-leave-grant</th></tr></thead>
+        <tbody>
+          <tr><td>驗收問題／草稿 User Story</td><td class="num">22／19</td><td class="num">14／11</td></tr>
+          <tr><td>新增的 Entity／屬性</td><td class="num">18／89</td><td class="num">6／45</td></tr>
+          <tr><td>狀態機／事件／更正方式</td><td class="num">11／36／10</td><td class="num">6／20／9</td></tr>
+          <tr><td>正式 Use Case</td><td class="num">15</td><td class="num">12</td></tr>
+          <tr><td>規則</td><td class="num">64</td><td class="num">35</td></tr>
+          <tr><td>參數／決策表</td><td class="num">—</td><td class="num">18／6</td></tr>
+          <tr><td>決定（D-nn）／反例（X-nn）</td><td class="num">125／132</td><td class="num">96／121</td></tr>
+          <tr><td>每條規則的反例數／決定數</td><td class="num">2.1／2.0</td><td class="num">3.5／2.7</td></tr>
+          <tr><td>專家問題（EQ）</td><td class="num">23 全部待問</td><td class="num">15（使用者答 1）</td></tr>
+          <tr><td>黃金案例</td><td class="num">5</td><td class="num">6（挑 3 個）</td></tr>
+          <tr><td>① 凍結 → ⑤ 第一次凍結</td><td class="num">約 9 天</td><td class="num">3 天</td></tr>
+          <tr><td>凍結的 tag 數</td><td class="num">23</td><td class="num">9</td></tr>
+          <tr><td>⑤ 第一次凍結後的重新凍結</td><td class="num">14（實作 12、lint 2）</td><td class="num">1（lint）</td></tr>
+          <tr><td>CHANGELOG 的回頭修改</td><td class="num">39</td><td class="num">15</td></tr>
+        </tbody>
+      </table></div>
+      <h3>問題是誰抓到的</h3>
+      <div class="scroll"><table>
+        <thead><tr><th>來源</th><th>hire-employee</th><th>annual-leave-grant</th></tr></thead>
+        <tbody>
+          <tr><td>AI 挑錯（另開 context）</td><td class="num">107</td><td class="num">121</td></tr>
+          <tr><td>審查者在審查表上提出</td><td class="num">1</td><td class="num">0</td></tr>
+          <tr><td>使用者在對話中指出</td><td>沒有記錄</td><td>4：① D-07、D-11 沒寫後續；要求逐條對照原文；③ 問答覆回來能不能找全</td></tr>
+          <tr><td>紙上驗證</td><td>3 處，都是人工預期要更正</td><td>3 處：1 處人工預期要更正，2 處設計要改</td></tr>
+          <tr><td>實作</td><td>24 個反例（21 個設計問題）</td><td>還沒實作</td></tr>
+          <tr><td>程式檢查（事後的新 lint）</td><td>決定表斷開、EQ 影響 44 處、core 編號沒前綴</td><td>EQ 影響 3 處、黃金案例的值、「用在」</td></tr>
+        </tbody>
+      </table></div>
+      <p class="callout">反例表的來源一律寫「AI 挑錯」，人在對話中指出的問題沒有記成反例，所以從表上看不出人做了什麼。這是記錄方式的缺口，見建議 3。</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="tag">四 · 限制</div>
+    <div>
+      <h2>這不是對照實驗</h2>
+      <div class="limits">
+        <div class="limit"><b>規模不同</b><span>Entity 6 對 18、規則 35 對 64；所以另外列了「每條規則」的比值。</span></div>
+        <div class="limit"><b>第一條也在建流程</b><span>它的回頭修改有一部分來自流程本身在改。</span></div>
+        <div class="limit"><b>還沒實作</b><span>只能比到 ⑤；「實作時的問題有沒有變少」還無法判斷。</span></div>
+        <div class="limit"><b>人介入較少</b><span>從 ③ 起是「8～9 成交給 Claude」的實驗，人審查的資料偏少。</span></div>
+        <div class="limit"><b>沒有 HC</b><span>兩條切片共 38 題專家問題，沒有一題由人資專家回答。</span></div>
+        <div class="limit"><b>早期在 cloud 做</b><span>第一條的 ①② 在 cloud session 完成，只能看凍結日期。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="tag">五 · 流程問題</div>
+    <div>
+      <h2>做這條切片時發現的 18 項流程問題</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>類型</th><th>清單編號</th><th>共同點</th></tr></thead>
+        <tbody>
+          <tr><td>AI 斷言或改寫錯誤</td><td class="num">#1 4 6 7 8 10 18</td><td>「歸某切片」「上游有／沒有」沒查清楚；法條改寫得像原文；使用者的選擇被當成現場證據；沒問就刪候選</td></tr>
+          <tr><td>規範沒寫清楚</td><td class="num">#5 9 14 15 16</td><td>AI 各自補了一種做法：第一次凍結前也加差異表、打勾算不算同意、core 編號要不要加前綴</td></tr>
+          <tr><td>工具沒檢查</td><td class="num">#2 11 12 13 17</td><td>佔位符、EQ 影響、被引用、上游重新凍結、表格欄數；修工具時另外找到兩張一直沒被解析的表</td></tr>
+          <tr><td>工作習慣</td><td class="num">#3</td><td>文件裡寫「尚未同步」，反覆過期</td></tr>
+        </tbody>
+      </table></div>
+      <p>最常見的錯是 AI 憑記憶或只查一部分就下斷言，不是設計方法本身的問題。最有效的對策是另開 context 逐句核對，現在已寫進挑錯指示。另一個教訓是：工具「默默跳過」比「報錯」危險。守恆式表少了一行分隔線，舊工具不報錯也不檢查，C01、C02 就一直沒被檢查到。</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="tag">六 · 建議</div>
+    <div>
+      <h2>下一步</h2>
+      <ol class="recs">
+        <li><b>重新判斷「整體流程圖」。</b>範圍先限定在切片之間的交接：每條切片的起點和終點接到哪條切片、要掛哪些上游事件。不一定要用正式的 BPMN。</li>
+        <li><b>實作 annual-leave-grant，把三個試用項目一起判斷完</b>：參數表、實作者角度、審查重點的後半。實作時發現的設計問題照第一條的做法記在 <code>signoff.md</code>，才能和第一條的 21 個比較。</li>
+        <li><b>記下人的貢獻。</b>人在對話中指出的問題也記成 X-nn，來源寫「審查者」，下一輪才量得出人審查的效果。</li>
+        <li><b>處理「只勾不看」。</b>兩個方向：照 10/07 決議加「AI 出題」；或把審查重點縮小到「AI 提出、沒有依據的決定」和紙上驗證的差異，這次真正改到設計的都出自這兩處。</li>
+        <li><b>讓 HC 回答一部分專家問題。</b>至少回答 P0 的幾題；否則「設計對不對」只有 AI 和使用者檢查過。</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    <span>正本：OntologyResearch <code>20261021流程成效分析.md</code>；統計方式見正本附錄。</span>
+    <span>相關：《20261007設計方向_決議》、《團隊開發流程_對抗性審查》2026-10-19～21、《流程待處理清單》。</span>
+  </footer>
+</div>
