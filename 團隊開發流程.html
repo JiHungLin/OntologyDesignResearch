@@ -229,8 +229,8 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
 
     <div class="row" role="row">
       <div class="name"><span>⑤</span>投影到實作</div>
-      <div><div class="lbl">交付物</div>對照表六區：概念→表與欄位、事件→API、規則→落實位置、推導值與歷史需求→資料身分與保存方式、技術欄位、Use Case 走一遍；AI 依此與平台約定產生 schema 與 API（請求與回應寫到欄位層級）<div class="files"><span class="file">05_mapping.md</span><span class="file">schema.sql</span><span class="file">api.yaml</span></div></div>
-      <div><div class="lbl">關卡</div><ul><li>每張業務表、每支 API 指得回概念；技術欄位與平台表標明「技術」即可</li><li>推導值已決定身分、歷史需求已決定保存方式；動作與規則都有落實位置（依平台約定）</li><li>每個正式 Use Case 照步驟走一遍 API：每一步的輸入都拿得到（例：建立的項目有回傳編號）</li><li>紙上驗證（預設）：人工算好的黃金案例，照設計推演一遍，結果一致</li></ul></div>
+      <div><div class="lbl">交付物</div>對照表六區：概念→表與欄位、事件→API（其他切片的事件要觸發本切片時，列出連鎖，凍結時記到共用核心的事件上）、規則→落實位置、推導值與歷史需求→資料身分與保存方式、技術欄位、Use Case 走一遍；AI 依此與平台約定產生 schema 與 API（請求與回應寫到欄位層級）<div class="files"><span class="file">05_mapping.md</span><span class="file">schema.sql</span><span class="file">api.yaml</span></div></div>
+      <div><div class="lbl">關卡</div><ul><li>每張業務表、每支 API 指得回概念；技術欄位與平台表標明「技術」即可</li><li>推導值已決定身分、歷史需求已決定保存方式；動作與規則都有落實位置（依平台約定）</li><li>每個正式 Use Case 照步驟走一遍 API：每一步的輸入都拿得到（例：建立的項目有回傳編號）</li><li>紙上驗證（預設）：人工算好的黃金案例，照設計推演一遍，結果一致；先列出「結果判定或交出之後才到的輸入」，每一種都有案例或沒挑的理由（試用中）</li></ul></div>
     </div>
 
     <div class="row" role="row">

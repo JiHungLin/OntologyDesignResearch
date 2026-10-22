@@ -4,7 +4,7 @@
 用法：python tools/lint.py <切片代號> [--root <repo 根目錄>] [--freeze] [--baseline <目錄>]
   --freeze：準備凍結時使用，「提出／同意」有「待確認」就亮紅燈（平常只列出）。
   --baseline：上一版的切片資料夾（預設取各步驟最新的 git tag），用來找被刪除或改名的名稱。
-  表格、EQ 影響、範圍外、佔位符、黃金案例、core 前綴（--freeze 時亮紅燈）、被引用也在這裡檢查；
+  表格、EQ 影響、範圍外、佔位符、黃金案例（含事後才到的輸入）、連鎖、core 前綴（--freeze 時亮紅燈）、被引用也在這裡檢查；
   「用在」與「舊版上游」只列提醒，不算紅燈。
 只檢查引用與結構對不對得起來，不代表內容正確。"""
 import os, re, subprocess, sys, tempfile
@@ -613,12 +613,7 @@ class Lint:
         path = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
         if not os.path.exists(path):
             return self.done('黃金案例', 0, '')
-        cases, cur = [], None
-        for no, h2, h3, line in mb.Doc(path).items:
-            if h3 is None and h2 and re.match(r'GC\d+', h2) and (cur is None or cur['id'] != h2.split()[0]):
-                cur = {'id': h2.split()[0], 'no': no}; cases.append(cur)
-            m = re.match(r'^- (紙上判定|判定)[：:]\s*(.*)$', line or '')
-            if cur and m: cur[m.group(1)] = (no, m.group(2).strip())
+        cases = self.golden_cases(path)
         for gc in cases:
             for key, allowed in self.GC_VALUES.items():
                 if key not in gc:
@@ -630,6 +625,101 @@ class Lint:
             if any(v.startswith('不採用') for v in vals) and not all(v.startswith('不採用') for v in vals):
                 self.red('黃金案例', f"golden_cases.md {gc['id']} 只有一欄寫「不採用」，兩欄要一致")
         self.done('黃金案例', len(cases), '個案例')
+
+    def doc_status(self, d):
+        for h2, h3, header, rows in d.tables():
+            if header[:2] == ['項目', '內容']:
+                return next((c[1] for no, c in rows if c[0] == '狀態'), None)
+
+    def golden_cases(self, path):
+        """golden_cases.md 的案例：[{'id', 'no', '紙上判定': (行號, 值), '判定': (行號, 值)}]。"""
+        cases, cur = [], None
+        for no, h2, h3, line in mb.Doc(path).items:
+            if h3 is None and h2 and re.match(r'GC\d+', h2) and (cur is None or cur['id'] != h2.split()[0]):
+                cur = {'id': h2.split()[0], 'no': no}; cases.append(cur)
+            m = re.match(r'^- (紙上判定|判定)[：:]\s*(.*)$', line or '')
+            if cur and m: cur[m.group(1)] = (no, m.group(2).strip())
+        return cases
+
+    def check_late_inputs(self):
+        print("\n[事後輸入] 黃金案例的「事後才到的輸入」每一列有案例或沒挑的理由")
+        path = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
+        if not os.path.exists(path):
+            return self.done('事後輸入', 0, '')
+        cases = self.golden_cases(path)
+        adopted = {gc['id'] for gc in cases if not gc.get('紙上判定', (0, ''))[1].startswith('不採用')}
+        table = next(((header, rows) for h2, h3, header, rows in mb.Doc(path).tables()
+                      if h2 == '事後才到的輸入' and not h3), None)
+        if table is None:
+            if not adopted:
+                return self.done('事後輸入', 0, '')
+            msg = "golden_cases.md 沒有「事後才到的輸入」表（docs/02 ⑥）"
+            tags = self.tags()
+            if tags and self.latest_tag(5, tags):
+                print(f"    • {msg}；⑤ 在這項規定之前凍結過，不回頭補，回頭修改 ⑤ 時可以補上")
+                return self.done('事後輸入', 0, '', skipped='⑤ 已凍結過，只提醒')
+            self.red('事後輸入', msg)
+            return self.done('事後輸入', 1, '張表')
+        header, rows = table
+        k, r = mb.col(header, '案例'), mb.col(header, '沒挑的理由')
+        if k is None or r is None:
+            self.red('事後輸入', "golden_cases.md「事後才到的輸入」表要有「案例」「沒挑的理由」兩欄")
+            return self.done('事後輸入', 1, '張表')
+        known = {gc['id'] for gc in cases}
+        for no, c in rows:
+            ids = re.findall(r'GC\d+', c[k])
+            for gid in ids:
+                if gid not in known:
+                    self.red('事後輸入', f"golden_cases.md:{no} 的 {gid} 不存在")
+                elif gid not in adopted:
+                    self.red('事後輸入', f"golden_cases.md:{no} 的 {gid} 是「不採用」，不算涵蓋；改挑它或寫沒挑的理由")
+            if not ids and not c[r].strip():
+                self.red('事後輸入', f"golden_cases.md:{no} 沒有案例，也沒寫沒挑的理由")
+        self.done('事後輸入', len(rows), '種輸入')
+
+    def core_events(self):
+        """core/flows.md 的事件：{名稱: (行號, 出處, 連鎖 或 None)}；沒有「連鎖」欄時為 None。"""
+        path = os.path.join(self.root, 'core', 'flows.md')
+        if not os.path.exists(path): return {}
+        out = {}
+        for h2, h3, header, rows in mb.Doc(path).tables():
+            if not header or header[0] != '事件' or mb.col(header, '出處') is None: continue
+            src, chain = mb.col(header, '出處'), mb.col(header, '連鎖')
+            for no, c in rows:
+                name = re.split(r'[（(\s]', c[0].strip().strip('`'), 1)[0]
+                out[name] = (no, c[src], None if chain is None else c[chain])
+        return out
+
+    CHAIN_TIMING = ['同一交易', '之後']
+
+    def check_chain(self):
+        print("\n[連鎖] ⑤「其他切片事件的連鎖」的上游事件，core/flows.md「連鎖」欄有本切片")
+        d5 = self.docs.get('05_mapping.md')
+        if d5 is None:
+            return self.done('連鎖', 0, '')
+        frozen = self.doc_status(d5) == '已凍結'
+        core, own = self.core_events(), self.slice_defs(self.dir)['event']
+        n = 0
+        for h2, h3, header, rows in d5.tables():
+            k = mb.col(header, '上游事件')
+            if k is None or '連鎖' not in (h3 or h2 or ''): continue
+            t = mb.col(header, '時機')
+            for no, c in rows:
+                if t is not None and c[t].strip() not in self.CHAIN_TIMING:
+                    self.red('連鎖', f"05_mapping.md:{no} 的「時機」是「{c[t]}」，只能是 {'、'.join(self.CHAIN_TIMING)}")
+                for name in dict.fromkeys(re.findall(r'(?<![A-Za-z0-9_.])[A-Z][A-Za-z0-9]+(?![A-Za-z0-9_])', c[k])):
+                    if name in own: continue
+                    if name not in core:
+                        print(f"    • 05_mapping.md:{no} 的上游事件 {name} 不在 core/flows.md"); continue
+                    cno, src, chain = core[name]
+                    if src.strip().startswith(self.slice): continue
+                    n += 1
+                    if chain is not None and word(self.slice).search(chain): continue
+                    msg = (f"core/flows.md 的事件表沒有「連鎖」欄（{name}）" if chain is None else
+                           f"core/flows.md:{cno} {name} 的「連鎖」沒有 {self.slice}（05_mapping.md:{no}）")
+                    if frozen: self.red('連鎖', msg)
+                    else: print(f"    • {msg}（⑤ 凍結時寫入）")
+        self.done('連鎖', n, '個上游事件')
 
     def check_core_prefix(self):
         print("\n[core 前綴] core/ 中沒有不帶切片前綴的 Qnn、US-Dnn、UC-nn" + ("（準備凍結）" if self.freeze else "（凍結時要清空）"))
@@ -747,7 +837,7 @@ class Lint:
         self.check_proposal(); self.check_markers(); self.check_paths(); self.check_versions()
         self.check_pending()
         self.check_tables(); self.check_placeholders(); self.check_eq_impact(); self.check_out_of_scope()
-        self.check_golden(); self.check_param_storage(); self.check_core_prefix(); self.check_referenced_by()
+        self.check_golden(); self.check_late_inputs(); self.check_param_storage(); self.check_chain(); self.check_core_prefix(); self.check_referenced_by()
         self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")
