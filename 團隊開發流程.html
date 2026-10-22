@@ -343,7 +343,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
         <tr><td>P1 狀態由事件改變</td><td>核心狀態只透過有名字的動作改變；單純資料欄位可直接更新</td></tr>
         <tr><td>P2 歷史與更正</td><td>依 ③ 的歷史需求與資料風險選擇：只新增／覆寫＋變更紀錄／直接覆寫</td></tr>
         <tr><td>P3 資料身分</td><td>事實、快取（可重建）、凍結快照（記錄當時規則版本）</td></tr>
-        <tr><td>P4 時間欄位</td><td>發生、得知、生效的標準欄位</td></tr>
+        <tr><td>P4 時間欄位與時區</td><td>發生、得知、生效的標準欄位；時間存 UTC 並記發生地時區，「今天」依 Domain 指定地點的當地日期</td></tr>
         <tr><td>P5 規則版本</td><td>規則以資料存在，結果記錄引用的版本</td></tr>
         <tr><td>P6 規則落實位置</td><td>資料庫 constraint／trigger 或 service 層；需人工判斷的只產生建議</td></tr>
         <tr><td>P7 個人資料</td><td>依個資法刪除或遮蔽並留紀錄；業務事實保留</td></tr>
