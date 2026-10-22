@@ -33,6 +33,7 @@ argument-hint: "<1-6> [切片代號]"
    - 本步引用了 `core/` 中 `[已取代]` 或 `[已停用]` 的項目時，停下來說明，請人決定改引用取代它的項目。
    - 本步「變更提案」區有已核准的第 3 級變更提案：被取代或停用的舊項目不刪除，標題列與 `core/glossary.md`、`core/relations.md` 對應的列改為 `[已取代: <新 ID>，<生效日>]` 或 `[已停用: <生效日>]`，狀態要一致（`docs/02` 第六節）。
    - `core/CHANGELOG.md` 新增一筆。
+   - 第 ⑤ 步：`05_mapping.md` 有「其他切片事件的連鎖」時，每個上游事件在 `core/flows.md` 事件表的「連鎖」欄加上 `<本切片>（<本切片做什麼>；<時機>）`（先試用）；事件表還沒有「連鎖」欄的，在「被引用」之後補上這一欄（其他列留空）。寫完執行 `python3 tools/lint.py <切片>`，「連鎖」不能有紅燈；`core/CHANGELOG.md` 記一筆。
    - 第 ⑤ 步：`slices/PLAN.md` 中這條切片的狀態改為「設計完成（待驗證）」，在 `slices/CHANGELOG.md` 記一筆（PLAN）。
    - 第 ② 步：本切片正式定義的名詞，在 `slices/ENTITY_SKETCH.md` 改為「已定義」，「一句意思」改為「見 core/entities.md」，在 `slices/CHANGELOG.md` 記一筆（SKETCH）。
 5. **第 ⑥ 步：升級核心項目**

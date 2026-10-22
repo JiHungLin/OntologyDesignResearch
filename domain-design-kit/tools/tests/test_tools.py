@@ -277,7 +277,10 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertIn('05_mapping.md 沒有「參數放在哪裡」表（④ 參數表有 2 個參數）', out)
 
-    GC = ('# leave-backfill 黃金案例\n\n## GC01 正常流程\n- 驗證：Q01\n- 情境：…\n- 紙上判定：{}\n- 判定：{}\n\n'
+    LATE = ('## 事後才到的輸入\n\n| 已判定或已交出的結果 | 之後才到的輸入 | 案例 | 沒挑的理由 |\n|---|---|---|---|\n'
+            '| LeaveRequest.Approved | CorrectRecord：請假起訖 | {} | {} |\n\n')
+    GC = ('# leave-backfill 黃金案例\n\n' + LATE.format('GC02', '') +
+          '## GC01 正常流程\n- 驗證：Q01\n- 情境：…\n- 紙上判定：{}\n- 判定：{}\n\n'
           '## GC02 候選\n- 驗證：Q02\n- 紙上判定：一致（2026-10-21）\n- 判定：[未執行]\n')
 
     def test_golden_case_not_adopted(self):
@@ -291,6 +294,47 @@ class TestLint(Base):
         self.write(self.slice_file('06_evidence/golden_cases.md'), self.GC.format('沒挑', '沒挑'))
         code, out = self.lint()
         self.assertIn('GC01 的「紙上判定」是「沒挑」', out)
+
+    def test_late_inputs_coverage(self):
+        gc = self.GC.format('不採用', '不採用')
+        self.write(self.slice_file('06_evidence/golden_cases.md'), gc.replace('| GC02 |  |', '| GC01 | |'))
+        code, out = self.lint()
+        self.assertIn('GC01 是「不採用」，不算涵蓋', out)
+        self.write(self.slice_file('06_evidence/golden_cases.md'), gc.replace('| GC02 |  |', '| — | |'))
+        code, out = self.lint()
+        self.assertIn('沒有案例，也沒寫沒挑的理由', out)
+        self.write(self.slice_file('06_evidence/golden_cases.md'), gc.replace('| GC02 |  |', '| — | 同 GC02 的路徑 |'))
+        code, out = self.lint()
+        self.assertEqual(code, 0, out)
+        self.write(self.slice_file('06_evidence/golden_cases.md'), gc.split('## GC01')[0].replace(self.LATE.format('GC02', ''), '') +
+                   '## GC01' + gc.split('## GC01')[1])
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('沒有「事後才到的輸入」表', out)
+
+    CORE_FLOWS = ('# 共用核心：狀態機、事件、更正方式\n\n## 事件（hire-employee）\n\n'
+                  '| 事件 | 觸發來源 | 層 | 主體 | 改變什麼 | 證據 | 能否撤銷 | 有意義的時間 | 狀態 | 出處 | 被引用 | 連鎖 |\n'
+                  '|---|---|---|---|---|---|---|---|---|---|---|---|\n'
+                  '| StartEmployment（到職） | 人的動作 | 發生 | Employment | （無）→ Active | — | 只能更正 | 發生 | [候選] | '
+                  'hire-employee（③ @ hire-employee/03-v1） | leave-backfill | {} |\n')
+    MAPPING = ('# leave-backfill 對照表\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | {} |\n\n## 二、事件 → API\n\n'
+               '### 其他切片事件的連鎖\n\n| 上游事件 | 條件 | 本切片做什麼 | 時機 |\n|---|---|---|---|\n'
+               '| StartEmployment | 到職日在過去 | SubmitLeaveRequest | {} |\n')
+
+    def test_chain_written_to_core(self):
+        self.write('core/flows.md', self.CORE_FLOWS.format('leave-backfill（SubmitLeaveRequest；同一交易）'))
+        self.write(self.slice_file('05_mapping.md'), self.MAPPING.format('已凍結', '同一交易'))
+        code, out = self.lint()
+        self.assertEqual(code, 0, out)
+        self.assertIn('檢查了 1 個上游事件', out)
+        self.write('core/flows.md', self.CORE_FLOWS.format(''))
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('StartEmployment 的「連鎖」沒有 leave-backfill', out)
+        self.write(self.slice_file('05_mapping.md'), self.MAPPING.format('待檢查', '馬上'))
+        code, out = self.lint()
+        self.assertIn('（⑤ 凍結時寫入）', out)
+        self.assertIn('「時機」是「馬上」', out)
 
     def test_core_question_without_slice_prefix(self):
         self.edit('core/entities.md', '- 對應驗收問題：annual-leave:Q01', '- 對應驗收問題：Q01')
