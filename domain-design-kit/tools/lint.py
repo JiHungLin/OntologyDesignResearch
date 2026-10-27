@@ -5,7 +5,8 @@
   --freeze：準備凍結時使用，「提出／同意」有「待確認」就亮紅燈（平常只列出）。
   --baseline：上一版的切片資料夾（預設取各步驟最新的 git tag），用來找被刪除或改名的名稱。
   表格、EQ 影響、範圍外、佔位符、黃金案例（含事後才到的輸入）、連鎖、core 前綴（--freeze 時亮紅燈）、被引用也在這裡檢查；
-  「用在」與「舊版上游」只列提醒，不算紅燈。
+  審查頁（--freeze 時沒作答的亮紅燈）、挑錯反例、黃金案例自給自足也在這裡檢查；
+  「用在」「舊版上游」「使用者同意」只列提醒，不算紅燈。
 只檢查引用與結構對不對得起來，不代表內容正確。"""
 import os, re, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -453,7 +454,7 @@ class Lint:
         return tables, bad
 
     OPTIONS = {   # (檔名, h2, 欄名) → 允許的值（開頭符合，後面可接括號說明）
-        ('questions.md', None, '狀態'): ['待問', '已問', '已回覆'],
+        ('questions.md', None, '狀態'): ['待問', '已問', '暫依整理', '已回覆'],
         ('PLAN.md', '現實資料盤點', '狀態'): ['已有', '已蒐集', '推想草稿', '待提供', '找不到'],
         ('PLAN.md', '切片', '大小估計'): ['太小', '剛好', '太大'],
         ('PLAN.md', '切片', '狀態'): ['候選', '進行中', '設計完成（待驗證）', '完成', '擱置', '已拆分', '已合併'],
@@ -831,6 +832,249 @@ class Lint:
         else:
             print(f"    （{hits} 處；依 docs/01 0.9 回歸範圍判斷要不要回頭，不用回頭的不必改）")
 
+
+    # ---------- 2026-10-27 新增（流程待處理清單 #19～#38） ----------
+    STEP_OF = {'01_scope.md': 1, '02_entities.md': 2, '03_flows.md': 3, '04_rules.md': 4, '05_mapping.md': 5}
+
+    def review_refs(self):
+        """各步檔案檢查紀錄的「審查頁」行：{檔名: (行號, [reviews/…])}；沒有這一行的是舊格式，不列入。"""
+        out = {}
+        for f, d in self.docs.items():
+            if f not in self.STEP_OF: continue
+            for no, h2, h3, line in d.items:
+                m = re.match(r'^- 審查頁[：:]\s*(.*)$', line or '')
+                if m and (h2 or '') == '檢查紀錄':
+                    out[f] = (no, re.findall(r'reviews/[^\s、，,；;）)]+\.md', m.group(1)))
+        return out
+
+    @staticmethod
+    def parse_review(path):
+        """審查頁：問題、確認列、抽查、結論、黃金案例、這輪的挑錯。"""
+        lines = open(path, encoding='utf-8').read().split('\n')
+        r = {'questions': [], 'confirms': [], 'spot': None, 'verdicts': [], 'cases': [], 'x_ids': [], 'lines': lines}
+        h2 = h3 = None
+        inside = False
+        for i, l in enumerate(lines, 1):
+            if '<!--' in l:
+                inside = '-->' not in l.split('<!--', 1)[1]; continue
+            if inside:
+                inside = '-->' not in l; continue
+            if l.startswith('## '):
+                h2, h3 = l[3:].strip(), None; continue
+            if l.startswith('### '):
+                h3 = l[4:].strip()
+                if h3.startswith('問題'):
+                    r['questions'].append({'no': i, 'title': h3, 'fields': {}, 'options': 0})
+                elif re.match(r'GC\d+', h3) and h2 and h2.startswith('三'):
+                    r['cases'].append({'no': i, 'id': h3.split()[0], 'fields': {}})
+                continue
+            m = re.match(r'^- ([^：:]+)[：:]\s*(.*)$', l)
+            if m and h3:
+                k, v = m.group(1).strip(), m.group(2).strip()
+                if r['questions'] and h3 == r['questions'][-1]['title'] and h3.startswith('問題'):
+                    q = r['questions'][-1]
+                    q['fields'][k] = (i, v)
+                    if re.match(r'^[A-Z]（建議）$', k) or re.match(r'^[A-Z]$', k): q['options'] += 1
+                elif r['cases'] and h3.split()[0] == r['cases'][-1]['id']:
+                    r['cases'][-1]['fields'][k] = (i, v)
+        for h2_, h3_, header, rows in mb.Doc(path).tables():
+            if header[:2] == ['項目', '內容']:
+                for no, c in rows:
+                    if c[0] == '這輪的挑錯': r['x_ids'] = Lint.expand_ids(c[1])
+            elif '原文' in header and '在哪裡' in header and '確認' in header:
+                r['confirms'] += [(no, dict(zip(header, c))) for no, c in rows]
+            elif header[:1] == ['抽查了哪幾條']:
+                r['spot'] = [(no, c) for no, c in rows]
+            elif header[:1] == ['步驟'] and '結論' in header:
+                r['verdicts'] += [(no, dict(zip(header, c))) for no, c in rows if c[0].strip()]
+        return r
+
+    @staticmethod
+    def expand_ids(text):
+        out = []
+        for m in re.finditer(r'X-(\d+)(?:\s*～\s*X?-?(\d+))?', text or ''):
+            a, b = int(m.group(1)), int(m.group(2) or m.group(1))
+            w = len(m.group(1))
+            out += [f'X-{i:0{w}d}' for i in range(a, b + 1)] if b - a < 200 else [f'X-{m.group(1)}']
+        return out
+
+    def check_reviews(self):
+        print("\n[審查頁] 送審的步驟有審查頁；問題附選項、原文對得上行號、自評部分與 ✗ 都在頁上" +
+              ("（準備凍結：每一列都要已作答）" if self.freeze else "；列出還沒作答的"))
+        refs = self.review_refs()
+        if not refs:
+            return self.done('審查頁', 0, '', skipped='沒有新格式（檢查紀錄有「審查頁」行）的交付物')
+        n = 0
+        pending = {}                                      # 審查頁 → [送審中的步驟檔]
+        for f, (no, paths) in refs.items():
+            status = self.doc_status(self.docs[f])
+            if status != '待檢查': continue
+            n += 1
+            if not paths:
+                self.red('審查頁', f"{f}:{no} 狀態是「待檢查」，檢查紀錄沒有寫審查頁（docs/02「審查頁」）"); continue
+            path = os.path.join(self.dir, paths[-1])
+            if not os.path.exists(path):
+                self.red('審查頁', f"{f}:{no} 的 {paths[-1]} 不存在"); continue
+            pending.setdefault(paths[-1], []).append(f)
+        for rel, files in pending.items():
+            path = os.path.join(self.dir, rel)
+            r = self.parse_review(path)
+            text = '\n'.join(r['lines'])
+            unanswered = []
+            for q in r['questions']:
+                n += 1
+                fl = q['fields']
+                for need in ('問題', '你的回答'):
+                    if need not in fl:
+                        self.red('審查頁', f"{rel}:{q['no']} {q['title']} 沒有「{need}」")
+                if not any(re.match(r'^[A-Z]（建議）$', k) for k in fl):
+                    self.red('審查頁', f"{rel}:{q['no']} {q['title']} 沒有建議答案（A（建議））")
+                if q['options'] < 2:
+                    self.red('審查頁', f"{rel}:{q['no']} {q['title']} 除了建議答案，至少還要一個選項（B…）")
+                if '你的回答' in fl and not fl['你的回答'][1]:
+                    unanswered.append(f"{rel}:{fl['你的回答'][0]} {q['title']}")
+            for no, c in r['confirms']:
+                n += 1
+                if not c.get('確認', '').strip():
+                    unanswered.append(f"{rel}:{no} 確認第 {c.get('#', '?')} 列")
+                self.check_excerpt(rel, no, c)
+            if r['spot'] is None:
+                self.red('審查頁', f"{rel} 沒有「抽查」表")
+            elif not any(c[0].strip() for no, c in r['spot']):
+                unanswered.append(f"{rel} 抽查")
+            for no, c in r['verdicts']:
+                miss = [k for k in c if k != '步驟' and not c[k].strip()]
+                if miss: unanswered.append(f"{rel}:{no} 結論（{c['步驟']}）")
+                elif self.freeze and not c.get('結論', '').strip().startswith('通過'):
+                    self.red('審查頁', f"{rel}:{no} {c['步驟']} 的結論是「{c.get('結論')}」，不是「通過」")
+            if not r['verdicts']:
+                self.red('審查頁', f"{rel} 沒有「結論」表")
+            for gc in r['cases']:
+                for k in ('預期結果', '計算過程', '計算者'):
+                    if not gc['fields'].get(k, (0, ''))[1]:
+                        unanswered.append(f"{rel}:{gc['no']} {gc['id']} 的「{k}」"); break
+            self.check_case_copies(rel, r)
+            # 自評「部分」或 ✗ 的完成標準要在審查頁
+            for f in files:
+                for h2, h3, header, rows in self.docs[f].tables():
+                    k = mb.col(header, 'AI 自評')
+                    if h2 != '檢查紀錄' or k is None: continue
+                    for no, c in rows:
+                        v = c[k].strip()
+                        if (v.startswith('部分') or v.startswith('✗')) and re.sub(r'\s+', '', c[0]) not in re.sub(r'\s+', '', text):
+                            self.red('審查頁', f"{f}:{no} 自評「{v[:6]}」的完成標準沒有列在 {rel}（照抄完成標準原文）")
+            for msg in unanswered:
+                if self.freeze: self.red('審查頁', f"{msg} 還沒作答")
+            if unanswered and not self.freeze:
+                print(f"    • {rel}：還有 {len(unanswered)} 處沒作答（等審查者填；凍結前要填完）")
+        self.done('審查頁', n, '個送審的步驟與題目')
+
+    def check_excerpt(self, rel, no, c):
+        where, quote = c.get('在哪裡', ''), c.get('原文', '')
+        m = re.search(r'([\w./-]+\.(?:md|yaml|sql)):(\d+)', where)
+        if not m:
+            self.red('審查頁', f"{rel}:{no} 「在哪裡」要寫 `檔名:行號`（現在是「{where}」）"); return
+        frags = [x for part in re.findall(r'「([^」]*)」', quote) for x in part.split('…') if len(x.strip()) >= 2]
+        if not frags:
+            self.red('審查頁', f"{rel}:{no} 「原文」要用「」照抄檔案中的文字"); return
+        target = os.path.join(self.dir, m.group(1))
+        if not os.path.exists(target):
+            self.red('審查頁', f"{rel}:{no} 的 {m.group(1)} 不存在"); return
+        lines = open(target, encoding='utf-8').read().split('\n')
+        line = int(m.group(2))
+        window = re.sub(r'\s+', '', ''.join(lines[max(0, line - 3):line + 2]))
+        missing = [x for x in frags if re.sub(r'\s+', '', x) not in window]
+        if missing:
+            self.red('審查頁', f"{rel}:{no} 的原文「{missing[0][:30]}」在 {m.group(1)}:{line} 前後 2 行找不到（設計改了，或行號過期）")
+
+    def check_case_copies(self, rel, r):
+        path = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
+        if not r['cases'] or not os.path.exists(path): return
+        gold, cur = {}, None
+        for no, h2, h3, line in mb.Doc(path).items:
+            if h3 is None and h2 and re.match(r'GC\d+', h2): cur = h2.split()[0]; gold[cur] = {}
+            m = re.match(r'^- (預期結果|計算過程|計算者)[：:]\s*(.*)$', line or '')
+            if cur and m: gold[cur][m.group(1)] = m.group(2).strip()
+        for gc in r['cases']:
+            for k in ('預期結果', '計算過程', '計算者'):
+                v = gc['fields'].get(k, (0, ''))[1]
+                if not v: continue
+                g = gold.get(gc['id'], {}).get(k, '')
+                if re.sub(r'\s+', '', g) != re.sub(r'\s+', '', v):
+                    self.red('審查頁', f"{rel} {gc['id']} 的「{k}」和 golden_cases.md 不同（人填在審查頁的要逐字抄回）")
+
+    def check_challenge(self):
+        print("\n[挑錯] 送審的 ①～⑤ 有「AI 挑錯」的反例；審查頁「這輪的挑錯」列的 X-nn 存在")
+        refs = self.review_refs()
+        n = 0
+        for f, (no, paths) in refs.items():
+            d = self.docs[f]
+            if self.doc_status(d) != '待檢查': continue
+            n += 1
+            xs, ai = set(), 0
+            for h2, h3, header, rows in d.tables():
+                if h3 == '反例處理' and header[:2] == ['#', '反例']:
+                    k = mb.col(header, '來源')
+                    for rno, c in rows:
+                        xs.add(c[0].strip())
+                        if k is not None and c[k].strip().startswith('AI 挑錯'): ai += 1
+            if not ai:
+                self.red('挑錯', f"{f} 送審了，「反例處理」沒有來源為「AI 挑錯」的反例（docs/01 該步完成標準）")
+            if paths and os.path.exists(os.path.join(self.dir, paths[-1])):
+                listed = self.parse_review(os.path.join(self.dir, paths[-1]))['x_ids']
+                for x in listed:
+                    if not any(x in self.x_ids(g) for g in self.docs if g in self.STEP_OF):
+                        self.red('挑錯', f"{paths[-1]}「這輪的挑錯」的 {x} 不在任何一步的「反例處理」"); break
+        self.done('挑錯', n, '個送審的交付物', skipped=None if n else ('沒有送審中的新格式交付物' if refs else None))
+
+    def x_ids(self, f):
+        out = set()
+        for h2, h3, header, rows in self.docs[f].tables():
+            if h3 == '反例處理' and header[:2] == ['#', '反例']:
+                out |= {c[0].strip() for no, c in rows}
+        return out
+
+    def check_golden_selfcontained(self):
+        print("\n[黃金案例自給自足] 採用的案例不寫「同 GCnn」「同上一個案例」")
+        path = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
+        if not os.path.exists(path):
+            return self.done('案例自足', 0, '')
+        cases, cur = [], None
+        for no, h2, h3, line in mb.Doc(path).items:
+            if h3 is None and h2 and re.match(r'GC\d+', h2) and (cur is None or cur['id'] != h2.split()[0]):
+                cur = {'id': h2.split()[0], 'lines': [], 'adopted': True}; cases.append(cur)
+            if cur and line is not None:
+                cur['lines'].append((no, line))
+                m = re.match(r'^- 紙上判定[：:]\s*(.*)$', line)
+                if m and m.group(1).strip().startswith('不採用'): cur['adopted'] = False
+        n = 0
+        for gc in cases:
+            if not gc['adopted']: continue
+            n += 1
+            for no, line in gc['lines']:
+                m = re.search(r'同\s*GC\d+|同(?:上|前)一?個?案例', line)
+                if m:
+                    self.red('案例自足', f"golden_cases.md:{no} {gc['id']} 寫了「{m.group(0)}」，把引用的內容寫進這個案例"); break
+        self.done('案例自足', n, '個採用的案例')
+
+    def check_user_agreement(self):
+        print("\n[使用者同意] 寫「使用者同意／決定」的，同一格有原話（「」）或 inputs/ 檔（提醒，不算紅燈）")
+        n = hits = 0
+        for f, d in self.docs.items():
+            for h2, h3, header, rows in d.tables():
+                if h2 != '決定與理由' or header[:2] != ['#', '決定']: continue
+                for no, c in rows:
+                    for cell in c[1:]:
+                        if re.search(r'使用者[^，。；]{0,6}(同意|決定|選)', cell):
+                            n += 1
+                            if '「' not in cell and 'inputs/' not in cell and '選項' not in cell:
+                                hits += 1
+                                print(f"    • {f}:{no} {c[0]} 寫了使用者同意或決定，沒有引用原話、選項或 inputs/ 檔（docs/02 第四節）")
+        if n and not hits:
+            print(f"    ✓ 通過（檢查了 {n} 格）")
+        elif not n:
+            self.done('使用者同意', 0, '')
+
     def run(self):
         self.check_parse()
         self.check_residue(); self.check_cancelled(); self.check_ids(); self.check_glossary()
@@ -838,6 +1082,7 @@ class Lint:
         self.check_pending()
         self.check_tables(); self.check_placeholders(); self.check_eq_impact(); self.check_out_of_scope()
         self.check_golden(); self.check_late_inputs(); self.check_param_storage(); self.check_chain(); self.check_core_prefix(); self.check_referenced_by()
+        self.check_reviews(); self.check_challenge(); self.check_golden_selfcontained(); self.check_user_agreement()
         self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")
