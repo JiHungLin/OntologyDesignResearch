@@ -1,0 +1,8 @@
+# 開發時實際使用的版本（2026-10-27 在 Python 3.10.12 上測試）
+fastapi==0.116.1
+starlette==0.47.2
+uvicorn==0.35.0
+pydantic==2.11.7
+# 測試
+pytest==6.2.5
+httpx==0.27.0

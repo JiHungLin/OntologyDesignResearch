@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Domain 設計審查</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <button class="nav-toggle" id="navToggle" aria-label="切片清單">☰</button>
+  <h1>Domain 設計審查</h1>
+  <span class="repo" id="repo"></span>
+</header>
+
+<div class="layout">
+  <nav class="nav" id="nav"></nav>
+
+  <main class="main" id="main">
+    <section class="empty">
+      <h2>選一份審查頁</h2>
+      <p>左邊列出每條切片的審查頁，數字是還沒作答的項目。</p>
+    </section>
+  </main>
+
+  <aside class="viewer" id="viewer" hidden>
+    <div class="viewer-head">
+      <span id="viewerPath"></span>
+      <button id="viewerClose" aria-label="關閉">✕</button>
+    </div>
+    <pre class="viewer-body" id="viewerBody"></pre>
+  </aside>
+</div>
+
+<section class="ai" id="ai">
+  <button class="ai-toggle" id="aiToggle">AI 對話 <span id="aiState"></span></button>
+  <div class="ai-body" id="aiBody" hidden>
+    <div class="ai-session" id="aiSession"></div>
+    <div class="ai-log" id="aiLog"></div>
+    <form class="ai-form" id="aiForm">
+      <textarea id="aiInput" rows="2" placeholder="平常用上面的按鈕就好；元件涵蓋不到的事才在這裡打字"></textarea>
+      <button type="submit" id="aiSend">送出</button>
+    </form>
+  </div>
+</section>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
