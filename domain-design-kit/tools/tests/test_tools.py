@@ -361,6 +361,132 @@ class TestLint(Base):
         self.assertEqual(code, 1, out)
         self.assertIn('R02 的套用對象「查看個資」沒有寫', out)
 
+    # ---------- 審查頁、挑錯、黃金案例自給自足（2026-10-27） ----------
+    FLOWS_TAIL = ('\n## 決定與理由\n\n| # | 決定 | 考慮過的替代做法 | 理由 | 依據 | 提出／同意 |\n|---|---|---|---|---|---|\n'
+                  '| D-01 | 駁回不可撤銷 | 可撤銷 | 使用者同意 | — | {who} |\n\n### 反例處理\n\n'
+                  '| # | 反例 | 來源 | 處理 | 理由或去向 |\n|---|---|---|---|---|\n'
+                  '| X-01 | 店長駁回後又想改 | {src} | 拒絕 | 另提一筆 |\n\n## 檢查紀錄\n\n### 完成標準（AI 自評）\n\n'
+                  '| 完成標準 | 類 | AI 自評 |\n|---|---|---|\n| 「核准」和「發生」是分開的兩件事 | 品質檢查 | ✓ |\n'
+                  '| 有寫更正方式，且沒有任何一步是直接改舊紀錄 | 品質檢查 | 部分：只有一種 |\n\n- 審查頁：reviews/2026-10-27_03.md\n')
+    REVIEW = ('# leave-backfill 審查頁：③（2026-10-27）\n\n| 項目 | 內容 |\n|---|---|\n| 這輪的挑錯 | ③ {xs} |\n\n'
+              '## 一、要你回答的問題\n\n### 問題 1（③ D-01）\n- 背景：設計目前不可撤銷\n- 問題：駁回之後可以撤銷嗎？\n'
+              '- A（建議）：不可以 → D-01 維持\n{b}- 其他：（寫一句）\n- 你的回答：{ans}\n\n'
+              '## 二、要你確認的內容\n\n| # | 步驟 | 要看的 | 原文 | 在哪裡 | 確認 |\n|---|---|---|---|---|---|\n'
+              '| 1 | ③ | {look} | 「{quote}」 | `03_flows.md:{line}` | {ok} |\n\n'
+              '## 四、抽查\n\n| 抽查了哪幾條 | 結果 |\n|---|---|\n| {spot} | |\n\n'
+              '## 結論\n\n| 步驟 | 審查者（非產出者） | 日期 | 結論 |\n|---|---|---|---|\n| ③ | {rev} | {date} | {verdict} |\n')
+
+    def setup_review(self, who='AI／待確認', src='AI 挑錯（時間與帳務）', **kw):
+        self.edit(self.slice_file('03_flows.md'), '# leave-backfill ③ 流程與狀態\n',
+                  '# leave-backfill ③ 流程與狀態\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 待檢查 |\n')
+        p = os.path.join(self.dir, self.slice_file('03_flows.md'))
+        with open(p, 'a', encoding='utf-8') as f:
+            f.write(self.FLOWS_TAIL.format(who=who, src=src))
+        line = next(i for i, l in enumerate(open(p, encoding='utf-8').read().split('\n'), 1) if l.startswith('| RejectLeave（駁回請假）'))
+        v = dict(xs='X-01', b='- B：可以 → RejectLeave 改成可撤銷\n', ans='', ok='', spot='', rev='', date='', verdict='',
+                 look='自評「部分」：有寫更正方式，且沒有任何一步是直接改舊紀錄', quote='RejectLeave（駁回請假） \\| 人的動作', line=line)
+        v.update(kw)
+        self.write(self.slice_file('reviews/2026-10-27_03.md'), self.REVIEW.format(**v))
+
+    def test_review_page_answered_before_freeze(self):
+        self.setup_review()
+        code, out = self.lint()
+        self.assertNotIn('    ✗', out.split('[審查頁]')[1].split('\n[')[0], out)
+        self.assertIn('還有 4 處沒作答', out)
+        code, out = self.lint('--freeze')
+        self.assertEqual(code, 1, out)
+        self.assertIn('還沒作答', out)
+        self.setup_review_filled()
+
+    def setup_review_filled(self):
+        self.write(self.slice_file('reviews/2026-10-27_03.md'), open(os.path.join(self.dir, self.slice_file('reviews/2026-10-27_03.md')),
+                   encoding='utf-8').read().replace('- 你的回答：\n', '- 你的回答：A\n').replace('| 03_flows', '| 03_flows')
+                   .replace('` |  |\n', '` | ✓ |\n').replace('|  | |\n', '| 第 1 條 | 符合 |\n').replace('| ③ |  |  |  |', '| ③ | 審查者甲 | 2026-10-27 | 通過 |'))
+        self.edit(self.slice_file('03_flows.md'), '| AI／待確認 |', '| AI／審查者甲（2026-10-27） |')
+        code, out = self.lint('--freeze')
+        self.assertNotIn('還沒作答', out)
+        self.assertNotIn('    ✗', out.split('[審查頁]')[1].split('\n[')[0], out)
+
+    def test_review_excerpt_must_match_line(self):
+        self.setup_review(quote='CorrectLeaveOccurrence')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('前後 2 行找不到', out)
+
+    def test_review_question_needs_options(self):
+        self.setup_review(b='')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('至少還要一個選項', out)
+
+    def test_review_lists_partial_self_check(self):
+        self.setup_review(look='更正方式')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('的完成標準沒有列在 reviews/2026-10-27_03.md', out)
+
+    def test_challenge_rows_required(self):
+        self.setup_review(src='審查者')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('沒有來源為「AI 挑錯」的反例', out)
+        self.setup_review(xs='X-09')
+        code, out = self.lint()
+        self.assertIn('X-09 不在任何一步的「反例處理」', out)
+
+    def test_user_agreement_reminder(self):
+        self.setup_review()
+        code, out = self.lint()
+        self.assertIn('寫了使用者同意或決定，沒有引用原話', out)
+
+    def test_golden_case_must_be_self_contained(self):
+        gc = self.GC.format('[未執行]', '[未執行]').replace('- 情境：…', '- 情境：同 GC02，但改成週末')
+        self.write(self.slice_file('06_evidence/golden_cases.md'), gc.replace('| GC02 |  |', '| GC01 | |'))
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('GC01 寫了「同 GC02」', out)
+
+    def test_question_status_temporarily_following_user(self):
+        self.edit(self.slice_file('questions.md'), '| 待問 | | |', '| 暫依整理 | inputs/leave-backfill/訪談_0930.md（使用者整理，非專家答覆） | |')
+        code, out = self.lint()
+        self.assertEqual(code, 0, out)
+
+class TestSyncCore(Base):
+    def sync(self, *args, tags=None):
+        return run('sync_core.py', SLICE, '--tags', tags or f'2={SLICE}/02-v1,3={SLICE}/03-v1,4={SLICE}/04-v1', *args, cwd=self.dir)
+
+    def test_first_sync_then_nothing_changes(self):
+        code, out = self.sync('--write')
+        self.assertEqual(code, 0, out)
+        self.assertIn('新增 3：Employment、LeaveOccurrence、LeaveRequest', out)
+        core = open(os.path.join(self.dir, 'core/entities.md'), encoding='utf-8').read()
+        self.assertIn('### LeaveRequest（請假申請） [候選]', core)
+        self.assertIn(f'- 出處：{SLICE}（② @ {SLICE}/02-v1）', core)
+        self.assertIn(f'{SLICE}:Q', core)
+        self.assertTrue(os.path.exists(os.path.join(self.dir, 'core/rules.md')))
+        code, out = self.sync()
+        self.assertIn('core/ 不用改', out)
+
+    def test_order_and_spaces_are_not_changes(self):
+        self.sync('--write')
+        p = os.path.join(self.dir, self.slice_file('03_flows.md'))
+        lines = open(p, encoding='utf-8').read().split('\n')
+        i = next(k for k, l in enumerate(lines) if l.startswith('| SubmitLeaveRequest'))
+        lines[i], lines[i + 1] = lines[i + 1].replace(' | ', '  |  '), lines[i]
+        open(p, 'w', encoding='utf-8').write('\n'.join(lines))
+        code, out = self.sync()
+        self.assertIn('core/ 不用改', out)
+
+    def test_changed_rule_updates_source(self):
+        self.sync('--write')
+        p = os.path.join(self.dir, self.slice_file('04_rules.md'))
+        t = open(p, encoding='utf-8').read()
+        i = t.index('| R01 | ') + len('| R01 | ')
+        open(p, 'w', encoding='utf-8').write(t[:i] + '（改）' + t[i:])
+        code, out = self.sync('--write', tags=f'2={SLICE}/02-v1,3={SLICE}/03-v1,4={SLICE}/04-v2')
+        self.assertIn('更新 1（出處改成新 tag）：R01（規則）', out)
+        self.assertIn(f'{SLICE}（④ @ {SLICE}/04-v2）', open(os.path.join(self.dir, 'core/rules.md'), encoding='utf-8').read())
+
 class TestTable(Base):
     def test_empty_cells_are_not_merged(self):
         self.edit(self.slice_file('questions.md'), '| 待問 | | |', '| 待問 | | 2026-10-21 |')
