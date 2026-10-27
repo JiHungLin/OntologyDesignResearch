@@ -6,7 +6,11 @@ import re
 import kit
 
 H3_QUESTION = re.compile(r'^### 問題\s*(\d+)\s*(?:（(.*)）)?\s*$')
-ITEM = re.compile(r'^- (背景|問題|其他|你的回答)：\s*(.*)$')
+ITEM = re.compile(r'^- (背景|問題|例子|主題|其他|你的回答)：\s*(.*)$')
+H3_CASE = re.compile(r'^### (GC\d+)\s*(.*)$')
+CASE_ITEM = re.compile(r'^- ([^：:]+)[：:]\s*(.*)$')
+# 黃金案例中人填的欄位（docs/02 ⑥；AI 不填）
+CASE_HUMAN = ('預期結果', '計算過程', '計算者')
 OPTION = re.compile(r'^- ([A-Z])(（建議）)?：\s*(.*)$')
 FILE_REF = re.compile(r'`?([^\s`「」（）()、，]+?\.(?:md|ya?ml|js|sql|py)):(\d+)`?')
 
@@ -37,7 +41,7 @@ def parse(path):
         m = H3_QUESTION.match(line)
         if m:
             cur = {'n': int(m.group(1)), 'ref': m.group(2) or '', 'section': h2, 'line': no,
-                   'background': '', 'question': '', 'options': [], 'other': '', 'answer': '', 'answer_line': None}
+                   'background': '', 'question': '', 'example': '', 'topic': '', 'options': [], 'other': '', 'answer': '', 'answer_line': None}
             questions.append(cur)
             continue
         if line.startswith('### '):
@@ -55,12 +59,20 @@ def parse(path):
             if k == '你的回答':
                 cur['answer'], cur['answer_line'] = v, no
             else:
-                cur[{'背景': 'background', '問題': 'question', '其他': 'other'}[k]] = v
+                cur[{'背景': 'background', '問題': 'question', '例子': 'example', '主題': 'topic', '其他': 'other'}[k]] = v
             continue
         if line.startswith('  ') and line.strip() and not line.strip().startswith('<!--'):
             # 前一項的續行
             if cur['options'] and not cur['answer_line']:
                 cur['options'][-1]['text'] += '\n' + line.strip()
+
+    # 選項寫成「做法 → 選了之後設計會怎樣」（docs/01 0.2「問人的方式」），分開給畫面用
+    for q in questions:
+        for o in q['options']:
+            head, _, outcome = o['text'].partition('→')
+            o['summary'], o['outcome'] = head.strip(), outcome.strip()
+
+    cases = _cases(lines)
 
     # 表格：確認、抽查、結論、開頭的項目表
     meta, confirms, spot, conclusion = [], [], [], []
@@ -101,15 +113,52 @@ def parse(path):
         'confirms_open': sum(1 for c in confirms if _empty(c['answer'])),
         'spot_done': any(not _empty(s['items']) and not _empty(s['result']) for s in spot),
         'conclusion_done': bool(conclusion) and all(not _empty(c['cells'].get('結論', '')) for c in conclusion),
+        'cases': len(cases),
+        'cases_open': sum(1 for c in cases if any(_empty(c['fields'].get(k, {}).get('value', '')) for k in CASE_HUMAN)),
     }
-    counts['open'] = (counts['questions_open'] + counts['confirms_open']
+    counts['open'] = (counts['questions_open'] + counts['confirms_open'] + counts['cases_open']
                       + (0 if counts['spot_done'] else 1) + (0 if counts['conclusion_done'] else 1))
     return {
         'title': title, 'digest': digest(text), 'meta': meta,
         'questions': questions, 'confirms': confirms, 'spot': spot, 'spot_hint': spot_hint,
-        'conclusion': conclusion, 'golden': section_text('三'), 'counts': counts,
+        'conclusion': conclusion, 'golden': section_text('三'), 'cases': cases, 'counts': counts,
         'problems': [f'{no} {msg}' for p, no, msg in mb.problems if p == path],
     }
+
+
+def _cases(lines):
+    """第三節「要你算的黃金案例」：### GCnn 標題，底下「- 欄位：值」，值可以有縮排的續行。"""
+    cases, cur, field, h2 = [], None, None, ''
+    for no, line in enumerate(lines, 1):
+        if line.startswith('## '):
+            h2, cur, field = line[3:].strip(), None, None
+            continue
+        m = H3_CASE.match(line)
+        if m and h2.startswith('三'):
+            cur = {'id': m.group(1), 'title': m.group(2).strip(), 'line': no, 'fields': {}}
+            cases.append(cur)
+            field = None
+            continue
+        if line.startswith('#'):
+            cur = field = None
+            continue
+        if cur is None:
+            continue
+        m = CASE_ITEM.match(line)
+        if m:
+            field = m.group(1).strip()
+            cur['fields'][field] = {'line': no, 'end': no, 'value': m.group(2).strip()}
+        elif field and line.startswith('  ') and line.strip():
+            f = cur['fields'][field]
+            f['value'] = (f['value'] + '\n' + line.strip()).strip()
+            f['end'] = no
+        elif line.strip():
+            field = None
+    for c in cases:
+        for f in c['fields'].values():
+            if f['value'].startswith('（') and f['value'].endswith('）') and '\n' not in f['value']:
+                f['placeholder'], f['value'] = f['value'], ''  # 範本的「（由人填）」
+    return cases
 
 
 class Conflict(Exception):
@@ -186,3 +235,22 @@ def _header_of(lines, line):
     if line - 1 <= i + 1 or not re.match(r'^\s*\|[\s:|-]+\|\s*$', lines[i + 1]):
         return None
     return [h.strip() for h in split(lines[i])]
+
+
+def set_case_field(path, line, key, value, expect_digest=None):
+    """寫入黃金案例中人填的一欄（預期結果、計算過程、計算者）。多行的值寫成縮排的子項目，取代原本的續行。"""
+    if key not in CASE_HUMAN:
+        raise ValueError(f'不能改這一欄：{key}')
+    lines = _load(path, expect_digest)
+    if not 0 < line <= len(lines) or not lines[line - 1].startswith(f'- {key}：'):
+        raise Conflict(path)
+    end = line
+    while end < len(lines) and lines[end].startswith('  ') and lines[end].strip():
+        end += 1
+    rows = [r.strip() for r in str(value).split('\n') if r.strip()]
+    if len(rows) <= 1:
+        new = [f'- {key}：' + (rows[0] if rows else '')]
+    else:
+        new = [f'- {key}：'] + ['  - ' + r.lstrip('-• ').strip() for r in rows]
+    lines[line - 1:end] = new
+    return _save(path, lines)

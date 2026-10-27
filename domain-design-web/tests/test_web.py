@@ -34,13 +34,17 @@ def client(repo):
 def test_parse(repo):
     r = review.parse(str(repo / REVIEW))
     assert r['counts'] == {'questions': 2, 'questions_open': 2, 'confirms': 2, 'confirms_open': 2,
-                           'spot_done': False, 'conclusion_done': False, 'open': 6}
+                           'spot_done': False, 'conclusion_done': False, 'cases': 1, 'cases_open': 1, 'open': 7}
     q = r['questions'][0]
     assert (q['n'], q['ref']) == (1, '② D-01')
     assert [(o['key'], o['recommended']) for o in q['options']] == [('A', True), ('B', False)]
-    assert r['confirms'][1]['cells']['原文'] == '「| Order | customer | Customer | 1 |」'
+    assert (q['options'][1]['summary'], q['options'][1]['outcome']) == ('刪除', '查不到取消紀錄')
+    assert q['example'] == '小王 3/1 下單，3/2 取消'
+    assert r['confirms'][1]['cells']['原文'] == '「| Order | customer（屬於客戶） | Customer | 1 |」'
     assert [m['key'] for m in r['meta']] == ['這輪審查的步驟', '起因']
-    assert r['golden'] == '（這輪沒有）'
+    gc = r['cases'][0]
+    assert gc['id'] == 'GC01' and gc['fields']['預期結果']['value'] == ''
+    assert gc['fields']['要回答']['value'] == '① 訂單狀態；② 退款金額'
     assert r['problems'] == []
 
 
@@ -87,7 +91,7 @@ def test_spot_row(repo):
 
 def test_api(client):
     s = client.get('/api/status').json()
-    assert s['slices'][0]['reviews'][0]['counts']['open'] == 6
+    assert s['slices'][0]['reviews'][0]['counts']['open'] == 7
     assert s['gitignored'] is False
     r = client.get('/api/review', params={'path': REVIEW}).json()
     assert r['slice'] == 'demo'
@@ -97,6 +101,39 @@ def test_api(client):
     res = client.post('/api/review/answer', json={'path': REVIEW, 'digest': r['digest'],
                                                   'line': r['questions'][1]['answer_line'], 'value': 'A'})
     assert res.status_code == 409  # 用舊的 digest
+
+
+def test_case_field(repo):
+    p = str(repo / REVIEW)
+    r = review.parse(p)
+    f = r['cases'][0]['fields']
+    d = review.set_case_field(p, f['預期結果']['line'], '預期結果', '① 已取消\n② 100 元', r['digest'])
+    d = review.set_case_field(p, review.parse(p)['cases'][0]['fields']['計算者']['line'], '計算者', '小林', d)
+    r2 = review.parse(p)
+    f2 = r2['cases'][0]['fields']
+    assert f2['預期結果']['value'] == '- ① 已取消\n- ② 100 元' and f2['計算者']['value'] == '小林'
+    assert r2['counts']['cases_open'] == 1  # 計算過程還沒填
+    # 再改一次：多行換單行，原本的續行要一起拿掉
+    review.set_case_field(p, f2['預期結果']['line'], '預期結果', '已取消，退 100', d)
+    r3 = review.parse(p)
+    assert r3['cases'][0]['fields']['預期結果']['value'] == '已取消，退 100'
+    assert r3['cases'][0]['fields']['紙上推演']['value'] == '取消 → 已取消，退 100'
+    with pytest.raises(ValueError):  # AI 填的欄不能改
+        review.set_case_field(p, f['紙上推演']['line'], '紙上推演', 'x', r3['digest'])
+
+
+def test_model_and_home(client):
+    r = client.get('/api/review', params={'path': REVIEW}).json()
+    m = r['model']
+    assert [(e['id'], e['changed']) for e in m['entities']] == [('Order', True)]
+    assert m['entities'][0]['definition'] == '客戶下的一筆訂單。'
+    assert [a['name'] for a in m['entities'][0]['attrs']] == ['ordered_on', 'total']
+    assert [x['id'] for x in m['refs']] == ['Customer']
+    assert m['relations'][0]['changed'] and m['relations'][0]['label'] == '屬於客戶'
+    assert [s['n'] for s in r['spot_items']] == [1, 2]
+    h = client.get('/api/home', params={'slice': 'demo'}).json()
+    assert h['current']['path'] == REVIEW
+    assert [lv['state'] for lv in h['levels']][:3] == ['locked', 'review', 'locked']
 
 
 def test_file_paths(client):
