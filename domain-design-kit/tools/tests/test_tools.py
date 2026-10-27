@@ -451,6 +451,33 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertEqual(code, 0, out)
 
+    # ---------- 跨切片修改（2026-10-27） ----------
+    OTHER = ('# other ③\n\n## 決定與理由\n\n| # | 決定 | 考慮過的替代做法 | 理由 | 依據 | 提出／同意 |\n|---|---|---|---|---|---|\n'
+             '| D-04 | 到職後重新判定 | — | — | — | AI／○○（2026-11-03） |\n')
+    LOG = ('# leave-backfill 變更紀錄\n\n{newer}'
+           '## 2026-11-03　（未處理）　③ 流程與狀態　其他切片要求\n- 要改什麼：加一個轉換\n- 依據：{ref}\n- 同意者：○○（2026-11-03）\n')
+
+    def test_cross_slice_reference_must_exist(self):
+        self.write('slices/other/03_flows.md', self.OTHER)
+        self.write(self.slice_file('CHANGELOG.md'), self.LOG.format(newer='', ref='other/03_flows D-04'))
+        code, out = self.lint()
+        self.assertEqual(code, 0, out)
+        self.assertIn('檢查了 1 個跨切片引用', out)
+        self.write(self.slice_file('CHANGELOG.md'), self.LOG.format(newer='', ref='other/03_flows D-09'))
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('03_flows.md 沒有 D-09', out)
+
+    def test_request_from_other_slice_pending_until_handled(self):
+        self.write('slices/other/03_flows.md', self.OTHER)
+        self.write(self.slice_file('CHANGELOG.md'), self.LOG.format(newer='', ref='other/03_flows D-04'))
+        code, out = self.lint()
+        self.assertIn('還沒處理：2026-11-03', out)
+        newer = '## 2026-11-05　leave-backfill/03-v2　③ 流程與狀態　凍結\n- 改了什麼：加轉換\n- 依據：other/03_flows D-04\n\n'
+        self.write(self.slice_file('CHANGELOG.md'), self.LOG.format(newer=newer, ref='other/03_flows D-04'))
+        code, out = self.lint()
+        self.assertIn('1 件都已處理', out)
+
 class TestSyncCore(Base):
     def sync(self, *args, tags=None):
         return run('sync_core.py', SLICE, '--tags', tags or f'2={SLICE}/02-v1,3={SLICE}/03-v1,4={SLICE}/04-v1', *args, cwd=self.dir)

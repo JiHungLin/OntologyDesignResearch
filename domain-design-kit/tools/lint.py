@@ -6,7 +6,8 @@
   --baseline：上一版的切片資料夾（預設取各步驟最新的 git tag），用來找被刪除或改名的名稱。
   表格、EQ 影響、範圍外、佔位符、黃金案例（含事後才到的輸入）、連鎖、core 前綴（--freeze 時亮紅燈）、被引用也在這裡檢查；
   審查頁（--freeze 時沒作答的亮紅燈）、挑錯反例、黃金案例自給自足也在這裡檢查；
-  「用在」「舊版上游」「使用者同意」只列提醒，不算紅燈。
+  跨切片引用（<切片>/<檔名> D-nn）也在這裡檢查；
+  「用在」「舊版上游」「使用者同意」「其他切片要求」只列提醒，不算紅燈。
 只檢查引用與結構對不對得起來，不代表內容正確。"""
 import os, re, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -1075,6 +1076,82 @@ class Lint:
         elif not n:
             self.done('使用者同意', 0, '')
 
+
+    # ---------- 跨切片修改（2026-10-27） ----------
+    CROSS_RE = re.compile(r'(?<![\w/-])([a-z][a-z0-9-]*)/(0\d_[a-z_]+)(?:\.md)?\s*([DX]-\d+)')
+
+    def ids_in_file(self, path, kind):
+        """檔案中「決定與理由」（D）或「反例處理」（X）表第一欄的編號。"""
+        out = set()
+        if not os.path.exists(path): return out
+        for h2, h3, header, rows in self.quiet_tables(path)[0]:
+            if kind == 'D' and h2 == '決定與理由' and not h3 and header[:2] == ['#', '決定']:
+                out |= {c[0].strip() for no, c in rows}
+            if kind == 'X' and h3 == '反例處理' and header[:2] == ['#', '反例']:
+                out |= {c[0].strip() for no, c in rows}
+        return out
+
+    def check_cross_refs(self):
+        print("\n[跨切片引用] <切片>/<檔名> D-nn、X-nn 引用的切片、檔案與編號存在")
+        files = [os.path.join(self.dir, f) for f in self.docs] + [os.path.join(self.dir, 'CHANGELOG.md'),
+                                                                   os.path.join(self.dir, 'questions.md')]
+        rdir = os.path.join(self.dir, 'reviews')
+        if os.path.isdir(rdir):
+            files += [os.path.join(rdir, f) for f in sorted(os.listdir(rdir)) if f.endswith('.md')]
+        n, cache = 0, {}
+        for path in files:
+            if not os.path.exists(path): continue
+            with open(path, encoding='utf-8') as fh:
+                for no, line in enumerate(fh, 1):
+                    for m in self.CROSS_RE.finditer(line):
+                        sl, fname, rid = m.group(1), m.group(2), m.group(3)
+                        n += 1
+                        sdir = os.path.join(self.root, 'slices', sl)
+                        target = os.path.join(sdir, fname + '.md')
+                        where = f"{self.rel(path)}:{no} 的 {sl}/{fname} {rid}"
+                        if not os.path.isdir(sdir):
+                            self.red('跨切片', f"{where}：沒有 slices/{sl}/"); continue
+                        if not os.path.exists(target):
+                            self.red('跨切片', f"{where}：沒有 {fname}.md"); continue
+                        key = (target, rid[0])
+                        if key not in cache: cache[key] = self.ids_in_file(target, rid[0])
+                        if rid not in cache[key]:
+                            self.red('跨切片', f"{where}：{fname}.md 沒有 {rid}")
+        self.done('跨切片', n, '個跨切片引用')
+
+    def changelog_entries(self):
+        """本切片 CHANGELOG.md 的每一筆：[(行號, 標題, 依據)]，最新的在前。"""
+        path = os.path.join(self.dir, 'CHANGELOG.md')
+        if not os.path.exists(path): return []
+        out, cur = [], None
+        for no, line in enumerate(open(path, encoding='utf-8').read().split('\n'), 1):
+            if line.startswith('## '):
+                cur = [no, line[3:].strip(), '']; out.append(cur)
+            m = re.match(r'^- 依據[：:]\s*(.*)$', line)
+            if cur and m: cur[2] = m.group(1)
+        return out
+
+    def check_requests(self):
+        print("\n[其他切片要求] CHANGELOG 的「其他切片要求」之後有依據同一個決定的修改（提醒，不算紅燈）")
+        entries = self.changelog_entries()
+        reqs = [(k, e) for k, e in enumerate(entries) if e[1].endswith('其他切片要求')]
+        if not reqs:
+            return self.done('其他切片要求', 0, '')
+        pending = 0
+        for k, (no, title, basis) in reqs:
+            refs = [m.group(0) for m in self.CROSS_RE.finditer(basis)]
+            if not refs:
+                print(f"    • CHANGELOG.md:{no} 的「依據」沒有寫 <切片>/<檔名> D-nn"); pending += 1; continue
+            later = entries[:k]                       # 最新的在前：比它新的紀錄
+            done = any(not e[1].endswith('其他切片要求') and any(r in e[2] for r in refs) for e in later)
+            if not done:
+                pending += 1
+                print(f"    • CHANGELOG.md:{no} 還沒處理：{title}（依據 {'、'.join(refs)}；用 /domain-change 處理）")
+        if not pending:
+            print(f"    ✓ 通過（{len(reqs)} 件都已處理）")
+        else:
+            print(f"    （{len(reqs)} 件，{pending} 件還沒處理）")
+
     def run(self):
         self.check_parse()
         self.check_residue(); self.check_cancelled(); self.check_ids(); self.check_glossary()
@@ -1083,6 +1160,7 @@ class Lint:
         self.check_tables(); self.check_placeholders(); self.check_eq_impact(); self.check_out_of_scope()
         self.check_golden(); self.check_late_inputs(); self.check_param_storage(); self.check_chain(); self.check_core_prefix(); self.check_referenced_by()
         self.check_reviews(); self.check_challenge(); self.check_golden_selfcontained(); self.check_user_agreement()
+        self.check_cross_refs(); self.check_requests()
         self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")
