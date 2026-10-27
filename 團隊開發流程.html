@@ -261,7 +261,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
     <table>
       <thead><tr><th>等級</th><th>性質</th><th>處理</th></tr></thead>
       <tbody>
-        <tr><td><span class="lv">0</span> 切片內</td><td>切片還沒通過 ⑥，發現前面漏了（來自專家、紙上驗證、實作或其他切片都算）</td><td>直接改，記 CHANGELOG；被改的步驟只審這次的差異、打新 tag，牽涉多步的一起審查、一起凍結；後面的步驟和實作程式碼依回歸範圍跟著改；已有資料時依平台 P12 處理</td></tr>
+        <tr><td><span class="lv">0</span> 切片內</td><td>切片還沒通過 ⑥，發現前面漏了（來自專家、紙上驗證、實作或其他切片都算）</td><td>直接改，記 CHANGELOG；被改的步驟只審這次的差異、打新 tag，牽涉多步的一起審查、一起凍結；後面的步驟和實作程式碼依回歸範圍跟著改；已有資料時依平台 P12 處理。要改到另一條切片時，先停下來問人，在對方的 CHANGELOG 記「其他切片要求」，由對方自己改、先凍結（試用中）</td></tr>
         <tr><td><span class="lv">1</span> 新增規則</td><td>模型不用動，多一條規則</td><td>新增規則＋黃金案例，跑測試</td></tr>
         <tr><td><span class="lv">2</span> 擴充模型</td><td>加屬性、關係或 Entity，既有意思不變</td><td>變更提案（次要版本）；舊資料的新屬性為「未知」，規則遇到未知判「資料不足」（平台 P12）；受影響切片重跑 ⑥</td></tr>
         <tr><td><span class="lv">3</span> 改變意思</td><td>概念要拆、要合，或幾對幾要改</td><td>變更提案（主要版本），舊紀錄保留原意，新意思從生效日起適用；舊項目標「已取代」，不刪除</td></tr>
