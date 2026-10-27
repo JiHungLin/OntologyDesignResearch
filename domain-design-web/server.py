@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -13,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import kit
+import model
 import review
 import sessions
 
@@ -63,12 +65,85 @@ def status():
     return {'repo': kit.repo(), 'slices': out, 'gitignored': sessions.gitignored()}
 
 
+STEPS = [('01', '範圍', '01_scope.md'), ('02', '名詞', '02_entities.md'), ('03', '流程', '03_flows.md'),
+         ('04', '規則', '04_rules.md'), ('05', '對照', '05_mapping.md'), ('06', '驗收', '06_evidence')]
+
+
+def _review_steps(step):
+    """審查頁檔名的步驟：「02」或「02-05」（合成一份，含中間各步）。"""
+    nums = [int(x) for x in re.findall(r'\d+', step)]
+    return set(range(nums[0], nums[-1] + 1)) if nums else set()
+
+
+def _tags(slice_name):
+    try:
+        out = subprocess.run(['git', '-C', kit.repo(), 'tag', '-l', f'{slice_name}/*'],
+                             capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return out.split()
+
+
+@app.get('/api/home')
+def home(slice: str):
+    if slice not in kit.slices():
+        raise HTTPException(404, f'沒有這條切片：{slice}')
+    st = status()
+    s = next(x for x in st['slices'] if x['slice'] == slice)
+    current = next((r for r in s['reviews'] if r.get('counts') and r['counts']['open']), None)
+    tags = _tags(slice)
+    on = _review_steps(current['step']) if current else set()
+    levels = []
+    for code, name, fn in STEPS:
+        n = int(code)
+        frozen = sorted(t for t in tags if t.split('/', 1)[1].startswith(code + '-'))
+        exists = os.path.exists(os.path.join(kit.repo(), 'slices', slice, fn))
+        state = 'review' if n in on else 'frozen' if frozen else 'draft' if exists else 'locked'
+        levels.append({'n': n, 'name': name, 'state': state, 'tag': frozen[-1] if frozen else ''})
+    out = {'slice': slice, 'levels': levels, 'reviews': s['reviews'], 'current': None,
+           'eq_open': len(sessions._open_eqs(os.path.join(kit.repo(), 'slices', slice, 'questions.md'))), 'session': s['session']}
+    if current:
+        r = get_review(current['path'])
+        out['current'] = {'path': r['path'], 'title': r['title'], 'step': current['step'], 'counts': r['counts'],
+                          'meta': r['meta'], 'model': bool(r.get('model'))}
+    return out
+
+
+def _spot_items(r, p):
+    """抽查可挑的條目：「`02_entities.md` 完成標準表由上往下第 1、2、3 條」→ 取出那幾條的文字。"""
+    m = re.search(r'`?([\w.-]+\.md)`?\s*完成標準表[^第]*第\s*([\d、，, ]+)\s*條', r['spot_hint'])
+    if not m:
+        return []
+    f = kit.resolve(m.group(1), os.path.dirname(os.path.dirname(p)))
+    if not f:
+        return []
+    mb = kit.md2build()
+    rows = []
+    for _, h3, header, trs in mb.Doc(f).tables():
+        if header and header[0].strip() == '完成標準' and (h3 or '').startswith('完成標準'):
+            rows = trs
+    mb.problems.clear()
+    out = []
+    for k in re.findall(r'\d+', m.group(2)):
+        i = int(k)
+        if 0 < i <= len(rows):
+            out.append({'n': i, 'text': rows[i - 1][1][0], 'self': rows[i - 1][1][-1], 'line': rows[i - 1][0],
+                        'file': kit.rel(f)})
+    return out
+
+
 @app.get('/api/review')
 def get_review(path: str):
     p = _review_path(path)
     r = review.parse(p)
     r['path'] = kit.rel(p)
     r['slice'] = _slice_of(p)
+    r['spot_items'] = _spot_items(r, p)
+    r['model'] = None
+    if r['slice'] and 2 in _review_steps((REVIEW_NAME.match(os.path.basename(p)) or [None, None, ''])[2]):
+        m = model.load(r['slice'])
+        if m:
+            r['model'] = model.mark_changed(m, r)
     return r
 
 
@@ -98,6 +173,19 @@ def post_answer(a: Answer):
 @app.post('/api/review/cells')
 def post_cells(a: Answer):
     return _write(review.set_cells, a, a.cells)
+
+
+class CaseField(BaseModel):
+    path: str
+    digest: str
+    line: int
+    key: str
+    value: str = ''
+
+
+@app.post('/api/review/case')
+def post_case(a: CaseField):
+    return _write(review.set_case_field, a, a.key, a.value)
 
 
 @app.post('/api/review/spot-row')

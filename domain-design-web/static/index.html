@@ -3,46 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Domain 設計審查</title>
+<title>Domain 設計</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header class="top">
-  <button class="nav-toggle" id="navToggle" aria-label="切片清單">☰</button>
-  <h1>Domain 設計審查</h1>
-  <span class="repo" id="repo"></span>
+  <a class="brand" href="#/">DOMAIN 設計</a>
+  <label class="slice-pick"><span class="sr">切片</span><select id="slicePick"></select></label>
+  <a class="back" id="back" hidden></a>
+  <div class="top-mid" id="topMid"></div>
+  <button class="ai-btn" id="aiBtn"><span class="dot" id="aiDot"></span><span id="aiLabel">AI</span></button>
 </header>
 
-<div class="layout">
-  <nav class="nav" id="nav"></nav>
+<main id="app"></main>
 
-  <main class="main" id="main">
-    <section class="empty">
-      <h2>選一份審查頁</h2>
-      <p>左邊列出每條切片的審查頁，數字是還沒作答的項目。</p>
-    </section>
-  </main>
+<aside class="drawer file" id="fileDrawer" hidden aria-label="檔案">
+  <div class="drawer-head"><strong id="filePath"></strong><button class="x" data-close="fileDrawer" aria-label="關閉">✕</button></div>
+  <pre class="file-body" id="fileBody"></pre>
+</aside>
 
-  <aside class="viewer" id="viewer" hidden>
-    <div class="viewer-head">
-      <span id="viewerPath"></span>
-      <button id="viewerClose" aria-label="關閉">✕</button>
-    </div>
-    <pre class="viewer-body" id="viewerBody"></pre>
-  </aside>
-</div>
+<aside class="drawer ai" id="aiDrawer" hidden aria-label="AI 對話">
+  <div class="drawer-head"><strong>AI 對話</strong><button class="x" data-close="aiDrawer" aria-label="關閉">✕</button></div>
+  <div class="ai-session" id="aiSession"></div>
+  <div class="ai-log" id="aiLog"></div>
+  <form class="ai-form" id="aiForm">
+    <textarea id="aiInput" rows="2" placeholder="畫面上的按鈕涵蓋不到的事，才在這裡打字"></textarea>
+    <button type="submit" class="btn primary" id="aiSend">送出</button>
+  </form>
+</aside>
 
-<section class="ai" id="ai">
-  <button class="ai-toggle" id="aiToggle">AI 對話 <span id="aiState"></span></button>
-  <div class="ai-body" id="aiBody" hidden>
-    <div class="ai-session" id="aiSession"></div>
-    <div class="ai-log" id="aiLog"></div>
-    <form class="ai-form" id="aiForm">
-      <textarea id="aiInput" rows="2" placeholder="平常用上面的按鈕就好；元件涵蓋不到的事才在這裡打字"></textarea>
-      <button type="submit" id="aiSend">送出</button>
-    </form>
-  </div>
-</section>
+<div class="toast" id="toast" hidden></div>
 
 <script src="/static/app.js"></script>
 </body>
