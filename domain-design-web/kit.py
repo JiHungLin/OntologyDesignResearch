@@ -39,9 +39,10 @@ def md2build():
 
 def resolve(rel, base=None):
     """把相對路徑轉成切片 repo 裡的絕對路徑；不在 repo 裡的回傳 None。
-    審查頁中的「在哪裡」常寫成相對於切片資料夾（02_entities.md:150），所以先試 base，再試 repo 根目錄。"""
+    審查頁中的「在哪裡」常寫成相對於切片資料夾（02_entities.md:150），所以先試 base，再試 repo 根目錄；
+    AI 也常把規劃檔寫成 PLAN.md:65、ENTITY_SKETCH.md:40（實際在 slices/ 底下），最後再試 slices/。"""
     root = repo()
-    for b in ([base] if base else []) + [root]:
+    for b in ([base] if base else []) + [root, os.path.join(root, 'slices')]:
         p = os.path.realpath(os.path.join(b, rel))
         if (p == root or p.startswith(root + os.sep)) and os.path.isfile(p):
             return p

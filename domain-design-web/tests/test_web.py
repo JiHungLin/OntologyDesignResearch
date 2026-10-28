@@ -286,3 +286,9 @@ def test_untouched_template_is_not_started(repo):
     assert st[3] == '未開始'
     (repo / 'slices' / 'demo' / '03_flows.md').write_text(tpl.replace('{{切片}}', 'demo') + '\n開始寫了\n', encoding='utf-8')
     assert {s['n']: s['status'] for s in project.steps('demo')}[3] == '草稿'
+
+
+def test_file_plan_short_name(client):
+    # AI 常寫「PLAN.md:65」：從切片資料夾找不到時，也找 slices/ 底下
+    f = client.get('/api/file', params={'path': 'PLAN.md', 'base': 'slices/demo'}).json()
+    assert f['path'] == os.path.join('slices', 'PLAN.md')
