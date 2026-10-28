@@ -38,7 +38,7 @@ function plain(s) {
     .replace(/〔[^〕]*〕/g, '')
     .replace(/\[(解讀|待專家確認|未核對|靜態替代|推導)[^\]]*\]/g, '')
     .replace(/（[^（）]*(?:D-\d+|X-\d+|Q\d+|EQ-\d+|\.md|#\d+)[^（）]*）/g, '')
-    .replace(/`/g, '').replace(/\s+/g, ' ').trim();
+    .replace(/`|\*\*/g, '').replace(/^>\s*/, '').replace(/\s+/g, ' ').trim();
 }
 
 // 給草稿、說明用的簡單 Markdown：標題、清單、表格、引用、段落
@@ -1071,16 +1071,21 @@ async function renderAi() {
 }
 
 // 交給 AI 的唯一入口：scope 範圍、purpose 用途、message 要說的話
+const LONG_TURNS = 12;   // 同一個 session 來回這麼多次，就建議開新的（精簡版「換 session 的時機」）
+
 async function runAi(scope, purpose, message, opts = {}) {
   await refreshSessions();
   const s = sessionOf(scope);
   state.aiScope = scope;
   if (s && s.running) { openAi(scope); toast('AI 還在處理上一件事，做完再交下一件'); return; }
-  const same = s && s.purpose === purpose && !s.compacted;
+  const long = s && s.turns >= LONG_TURNS;
+  const same = s && s.purpose === purpose && !s.compacted && !long;
   if (same || (s && opts.keep)) return send(s, message, opts);
   if (!s) return startNew(scope, purpose, message, opts);
-  // 用途不同或壓縮過：問人
-  const why = s.compacted ? '現在的 session 經過摘要壓縮，容易憑記憶回答' : `現在的 session 是「${esc(s.purpose)}」，這件事是「${esc(purpose)}」`;
+  // 用途不同、壓縮過或已經很長：用選擇題問人（建議開新的，新的 session 由檔案產生交接提示，不用人貼）
+  const why = s.compacted ? '現在的 session 經過摘要壓縮，容易憑記憶回答'
+    : s.purpose !== purpose ? `現在的 session 是「${esc(s.purpose)}」，這件事是「${esc(purpose)}」`
+    : `現在的 session 已經來回 ${s.turns} 次，內容很長`;
   const h = await api(`/api/handoff?slice=${enc(scope)}&purpose=${enc(purpose)}&review=${enc(opts.review || '')}`);
   state.pending = {
     html: `<div class="card hint" style="padding:12px 14px"><b>${why}。</b>要開新的 session 嗎？
