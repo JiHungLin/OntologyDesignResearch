@@ -1058,9 +1058,11 @@ async function renderAi() {
   const s = curSession();
   if (!aiScope()) { box.innerHTML = warn + '<div class="muted">在總覽頁時，AI 對話跟著你按的按鈕走（規劃或某條切片）。</div>'; $('#aiLog').innerHTML = ''; return; }
   if (!s) { box.innerHTML = warn + `<div><b>${esc(scopeName(aiScope()))}</b> 還沒有 AI session。按畫面上的按鈕交給 AI 時會自動開一個。</div>`; $('#aiLog').innerHTML = ''; return; }
-  box.innerHTML = warn + `<div>session：<b>${esc(s.name)}</b>（第 ${s.turns} 次）${s.running ? '　<span class="chip turn">處理中</span>' : ''}</div>
-    <details class="tech"><summary>在 terminal 接著做</summary><code>claude --resume ${esc(s.id)}</code></details>
-    <div><button class="btn" id="endSession" ${s.running ? 'disabled' : ''}>結束這個 session</button></div>`;
+  box.innerHTML = warn + `<div><b>${esc(scopeName(s.slice) === s.purpose ? s.purpose : scopeName(s.slice) + '・' + s.purpose)}</b>（第 ${s.turns} 次）${s.running ? '　<span class="chip turn">處理中</span>' : ''}</div>
+    <div class="small muted">不用自己關 session：做下一件事時，網頁會自己開新的或問你。</div>
+    <details class="tech"><summary>進階：在 terminal 接著做、結束 session</summary>
+      <div style="margin:6px 0"><code>claude --resume ${esc(s.id)}</code></div>
+      <button class="btn small-btn" id="endSession" ${s.running ? 'disabled' : ''}>結束這個 session</button></details>`;
   $('#endSession').onclick = async () => { await api(`/api/sessions/${s.id}/end`, {}); await refreshSessions(); renderAi(); };
   const ev = await api(`/api/sessions/${s.id}/events`);
   const log = $('#aiLog');
@@ -1068,6 +1070,36 @@ async function renderAi() {
   ev.events.slice(-300).forEach(showEvent);
   log.dataset.sid = s.id;
   log.dataset.n = ev.n;
+  renderAiNext(s);
+}
+
+// AI 對話下方的「接下來」：AI 在問問題就放選項按鈕；不然依檔案算出現在輪到誰、給一個按鈕帶過去
+async function renderAiNext(s) {
+  const box = $('#aiNext');
+  box.innerHTML = '';
+  if (!s || s.running || state.pending) return;
+  const ask = parseAsk(s.last_reply);
+  if (ask) {
+    box.innerHTML = `<div class="label">AI 在等你回答，點一個</div><div class="ai-opts">${ask.opts.map(o => `<button class="opt ${o.rec ? 'rec' : ''}" data-airep="${o.key}"><span class="row spread"><b>${o.key}</b>${o.rec ? '<span class="badge-rec">★ 建議</span>' : ''}</span><span>${inline(o.sum)}</span></button>`).join('')}</div>
+      <div class="small muted">都不是的話，直接在下面打字回覆。</div>`;
+    $$('[data-airep]', box).forEach(b => b.onclick = () => runAi(s.slice, s.purpose, b.dataset.airep, { keep: true }));
+    return;
+  }
+  const P = await loadProject();
+  const N = nextOfProject(P);
+  const it = N.item;
+  const step = it && it.f && it.f.next ? `${CIRCLED[it.f.next.n]} ${LEVEL_NAME[it.f.next.n]}` : '';
+  const act = {
+    start: ['寫主題草案', '#/start'],
+    'plan-ai': ['請 AI 規劃', '#/'],
+    plan: ['看規劃：補資料、看草稿、同意地圖', '#/plan'],
+    review: it && ['審查 ' + it.code, `#/s/${enc(it.code)}`],
+    slice: it && [`到 ${it.code} 首頁，交給 AI 做 ${step}`, `#/s/${enc(it.code)}`],
+    pick: it && ['開始下一條切片：' + it.code, `#/new/${enc(it.code)}`],
+  }[N.kind];
+  if (!act) return;
+  box.innerHTML = `<div class="label">接下來</div><a class="btn primary" href="${act[1]}">${esc(act[0])} ›</a>
+    <div class="small muted" style="margin-top:6px">在網頁上按就好，不用貼 AI 寫的指令；需要新的 session 時網頁會自己開。</div>`;
 }
 
 // 交給 AI 的唯一入口：scope 範圍、purpose 用途、message 要說的話
