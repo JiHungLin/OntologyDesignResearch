@@ -4,7 +4,7 @@
   --primary: #5B3DF5; --primary-ink: #FFFFFF;
   --turn: #FF7A1A; --hint: #FFE45C; --done: #18B26B;
   --muted: #4A4670; --faint: #9C98C4; --line: #C9C6E6; --dark2: #3A3566;
-  --r: 20px; --shadow: 4px 4px 0 var(--ink); --nav-w: 290px; --side-bg: #F7F6FF;
+  --r: 20px; --shadow: 4px 4px 0 var(--ink); --nav-w: 290px; --drawer-w: min(520px, 100vw); --side-bg: #F7F6FF;
 }
 /* 捲軸：細、圓角、跟主題同色 */
 @supports (-moz-appearance: none) { * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; } }
@@ -32,7 +32,9 @@ code { font-size: .9em; background: var(--bg); border-radius: 6px; padding: 0 4p
 .nav-toggle { flex: 0 0 auto; display: grid; place-items: center; width: 30px; height: 30px; margin-left: -6px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #fff; cursor: pointer; transition: background .15s; }
 .top .nav-toggle:hover { background: var(--dark2); }
 body:not(.nav-closed) .top .nav-toggle { display: none; }
-.page { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
+.page { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; transition: margin-right .2s ease; }
+/* 右側抽屜（AI 對話、檔案）打開時，螢幕夠寬就把主畫面往左縮，不蓋住內容；窄螢幕照舊蓋在上面 */
+@media (min-width: 1100px) { body.drawer-open .page { margin-right: var(--drawer-w); } }
 .back { color: #fff; font-weight: 700; font-size: 14px; text-decoration: none; }
 .top-mid { flex: 1 1 200px; display: flex; align-items: center; gap: 12px; min-width: 0; }
 .ai-btn { display: flex; align-items: center; gap: 8px; font: inherit; font-size: 14px; color: #fff; background: transparent; border: 2px solid #fff; border-radius: 999px; padding: 3px 14px; cursor: pointer; }
@@ -252,7 +254,7 @@ details.tech summary { cursor: pointer; }
 .verdict .btn.on.fail { background: var(--turn); }
 
 /* ---- 抽屜 ---- */
-.drawer { position: fixed; top: 0; bottom: 0; right: 0; z-index: 40; width: min(560px, 100vw); background: var(--card); border-left: 3px solid var(--ink); box-shadow: -6px 0 0 rgba(22, 18, 58, .15); display: flex; flex-direction: column; }
+.drawer { position: fixed; top: 0; bottom: 0; right: 0; z-index: 40; width: var(--drawer-w); background: var(--card); border-left: 3px solid var(--ink); box-shadow: -6px 0 0 rgba(22, 18, 58, .15); display: flex; flex-direction: column; }
 .drawer-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 16px; background: var(--ink); color: #fff; font-size: 14px; }
 .drawer .x { font: inherit; background: transparent; color: #fff; border: 0; font-size: 18px; cursor: pointer; }
 .file-body { margin: 0; flex: 1; overflow: auto; font-size: 13px; line-height: 1.55; padding: 8px 0; white-space: pre-wrap; word-break: break-word; }
