@@ -308,3 +308,15 @@ def test_evidence_headings_and_english(repo):
     ev = evidence.find('✓：AI 檢查全文', 'slices/demo/y.md', '範圍與觀察都用業務語言寫，沒有英文識別名稱、表名或欄位名')
     assert [e['ref'] for e in ev] == ['網頁掃過這幾段的英文字', '範圍', '交給第 ② 步的觀察']
     assert 'bill_id' in ev[0]['text'] and 'ElectricityBill' in ev[0]['text'] and ev[1]['more']
+
+
+def test_evidence_every_card_and_column(repo):
+    import evidence
+    (repo / 'slices' / 'demo' / 'z.md').write_text(
+        '# z\n\n## 新增\n\n### Order（訂單）\n- 不是什麼：不是購物車\n- 主要屬性：金額\n\n### Customer（客戶）\n- 主要屬性：姓名\n\n'
+        '## 草稿 User Story\n\n| 編號 | 故事 | 來源 |\n|---|---|---|\n| US-D01 | 下單 | AI |\n| US-D02 | 取消 | |\n\n'
+        '## 反例處理\n\n| # | 反例 | 來源 |\n|---|---|---|\n| X-01 | 重複下單 | 領域實務 |\n', encoding='utf-8')
+    ev = evidence.find('✓', 'slices/demo/z.md', '每張新卡都有「不是什麼」和「主要屬性」')
+    assert ev[0]['ref'] == '「不是什麼」' and '1 張沒有' in ev[0]['text'] and 'Customer' in ev[0]['text']
+    ev = evidence.find('✓', 'slices/demo/z.md', '每個草稿 User Story 都填了「來源」欄')
+    assert [e['title'] for e in ev] == ['草稿 User Story'] and '1 列空白' in ev[0]['text']
