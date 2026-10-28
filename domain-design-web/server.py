@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import evidence
 import kit
 import model
 import project
@@ -220,7 +221,8 @@ def _spot_items(r, p):
                 cells = rows[i - 1][1]
                 out.append({'id': f'{step}{i}', 'step': step, 'n': i, 'text': cells[0],
                             'kind': cells[1] if len(cells) > 2 else '', 'self': cells[-1],
-                            'line': rows[i - 1][0], 'file': kit.rel(f)})
+                            'line': rows[i - 1][0], 'file': kit.rel(f),
+                            'evidence': evidence.find(cells[-1], kit.rel(f))})
     return out
 
 
