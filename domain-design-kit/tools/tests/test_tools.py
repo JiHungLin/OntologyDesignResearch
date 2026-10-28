@@ -419,6 +419,27 @@ class TestLint(Base):
         self.assertEqual(code, 1, out)
         self.assertIn('至少還要一個選項', out)
 
+    def test_review_question_example_and_outcome(self):
+        self.setup_review()
+        old = os.path.join(self.dir, self.slice_file('reviews/2026-10-27_03.md'))
+        text = open(old, encoding='utf-8').read().replace('- B：可以 → RejectLeave 改成可撤銷', '- B：可以')
+        self.write(self.slice_file('reviews/2026-10-27_03.md'), text)
+        code, out = self.lint()
+        self.assertNotIn('沒有「例子」', out)
+        self.assertNotIn('沒有用「→」', out)
+        os.remove(old)
+        self.edit(self.slice_file('03_flows.md'), '- 審查頁：reviews/2026-10-27_03.md', '- 審查頁：reviews/2026-10-28_03.md')
+        self.write(self.slice_file('reviews/2026-10-28_03.md'), text)
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('沒有「例子」', out)
+        self.assertIn('選項 B 沒有用「→」', out)
+        self.write(self.slice_file('reviews/2026-10-28_03.md'), text.replace('- 問題：', '- 例子：小王 3/1 請假被駁回，3/2 店長想改成核准\n- 問題：')
+                   .replace('- B：可以\n', '- B：可以 → RejectLeave 改成可撤銷\n'))
+        code, out = self.lint()
+        self.assertNotIn('沒有「例子」', out)
+        self.assertNotIn('沒有用「→」', out)
+
     def test_review_lists_partial_self_check(self):
         self.setup_review(look='更正方式')
         code, out = self.lint()
