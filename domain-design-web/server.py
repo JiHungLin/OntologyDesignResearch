@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Domain 設計流程網頁：從主題草案、規劃、開切片到每一步的審查與凍結。
-用法：python3 server.py --repo <設計 repo> [--port 8765]
+用法：python3 server.py --repo <設計 repo> [--port 8765] [--host 0.0.0.0]
       python3 server.py --repo <空資料夾> --init   # 建立新的設計 repo（複製工具包、git init）
 只綁 127.0.0.1，單人在本機使用。"""
 import argparse
@@ -389,10 +389,35 @@ def init_repo(path):
     return path
 
 
+# 虛擬網卡的名稱開頭（Docker、VM、VPN 橋接）；用開頭比對，免得 wlo1 這類無線網卡被「lo」誤判
+VIRTUAL_IF = ('lo', 'docker', 'br-', 'veth', 'virbr', 'vmnet', 'vboxnet', 'vethernet', 'wsl')
+
+
+def lan_addresses():
+    """綁 0.0.0.0 時列出其他電腦可以連的 IPv4 位址：略過沒啟用的與虛擬網卡（Docker、VM）。有 psutil 就逐張網卡看，沒有就用預設路由那張。"""
+    import socket
+    try:
+        import psutil
+    except ImportError:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            try:
+                s.connect(('10.255.255.255', 1))   # 不會真的送出封包，只是讓系統選出預設路由的位址
+                return [s.getsockname()[0]]
+            except OSError:
+                return []
+    stats = psutil.net_if_stats()
+    return [addr.address
+            for name, addrs in psutil.net_if_addrs().items()
+            if name in stats and stats[name].isup and not name.lower().startswith(VIRTUAL_IF)
+            for addr in addrs if addr.family == socket.AF_INET and not addr.address.startswith('127.')]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--repo', default=os.environ.get('DOMAIN_REPO', os.getcwd()), help='切片 repo（工具包攤平在根目錄）')
     ap.add_argument('--port', type=int, default=8765)
+    ap.add_argument('--host', default='127.0.0.1',
+                    help='綁定的位址；預設只有本機能開，0.0.0.0 讓同一個網路的其他電腦也能開（沒有登入機制，只在信任的網路上用）')
     ap.add_argument('--init', action='store_true', help='在 --repo 指定的空資料夾建立新的設計 repo')
     a = ap.parse_args()
     if a.init:
@@ -401,8 +426,15 @@ def main():
     if not os.path.isdir(os.path.join(kit.repo(), 'slices')) and not os.path.isdir(os.path.join(kit.repo(), 'templates')):
         ap.error(f'{kit.repo()} 不是設計 repo（沒有 slices/ 也沒有 templates/）；新的 domain 請加 --init')
     import uvicorn
-    print(f'切片 repo：{kit.repo()}\n打開 http://127.0.0.1:{a.port}/')
-    uvicorn.run(app, host='127.0.0.1', port=a.port, log_level='warning')
+    print(f'切片 repo：{kit.repo()}')
+    if a.host in ('0.0.0.0', '::'):
+        print(f'打開 http://127.0.0.1:{a.port}/（本機）')
+        for ip in lan_addresses():
+            print(f'　　 http://{ip}:{a.port}/（同一個網路的其他電腦）')
+        print('注意：同一個網路的人都能打開這個網頁、叫 AI 修改設計 repo；只在信任的網路上使用。')
+    else:
+        print(f'打開 http://{a.host}:{a.port}/')
+    uvicorn.run(app, host=a.host, port=a.port, log_level='warning')
 
 
 if __name__ == '__main__':
