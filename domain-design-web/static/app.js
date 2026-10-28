@@ -929,6 +929,7 @@ function renderNav() {
   const plan = P.plan;
   const list = planSlices(P);
   const started = list.filter(x => x.f), waiting = list.filter(x => !x.f);
+  const doing = started.find(x => x.f.next && x.f.next.n <= 5);   // 一次只做一條：這條做完前不能開新的
   const pendingDrafts = P.drafts.filter(d => d.pending).length;
 
   const sliceNode = x => {
@@ -959,7 +960,8 @@ function renderNav() {
     <div class="nav-h">切片</div>
     ${started.map(sliceNode).join('') || '<div class="nav-empty">還沒有開始的切片</div>'}
     ${waiting.length ? node('waiting', `<span class="nav-dir">還沒開始</span><span class="nav-x">${waiting.length}</span>`,
-      waiting.map(x => a(plan && plan.agreed && x.row['狀態'] === '候選' ? `#/new/${enc(x.code)}` : '#/plan', esc(x.code), esc(x.row['狀態'] || ''))).join('')) : ''}
+      (doing ? `<div class="nav-empty">等 ${esc(doing.code)} 做完才能開始下一條</div>` : '')
+      + waiting.map(x => a(plan && plan.agreed && x.row['狀態'] === '候選' && !doing ? `#/new/${enc(x.code)}` : '#/plan', esc(x.code), esc(x.row['狀態'] || ''))).join('')) : ''}
     <div class="nav-h">資料與成果</div>
     ${node('core', `<span class="nav-name">core</span><span class="nav-x">共用核心</span>`,
       Object.keys(P.core).length ? folderTree(P.core, 'core', p => fileA(p)) : '<div class="nav-empty">第一次凍結 ②③④ 後才有</div>')}
@@ -1407,6 +1409,7 @@ async function renderHub() {
 
   const eqTotal = P.slices.reduce((n, x) => n + x.eq_open, 0);
   const started = list.filter(x => x.f), waiting = list.filter(x => !x.f);
+  const doing = started.find(x => x.f.next && x.f.next.n <= 5);   // 一次只做一條：這條做完前不能開新的
   $('#app').innerHTML = `
     <nav class="journey">${journey.map((j, k) => `<div class="${k < stage ? 'done' : k === stage ? 'now' : ''}"><b>${k + 1}</b><span>${esc(j)}</span></div>`).join('')}</nav>
     ${waitingCard('_plan')}
@@ -1423,10 +1426,10 @@ async function renderHub() {
           ${x.f.eq_open || x.f.eq_answered ? `<span class="small muted">專家問題：${x.f.eq_open} 題等答覆${x.f.eq_answered ? `、${x.f.eq_answered} 題答覆了待處理` : ''}</span>` : ''}
         </a>`;
       }).join('')}</div>` : ''}
-      ${waiting.length ? `<div class="sub-h"><h3>還沒開始（${waiting.length}）</h3><span class="small muted">照建議順序；點一條看地圖上的說明${plan && plan.agreed ? '或開始' : ''}</span></div>
+      ${waiting.length ? `<div class="sub-h"><h3>還沒開始（${waiting.length}）</h3><span class="small muted">${doing ? `等 ${esc(doing.code)} 做完（①～⑤ 都凍結）才能開始下一條；點一條看地圖上的說明` : `照建議順序；點一條看地圖上的說明${plan && plan.agreed ? '或開始' : ''}`}</span></div>
       <ol class="slice-list">${waiting.map((x, k) => {
         const r = x.row || {};
-        const href = plan && plan.agreed && r['狀態'] === '候選' ? `#/new/${enc(x.code)}` : '#/plan';
+        const href = plan && plan.agreed && r['狀態'] === '候選' && !doing ? `#/new/${enc(x.code)}` : '#/plan';
         const sc = r['情境（起點 → 可驗證的結果）'] || '';
         return `<li><a href="${href}" title="${esc(sc)}"><span class="order">${esc(r['建議順序'] || '')}</span><b>${esc(x.code)}</b>
           <span class="chip">${esc(r['狀態'] || '')}</span><span class="scn-1">${esc(sc)}</span></a></li>`;
@@ -1776,7 +1779,16 @@ async function renderKickoff(code) {
   const P = await loadProject();
   const r = (P.plan ? P.plan.slices : []).find(x => x['切片'] === code) || {};
   if (P.slices.some(x => x.slice === code)) { go(`#/s/${enc(code)}`); return; }
-  const busySlices = P.slices.filter(x => x.next && x.next.n <= 5);   // ①～⑤ 還沒都凍結的切片
+  // 網頁一次只做一條切片：還有切片 ①～⑤ 沒都凍結，就不能開新的（伺服器也會擋）
+  const busySlices = P.slices.filter(x => x.next && x.next.n <= 5);
+  if (busySlices.length) {
+    const b = busySlices[0];
+    $('#app').innerHTML = `<div class="narrow"><section class="card lift" style="display:flex;flex-direction:column;gap:12px">
+      <span class="chip">還不能開始</span><h1 class="qtitle" style="margin:0">${esc(code)} 要等 ${esc(b.slice)} 做完</h1>
+      <p class="muted" style="margin:0">網頁一次只做一條切片。${esc(b.slice)} 還在第 ${CIRCLED[b.next.n]} 步；①～⑤ 都凍結後，就可以開始下一條。先做完的切片會把共用名詞定下來，下一條直接引用。</p>
+      <div><a class="btn big primary" href="#/s/${enc(b.slice)}">回去做 ${esc(b.slice)} ›</a></div></section></div>`;
+    return;
+  }
   const qs = [
     ['不做', '這條切片明確不做什麼？', '例：兼職人員先不處理'],
     ['專家', '有沒有 Domain 專家或客戶端使用者可以確認？是誰？', '例：總部人資王小姐'],
@@ -1785,9 +1797,7 @@ async function renderKickoff(code) {
   ];
   $('#app').innerHTML = `
     <div class="narrow">
-      ${busySlices.length ? `<section class="card hint"><b>${busySlices.map(x => esc(x.slice)).join('、')} 還沒做完（下一關 ${busySlices.map(x => CIRCLED[x.next.n]).join('、')}）。</b>
-        <p class="small" style="margin:6px 0 10px">流程是一條一條做：先做完的切片會把共用名詞定下來，下一條直接引用。同時開兩條，同一個名詞容易被定兩次，審查也會分散。要平行做，建議由不同的人各自 clone、開分支，用 PR 合併。</p>
-        <div class="row"><a class="btn primary" href="#/s/${enc(busySlices[0].slice)}">回去做 ${esc(busySlices[0].slice)} ›</a><span class="small muted">仍要開始的話，照下面填寫。</span></div></section>` : ''}
+
       <div><span class="chip">開始一條切片</span><h1 class="qtitle">${esc(code)}</h1>
         <p class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'] || '')}</p>
         <p class="muted">開工前先回答幾件事（知道的就寫，不知道空著）。AI 會建立切片資料夾，接著做第 ① 步：範圍與驗收問題。</p></div>

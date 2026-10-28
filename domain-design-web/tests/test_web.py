@@ -273,3 +273,11 @@ def test_fetch_text_html():
     t = p.text()
     assert '碳費收費辦法' in t and 'x=1' not in t
     assert '附表 <https://example.gov.tw/law/a.html>' in t and '| A | 300' in t
+
+
+def test_one_slice_at_a_time(repo, client):
+    # fixture 的 demo 還在做（② 之後沒凍結），地圖上的 return-order 不能開
+    r = client.post('/api/sessions', json={'slice': 'return-order', 'purpose': '第 1 步', 'handoff': 'x'})
+    assert r.status_code == 409 and 'demo' in r.json()['detail']
+    assert client.post('/api/sessions', json={'slice': 'demo', 'purpose': '第 2 步', 'handoff': 'x'}).status_code == 200
+    assert client.post('/api/sessions', json={'slice': '_plan', 'purpose': '規劃', 'handoff': 'x'}).status_code == 200

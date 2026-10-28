@@ -329,6 +329,9 @@ def new_session(n: NewSession):
     planned = [x.get('切片', '') for x in (project.plan() or {}).get('slices', [])]
     if n.slice != '_plan' and n.slice not in kit.slices() and n.slice not in planned:
         raise HTTPException(400, f'沒有這條切片：{n.slice}')
+    busy = [x for x in project.in_progress() if x != n.slice]
+    if n.slice != '_plan' and n.slice not in kit.slices() and busy:
+        raise HTTPException(409, f'{"、".join(busy)} 還沒做完（①～⑤ 還沒都凍結）。網頁一次只做一條切片，做完再開下一條')
     return sessions.create(n.slice, n.purpose, n.handoff)
 
 
