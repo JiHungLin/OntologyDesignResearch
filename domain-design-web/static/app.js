@@ -1214,13 +1214,43 @@ function curPurpose() {
   return m ? `審查 ${m[1]}` : '設計';
 }
 
+// AI 對話的呈現（像 Claude）：你說的話是泡泡、AI 說的話照 Markdown 排版；讀檔、改檔、指令、子代理這些內部步驟收成一行，點開才看
+const TOOL_NAME = { Read: '讀檔', Edit: '改檔', MultiEdit: '改檔', Write: '寫檔', Bash: '執行指令', Grep: '搜尋文字', Glob: '找檔案',
+  Agent: '子代理', Task: '子代理', Skill: '技能', WebSearch: '搜尋網路', WebFetch: '讀網頁', TodoWrite: '待辦清單', NotebookEdit: '改筆記本' };
+
+function stepsGroup(log) {
+  let g = log.lastElementChild;
+  if (!g || !g.classList.contains('steps')) {
+    g = document.createElement('details');
+    g.className = 'steps';
+    g.innerHTML = '<summary></summary><div class="step-list"></div>';
+    log.appendChild(g);
+  }
+  return g;
+}
+
+function addStep(log, html, name) {
+  const g = stepsGroup(log);
+  g.querySelector('.step-list').insertAdjacentHTML('beforeend', `<div data-name="${esc(name)}">${html}</div>`);
+  const items = [...g.querySelectorAll('.step-list > div')];
+  const names = [...new Set(items.map(x => x.dataset.name))];
+  g.querySelector('summary').textContent = `${items.length} 個步驟：${names.slice(0, 4).join('、')}${names.length > 4 ? '…' : ''}`;
+}
+
 function showEvent(ev) {
   const log = $('#aiLog');
-  const sub = ev.sub ? ' sub' : '';
-  if (ev.kind === 'me') state.lastText = '';
-  if (ev.kind === 'me') log.insertAdjacentHTML('beforeend', `<div class="me">› ${esc(ev.text.length > 600 ? ev.text.slice(0, 600) + '…' : ev.text)}</div>`);
-  else if (ev.kind === 'text') { log.insertAdjacentHTML('beforeend', `<div class="t${sub}">${inline(ev.text)}</div>`); if (!ev.sub) state.lastText = ev.text; }
-  else if (ev.kind === 'tool') log.insertAdjacentHTML('beforeend', `<div class="tool${sub}">· ${esc(ev.name)} ${esc(ev.brief)}</div>`);
+  if (ev.kind === 'me') {
+    state.lastText = '';
+    // 新 session 的第一則是「交接提示＋要做的事」：泡泡只放最後一段，整段收起來
+    const paras = ev.text.trim().split(/\n\s*\n/);
+    const last = paras[paras.length - 1];
+    log.insertAdjacentHTML('beforeend', paras.length > 1 && ev.text.length > 300
+      ? `<div class="me"><div>${inline(last.length > 400 ? last.slice(0, 400) + '…' : last)}</div><details class="small"><summary>交接提示與完整內容</summary><div class="md">${md(ev.text)}</div></details></div>`
+      : `<div class="me">${inline(ev.text.length > 800 ? ev.text.slice(0, 800) + '…' : ev.text)}</div>`);
+  }
+  else if (ev.kind === 'text' && ev.sub) addStep(log, `<div class="sub-text">${inline(ev.text)}</div>`, '子代理');
+  else if (ev.kind === 'text') { log.insertAdjacentHTML('beforeend', `<div class="t md">${md(ev.text)}</div>`); state.lastText = ev.text; }
+  else if (ev.kind === 'tool') addStep(log, `<b>${esc(TOOL_NAME[ev.name] || ev.name)}</b> <code>${esc(ev.brief || '')}</code>`, ev.sub ? '子代理' : (TOOL_NAME[ev.name] || ev.name));
   else if (ev.kind === 'compacted') log.insertAdjacentHTML('beforeend', '<div class="deny">這個 session 剛經過摘要壓縮，建議做完這一段就開新的 session。</div>');
   else if (ev.kind === 'error') log.insertAdjacentHTML('beforeend', `<div class="err">${esc(ev.text)}</div>`);
   else if (ev.kind === 'result') {
@@ -1230,8 +1260,8 @@ function showEvent(ev) {
       <p class="small" style="margin:6px 0">AI 通常會改用別的方法繼續。只有它最後說缺了什麼、做不完時才需要處理：到 terminal 用 <code>claude --resume ${esc((curSession() || {}).id || '<session id>')}</code> 接著做並核准。</p>
       <ul class="small">${dn.map(d => `<li><code>${esc(d.tool)}</code> ${esc(((d.input || {}).command || JSON.stringify(d.input || '')).slice(0, 200))}</li>`).join('')}</ul></details>`);
     if (!ev.ok) log.insertAdjacentHTML('beforeend', `<div class="err">${esc(ev.text)}</div>`);
-    else if (ev.text && ev.text.trim() !== (state.lastText || '').trim()) log.insertAdjacentHTML('beforeend', `<div class="t">${inline(ev.text)}</div>`);
-    log.insertAdjacentHTML('beforeend', '<div class="tool">— 這一輪結束 —</div>');
+    else if (ev.text && ev.text.trim() !== (state.lastText || '').trim()) log.insertAdjacentHTML('beforeend', `<div class="t md">${md(ev.text)}</div>`);
+    log.insertAdjacentHTML('beforeend', '<div class="turn-end"></div>');
   }
   log.scrollTop = log.scrollHeight;
 }
