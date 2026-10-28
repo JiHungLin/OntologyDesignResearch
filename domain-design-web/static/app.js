@@ -85,6 +85,17 @@ function remember(k, v) {
   return '';
 }
 
+// 表單寫到一半先暫存在這個瀏覽器（依專案分開），重新整理不會清空；送出成功後清掉
+function keepDraft(name, fields) {
+  const key = `draft:${(state.project || {}).repo || ''}:${name}`;
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) { }
+  for (const x of fields) if (saved[x.dataset.k] && !x.value) x.value = saved[x.dataset.k];
+  const store = () => { try { localStorage.setItem(key, JSON.stringify(Object.fromEntries(fields.map(x => [x.dataset.k, x.value])))); } catch (e) { } };
+  fields.forEach(x => x.addEventListener('input', store));
+  return () => { try { localStorage.removeItem(key); } catch (e) { } };
+}
+
 let toastTimer;
 function toast(msg) {
   const t = $('#toast');
@@ -1390,7 +1401,8 @@ async function renderStart() {
   $('#app').innerHTML = `
     <div class="narrow">
       <div><span class="chip">第 1 步</span><h1 class="qtitle">寫下你想做的系統</h1>
-        <p class="muted">用自己的話寫，不用專業術語；空著的 AI 之後會用選擇題問。存成 <code>inputs/shared/主題草案.md</code>${P.topic ? '（已經有了，這次寫的會加成一節「補充」，不改舊的）' : ''}。</p></div>
+        <p class="muted">用自己的話寫，不用專業術語；空著的 AI 之後會用選擇題問。存成 <code>inputs/shared/主題草案.md</code>${P.topic ? '（已經有了，這次寫的會加成一節「補充」，不改舊的）' : ''}。</p>
+        <p class="small muted" style="margin:0">寫到一半重新整理也不會不見（暫存在這個瀏覽器，存好後清掉）。</p></div>
       <section class="card lift" style="display:flex;flex-direction:column;gap:16px">
         ${TOPIC_Q.map(([k, q, ph], i) => `<label class="label" style="color:var(--ink);font-size:16px">${esc(q)}
           ${i === 0 ? `<textarea data-k="${k}" rows="2" placeholder="${esc(ph)}"></textarea>` : `<input type="text" data-k="${k}" class="soft" placeholder="${esc(ph)}">`}</label>`).join('')}
@@ -1402,11 +1414,13 @@ async function renderStart() {
       </section>
       <div class="row"><button class="btn big primary" id="saveTopic">存好，請 AI 規劃 ›</button><button class="btn big" id="saveOnly">只存起來</button></div>
     </div>`;
-  const collect = () => Object.fromEntries($$('[data-k]').map(x => [x.dataset.k, x.value.trim()]));
+  const fields = $$('#app [data-k]');
+  const clearDraft = keepDraft('topic', fields);
+  const collect = () => Object.fromEntries(fields.map(x => [x.dataset.k, x.value.trim()]));
   const save = async () => {
     const f = collect();
     if (!Object.values(f).some(Boolean)) { toast('至少寫一項'); return null; }
-    try { return (await api('/api/topic', { fields: f })).path; } catch (e) { toast(e.message); return null; }
+    try { const p = (await api('/api/topic', { fields: f })).path; clearDraft(); return p; } catch (e) { toast(e.message); return null; }
   };
   $('#saveTopic').onclick = async () => {
     const p = await save();
@@ -1689,8 +1703,11 @@ async function renderKickoff(code) {
       <div class="row"><button class="btn big primary" id="go1">開始 ›</button></div>
     </div>`;
   $('#addInput').onclick = () => inputDialog({ folder: code });
+  const fields = $$('#app [data-k]');
+  const clearDraft = keepDraft('new:' + code, fields);
   $('#go1').onclick = () => {
-    const a = Object.fromEntries($$('[data-k]').map(x => [x.dataset.k, x.value.trim()]));
+    const a = Object.fromEntries(fields.map(x => [x.dataset.k, x.value.trim()]));
+    clearDraft();
     const lines = qs.map(([k, q]) => `- ${q}${a[k] || '（使用者沒寫）'}`).join('\n');
     runAi(code, '第 1 步', `/domain-new-slice ${code}\n\n使用者在網頁上先回答了開工的問題（原話，存成 inputs/${code}/ 的檔案時照抄）：\n${lines}\n\n建立好就接著做第 ① 步。`);
     setTimeout(() => go('#/'), 300);
