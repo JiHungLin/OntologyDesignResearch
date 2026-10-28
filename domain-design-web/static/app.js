@@ -848,11 +848,14 @@ async function renderFinish(path) {
 
 // ---------- 檔案 ----------
 
+// 右側一次只放一個抽屜（AI 對話或檔案），最後打開的那個蓋掉另一個
+function showDrawer(id) { $$('.drawer').forEach(d => { d.hidden = d.id !== id; }); }
+
 async function openFile(file, line) {
   const base = state.review && state.review.slice ? `slices/${state.review.slice}` : '';
   try {
     const f = await api(`/api/file?path=${enc(file)}&base=${enc(base)}`);
-    $('#fileDrawer').hidden = false;
+    showDrawer('fileDrawer');
     $('#filePath').textContent = f.path + (line ? `:${line}` : '');
     const n = +line || 0;
     $('#fileBody').innerHTML = f.text.split('\n').map((l, k) => `<span class="ln ${k + 1 === n ? 'hit' : ''}" data-n="${k + 1}">${esc(l) || ' '}</span>`).join('');
@@ -1042,7 +1045,7 @@ function openAi(scope) {
     const s = state.sessions.find(x => x.running) || state.sessions.find(x => x.status === '使用中');
     if (s) state.aiScope = s.slice;
   }
-  $('#aiDrawer').hidden = false; renderAi();
+  showDrawer('aiDrawer'); renderAi();
 }
 
 async function renderAi() {
