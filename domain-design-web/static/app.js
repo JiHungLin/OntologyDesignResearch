@@ -1870,10 +1870,12 @@ $('#aiForm').onsubmit = e => {
   e.preventDefault();
   const v = $('#aiInput').value.trim();
   if (!v) return;
-  if (!state.scope) { toast('先打開一條切片或規劃，再和 AI 對話'); return; }
+  // 送給抽屜正在顯示的那個對話（總覽頁也一樣），不是只看目前頁面
+  const scope = aiScope();
+  if (!scope) { toast('還沒有 AI 對話。到規劃頁或某條切片的頁面再打開'); return; }
   $('#aiInput').value = ''; growAi();
   const s = curSession();
-  runAi(state.scope, s ? s.purpose : '對話', v, { keep: true });
+  runAi(scope, s ? s.purpose : '對話', v, { keep: true });
 };
 window.addEventListener('hashchange', route);
 
