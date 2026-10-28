@@ -209,16 +209,20 @@ details.tech summary { cursor: pointer; }
 .box .label { margin-bottom: 2px; }
 .attrs { display: flex; flex-wrap: wrap; gap: 6px; }
 .attrs span { background: #fff; border: 2px solid var(--line); border-radius: 999px; padding: 0 10px; font-size: 13px; }
-.crow { border: 2px solid var(--line); border-radius: 14px; padding: 14px 16px; font-size: 14px; display: flex; flex-direction: column; gap: 8px; }
+.crow { border: 2px solid var(--line); border-radius: 14px; padding: 16px 18px; font-size: 14px; display: flex; flex-direction: column; gap: 10px; }
+.crow .what { font-weight: 700; }
+.crow .orig { background: var(--bg); border-radius: 10px; padding: 8px 12px; line-height: 1.7; }
+.crow .where { font-size: 12px; color: var(--muted); }
+/* 同一排的卡一樣高，按鈕一律貼在卡片底部，不會忽高忽低 */
+.crow .acts { margin-top: auto; padding-top: 4px; }
 .crow.done { border-color: var(--done); background: #E3F7EC; }
-.crow .orig { color: var(--muted); font-size: 13px; }
 .crow .acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .crow .acts .btn { min-height: 36px; padding: 0 12px; font-size: 14px; box-shadow: 2px 2px 0 var(--ink); }
 .crow .val { font-weight: 900; color: var(--done); }
 .groups { display: flex; flex-direction: column; gap: 24px; }
-.group > .row { margin-bottom: 18px; align-items: flex-start; }
+.group > .row { margin-bottom: 18px; align-items: center; }
 .group > .row .btn { flex: 0 0 auto; }
-.group h3 { margin: 6px 0 0; font-size: 17px; flex: 1 1 300px; }
+.group h3 { margin: 0; font-size: 17px; flex: 1 1 300px; }
 .group .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 14px; }
 
 /* ---- 黃金案例 ---- */
