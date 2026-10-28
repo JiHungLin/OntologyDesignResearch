@@ -43,7 +43,8 @@ def get(sid):
 
 
 def active(slice_):
-    return next((s for s in load() if s['slice'] == slice_ and s['status'] == '使用中'), None)
+    s = next((s for s in load() if s['slice'] == slice_ and s['status'] == '使用中'), None)
+    return dict(s, running=busy(s['id'])) if s else None
 
 
 def _update(sid, **kw):
@@ -89,7 +90,7 @@ def handoff(slice_, purpose, review=None):
              '開始前先讀下面的檔案，回報狀態或人說過什麼一律以檔案為準，不憑記憶：']
     sdir = os.path.join(kit.repo(), 'slices', slice_)
     if slice_ == '_plan':
-        lines.append('- `slices/PLAN.md`、`slices/CHANGELOG.md`')
+        lines.append('- `slices/PLAN.md`、`slices/ENTITY_SKETCH.md`、`slices/CHANGELOG.md`（有的話）、`inputs/` 的檔案清單')
     else:
         lines.append(f'- `slices/{slice_}/CHANGELOG.md`（最後幾筆）')
         if review:
@@ -114,10 +115,26 @@ def _open_eqs(path):
     return out
 
 
-# ---- 呼叫 claude -p ----
+# ---- 呼叫 claude -p（在背景跑，事件寫進 .domain-web/logs/<id>.jsonl，網頁輪詢） ----
+
+# 網頁沒有選項介面也不能互動核准：檔案修改自動接受（只限切片 repo），常用指令先允許；
+# 其他會被擋下、顯示在網頁上，請人到 terminal 用 --resume 處理。可用環境變數 DOMAIN_WEB_ALLOWED（以逗號分隔）覆寫。
+ALLOWED = os.environ.get('DOMAIN_WEB_ALLOWED', ','.join([
+    'Read', 'Edit', 'Write', 'Glob', 'Grep', 'Agent', 'Skill', 'WebSearch', 'WebFetch',
+    'Bash(python3 tools/*)', 'Bash(python3 -I tools/*)', 'Bash(git status*)', 'Bash(git diff*)', 'Bash(git log*)',
+    'Bash(git show*)', 'Bash(git tag*)', 'Bash(git add*)', 'Bash(git commit*)', 'Bash(git rev-parse*)',
+    'Bash(ls*)', 'Bash(cp *)', 'Bash(mkdir *)', 'Bash(curl *)', 'Bash(date*)'])).split(',')
+
+WEB_PROMPT = (
+    '你在「Domain 設計流程網頁」裡執行（claude -p）。使用者看不到選項介面（AskUserQuestion 不能用），也不能在這裡核准權限。'
+    '要問人時照 docs/01 0.2「問人的方式」寫在回覆最後，一題一段，格式固定：'
+    '「問題：<一句話>」、「例子：<一個具體情況>」、「A（建議）：<做法> → <選了之後設計會怎樣>」、「B：<做法> → <結果>」、「其他：（寫一句）」，然後停下來。'
+    '回報結束時，用一句話說明下一步要人做什麼。')
+
 
 def _command(s, message):
-    cmd = [CLAUDE, '-p', message, '--output-format', 'stream-json', '--verbose']
+    cmd = [CLAUDE, '-p', message, '--output-format', 'stream-json', '--verbose',
+           '--permission-mode', 'acceptEdits', '--append-system-prompt', WEB_PROMPT, '--allowedTools', *ALLOWED]
     if s['turns'] == 0:
         cmd += ['--session-id', s['id'], '-n', s['name']]
     else:
@@ -149,44 +166,85 @@ def summarize(event):
     return None
 
 
+_running = {}   # session id → asyncio.Task
+
+
 def busy(sid):
-    lock = _locks.get(sid)
-    return bool(lock and lock.locked())
+    t = _running.get(sid)
+    return bool(t and not t.done())
 
 
-async def send(sid, message):
-    """送一則訊息，逐一產生要顯示的事件。同一個 session 一次只送一個。"""
+def running_slices():
+    return {s['slice'] for s in load() if busy(s['id'])}
+
+
+def _log(sid):
+    return os.path.join(kit.repo(), '.domain-web', 'logs', f'{sid}.jsonl')
+
+
+def _append(sid, ev):
+    p = _log(sid)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    ev = dict(ev, at=_now())
+    with open(p, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(ev, ensure_ascii=False) + '\n')
+
+
+def events(sid, after=0):
+    """這個 session 從第 after 個事件之後的事件（重新整理頁面也接得回來）。"""
+    try:
+        with open(_log(sid), encoding='utf-8') as f:
+            evs = [json.loads(l) for l in f if l.strip()]
+    except FileNotFoundError:
+        evs = []
+    return {'events': evs[after:], 'n': len(evs), 'running': busy(sid)}
+
+
+def start(sid, message):
+    """在背景送一則訊息。同一個 session 一次只送一個。"""
+    if get(sid) is None:
+        raise KeyError(sid)
+    if busy(sid):
+        raise RuntimeError('這個 session 上一個請求還沒結束')
+    _append(sid, {'kind': 'me', 'text': message})
+    _running[sid] = asyncio.get_running_loop().create_task(_run(sid, message))
+
+
+async def _run(sid, message):
     s = get(sid)
-    if s is None:
-        yield {'kind': 'error', 'text': '找不到這個 session'}
-        return
-    lock = _locks.setdefault(sid, asyncio.Lock())
-    if lock.locked():
-        yield {'kind': 'error', 'text': '這個 session 上一個請求還沒結束'}
-        return
-    async with lock:
+    try:
         proc = await asyncio.create_subprocess_exec(
             *_command(s, message), cwd=kit.repo(),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, limit=2 ** 24)
-        _update(sid, turns=s['turns'] + 1, last_used=_now())
-        compacted = False
-        async for raw in proc.stdout:
-            try:
-                ev = json.loads(raw)
-            except ValueError:
-                continue
-            out = summarize(ev)
-            if out is None:
-                continue
-            for o in (out if isinstance(out, list) else [out]):
-                if o['kind'] == 'compacted':
-                    compacted = True
-                yield o
-        err = (await proc.stderr.read()).decode('utf-8', 'replace').strip()
-        code = await proc.wait()
-        if compacted:
-            _update(sid, compacted=True)
-        if code != 0:
-            if s['turns'] == 0:
-                _update(sid, turns=0)  # 沒有成功建立，下次仍用 --session-id
-            yield {'kind': 'error', 'text': err or f'claude 結束碼 {code}'}
+    except OSError as e:
+        _append(sid, {'kind': 'error', 'text': f'無法執行 {CLAUDE}：{e}'})
+        return
+    _update(sid, turns=s['turns'] + 1, last_used=_now())
+    compacted, result = False, None
+    async for raw in proc.stdout:
+        try:
+            ev = json.loads(raw)
+        except ValueError:
+            continue
+        out = summarize(ev)
+        if out is None:
+            continue
+        for o in (out if isinstance(out, list) else [out]):
+            if o['kind'] == 'compacted':
+                compacted = True
+            if o['kind'] == 'result':
+                result = o
+            _append(sid, o)
+    err = (await proc.stderr.read()).decode('utf-8', 'replace').strip()
+    code = await proc.wait()
+    kw = {}
+    if compacted:
+        kw['compacted'] = True
+    if result:
+        kw.update(last_reply=result['text'], last_ok=result['ok'], last_at=_now())
+    if kw:
+        _update(sid, **kw)
+    if code != 0:
+        if s['turns'] == 0:
+            _update(sid, turns=0)  # 沒有成功建立，下次仍用 --session-id
+        _append(sid, {'kind': 'error', 'text': err or f'claude 結束碼 {code}'})

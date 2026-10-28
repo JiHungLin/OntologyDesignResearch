@@ -1,10 +1,11 @@
-// Domain 設計：任務板。資料都在切片 repo 的 .md，這裡只讀寫審查頁裡人要填的欄位。
+// Domain 設計：任務板。從主題草案、規劃、開切片，到每一步的審查與凍結。
+// 資料都在設計 repo 的 .md；網頁只寫人做的事（作答、接受草稿、存資料），其他交給 AI（claude -p，在背景跑）。
 'use strict';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const CIRCLED = ['', '①', '②', '③', '④', '⑤', '⑥'];
-const state = { slices: [], slice: null, home: null, review: null, path: null, sel: null, showAll: false, sessionChoice: null, busy: false };
+const state = { slices: [], sessions: [], scope: null, slice: null, home: null, project: null, review: null, path: null, sel: null, showAll: false, watching: {} };
 
 // ---------- 工具 ----------
 
@@ -27,7 +28,8 @@ const FILE_REF = /`?([^\s`「」（）()、，；<>]+?\.(?:md|ya?ml|js|sql|py)):
 function inline(s) {
   return esc(s)
     .replace(FILE_REF, (m, f, n) => `<a class="ref-link" data-file="${f}" data-line="${n}">${f}:${n}</a>`)
-    .replace(/`([^`]+)`/g, '<code>$1</code>');
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 }
 
 // 給人看的白話：拿掉出處括號、〔日期〕與標記，技術細節另外收起來
@@ -37,6 +39,40 @@ function plain(s) {
     .replace(/\[(解讀|待專家確認|未核對|靜態替代|推導)[^\]]*\]/g, '')
     .replace(/（[^（）]*(?:D-\d+|X-\d+|Q\d+|EQ-\d+|\.md|#\d+)[^（）]*）/g, '')
     .replace(/`/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// 給草稿、說明用的簡單 Markdown：標題、清單、表格、引用、段落
+function md(text) {
+  const out = [];
+  let para = [], list = null, table = null;
+  const flush = () => {
+    if (para.length) { out.push(`<p>${inline(para.join(' '))}</p>`); para = []; }
+    if (list) { out.push(`<${list.tag}>${list.items.map(x => `<li>${inline(x)}</li>`).join('')}</${list.tag}>`); list = null; }
+    if (table) {
+      const [h, ...rows] = table.filter(r => !/^\s*\|[\s:|-]+\|\s*$/.test(r));
+      const cells = r => r.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/).map(c => c.trim());
+      out.push(`<div class="tbl"><table><tr>${cells(h).map(c => `<th>${inline(c)}</th>`).join('')}</tr>${rows.map(r => `<tr>${cells(r).map(c => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</table></div>`);
+      table = null;
+    }
+  };
+  let inComment = false;
+  for (const line of String(text || '').split('\n')) {
+    if (inComment) { if (line.includes('-->')) inComment = false; continue; }
+    if (line.includes('<!--')) { if (!line.includes('-->')) inComment = true; continue; }
+    let m;
+    if ((m = line.match(/^(#{1,4})\s+(.*)$/))) { flush(); out.push(`<h${Math.min(m[1].length + 1, 5)}>${inline(m[2])}</h${Math.min(m[1].length + 1, 5)}>`); }
+    else if (line.startsWith('|')) { if (!table) { flush(); table = []; } table.push(line); }
+    else if ((m = line.match(/^\s*(?:[-*]|(\d+)\.)\s+(.*)$/))) {
+      const tag = m[1] ? 'ol' : 'ul';
+      if (!list || list.tag !== tag) { flush(); list = { tag, items: [] }; }
+      list.items.push(m[2]);
+    }
+    else if ((m = line.match(/^>\s?(.*)$/))) { flush(); out.push(`<blockquote>${inline(m[1])}</blockquote>`); }
+    else if (!line.trim()) flush();
+    else { if (list || table) flush(); para.push(line.trim()); }
+  }
+  flush();
+  return out.join('');
 }
 
 function today() {
@@ -127,22 +163,39 @@ function firstOpenQ(r, after = -1) {
 const HUMAN = ['預期結果', '計算過程', '計算者'];
 function caseOpen(c) { return HUMAN.some(k => !(c.fields[k] && c.fields[k].value.trim())); }
 
-// ---------- 首頁：輪到你 ----------
+// ---------- 切片首頁：輪到你 ----------
+
+// 每一步 AI 做什麼、做完要你做什麼（給還沒開始的關卡看）
+const STEP_INFO = {
+  1: ['範圍與驗收問題', '這條切片做到哪裡、做完要能回答哪些問題', '回答範圍的選擇題、確認驗收問題'],
+  2: ['名詞盤點', '哪些是「一個東西」、彼此什麼關係', '看模型圖，確認新增的名詞與關係'],
+  3: ['流程與狀態', '事情怎麼發生、誰能做、錯了怎麼改', '確認狀態、歷史需求與更正方式'],
+  4: ['規則與限制', '什麼情況允許、什麼必須成立、依據是什麼', '回答規則的選擇題、確認依據'],
+  5: ['投影到實作與紙上驗證', '每個概念放在哪張表、哪支 API；照設計推演黃金案例', '自己算 1～3 個黃金案例，和設計對答案'],
+  6: ['跑起來驗證', '在真的系統上跑黃金案例、回答驗收問題', '簽核（執行者和簽核者不同人）'],
+};
+
+function levelStrip(levels) {
+  return `<nav class="levels" aria-label="切片關卡">${levels.map(l => {
+    const label = { frozen: '過關', review: '挑戰中', wait: '等你凍結', draft: '進行中', locked: '' }[l.state];
+    return `<div class="level ${l.state}" title="${esc(l.status)} ${esc(l.tag)}"><b>${CIRCLED[l.n]}</b><span>${esc(l.name)}${label ? '　' + label : ''}</span></div>`;
+  }).join('')}</nav>`;
+}
 
 async function renderHome(slice) {
   state.slice = slice;
+  state.scope = slice;
   syncSlicePick();
   const h = state.home = await api('/api/home?slice=' + enc(slice));
-  setTop(null, '');
+  setTop(['#/', '總覽'], `<strong>${esc(slice)}</strong>`);
   const app = $('#app');
-  const levels = h.levels.map(l => {
-    const label = { frozen: '過關', review: '挑戰中', draft: '', locked: '' }[l.state];
-    return `<div class="level ${l.state}" title="${esc(l.tag)}"><b>${CIRCLED[l.n]}</b><span>${esc(l.name)}${label ? '　' + label : ''}</span></div>`;
-  }).join('');
-
-  let hero, tasks = '', changes = '';
+  const s = sessionOf(slice);
+  let hero = '', tasks = '', changes = '';
   const cur = h.current;
-  if (cur) {
+  const wait = h.levels.filter(l => l.state === 'wait');
+  if (s && s.running) {
+    hero = runningCard(slice);
+  } else if (cur) {
     const r = await loadReview(cur.path);
     const c = r.counts;
     const nums = (cur.step.match(/\d+/g) || []).map(Number);
@@ -184,39 +237,86 @@ async function renderHome(slice) {
                  : task(`#/r/${p}/finish`, '抽查 1～2 條、簽名過關', 2, (t.finish.spot ? 0 : 1) + (t.finish.sign ? 0 : 1))}
       </section>`;
     const items = r.model ? r.model.entities.filter(e => e.changed) : [];
-    changes = items.length
+    changes = `<h2>這一關 AI 改了什麼</h2>` + (items.length
       ? `<div class="grid2">${items.map(e => `<a class="change" href="#/r/${p}/confirm/${e.id}" style="text-decoration:none;color:inherit">
           <span class="chip new">新</span><b>${esc(e.label)}</b><div>${esc(e.definition)}</div></a>`).join('')}</div>`
-      : `<div class="card">${r.meta.filter(m => !/填完之後/.test(m.key)).map(m => `<div class="small"><b>${esc(m.key)}</b>　${esc(plain(m.value))}</div>`).join('')}</div>`;
-  } else {
+      : `<div class="card">${r.meta.filter(m => !/填完之後/.test(m.key)).map(m => `<div class="small"><b>${esc(m.key)}</b>　${esc(plain(m.value))}</div>`).join('')}</div>`);
+  } else if (wait.length) {
+    // 審查頁都填好了、還沒凍結
+    const last = h.reviews[0];
+    const step = last ? last.step : String(wait[0].n).padStart(2, '0');
+    hero = `
+      <section class="hero">
+        <div style="flex:999 1 480px;min-width:0">
+          <span class="chip">輪到你</span>
+          <h1>審查填好了：${esc(stepName(step))}</h1>
+          <p>交給 AI 依你的答案修改；結論都是「通過」的話，請 AI 凍結（凍結＝之後的修改都要留紀錄）。</p>
+        </div>
+        <div class="row"><button class="btn big yellow" id="handover">交給 AI 處理答案</button><button class="btn big" id="freeze">請 AI 凍結</button></div>
+      </section>`;
+  } else if (h.next) {
+    const n = h.next.n;
+    const info = STEP_INFO[n];
+    const going = h.next.status !== '未開始';
     hero = `
       <section class="hero idle">
         <div style="flex:999 1 480px;min-width:0">
-          <span class="chip">沒有要你審的</span>
-          <h1>目前輪到 AI</h1>
-          <p class="muted">沒有待作答的審查頁。請 AI 做下一步，它做完會產生新的審查頁，這裡就會出現新的關卡。</p>
+          <span class="chip">輪到 AI</span>
+          <h1>${going ? `第 ${CIRCLED[n]} 步還沒做完` : `下一關：${CIRCLED[n]} ${esc(info[0])}`}</h1>
+          <p>AI 會整理：${esc(info[1])}。做完後另開 AI 挑錯、核對，產生一份審查頁，這裡就會出現新的關卡。</p>
+          <p class="muted small">之後輪到你：${esc(info[2])}。${n === 6 ? '第 ⑥ 步要有實作好的系統才做。' : ''}</p>
         </div>
-        <button class="btn big primary" id="askNext">請 AI 做下一步 ›</button>
+        <button class="btn big primary" id="doStep">${going ? `請 AI 繼續第 ${CIRCLED[n]} 步` : `請 AI 開始第 ${CIRCLED[n]} 步`} ›</button>
       </section>`;
+  } else {
+    hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>這條切片全部完成！</h1>
+      <p class="muted">①～⑥ 都凍結了。回總覽挑下一條。</p><a class="btn big primary" href="#/">回總覽</a></section>`;
   }
 
+  const designDone = h.levels.slice(0, 5).every(l => l.state === 'frozen') && h.levels[5].state !== 'frozen';
+  if (designDone && !(s && s.running)) {
+    hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>設計完成（待驗證）</h1>
+      <p class="muted">①～⑤ 都凍結了，這是一個設計版本。第 ⑥ 步等系統實作好再做；現在可以開始下一條切片。</p>
+      <div class="row" style="justify-content:center"><a class="btn big primary" href="#/">挑下一條切片 ›</a><button class="btn big" id="doStep">系統好了，開始 ⑥</button></div></section>`;
+  }
+
+  const eqOpen = h.eqs.filter(e => e['狀態'] !== '已回覆');
+  const eqTodo = h.eqs.filter(e => e['狀態'] === '已回覆' && !e['處理']);
   const past = h.reviews.filter(x => !cur || x.path !== cur.path);
   app.innerHTML = `
-    <nav class="levels" aria-label="切片關卡">${levels}</nav>
+    ${levelStrip(h.levels)}
+    ${waitingCard(slice)}
     ${hero}
     <div class="cols">
       ${tasks}
       <section class="wide">
-        ${cur ? `<h2>這一關 AI 改了什麼</h2>${changes}` : ''}
-        ${h.eq_open ? `<div class="card hint row spread"><span><strong>支線：等專家回答 ${h.eq_open} 題</strong>　不擋這一關。專家回覆後交給 AI 處理。</span>
-          <button class="btn" id="expertReply">專家回覆了</button></div>` : ''}
+        ${changes}
+        ${eqOpen.length || eqTodo.length ? `<a class="card hint row spread" href="#/eq/${enc(slice)}" style="text-decoration:none;color:inherit">
+          <span><strong>支線：專家問題</strong>　${eqOpen.length ? `${eqOpen.length} 題還沒有答覆（不擋關卡）` : ''}${eqTodo.length ? `　${eqTodo.length} 題答覆了、還沒處理` : ''}</span><span class="btn">打開 ›</span></a>` : ''}
+        <section class="card">
+          <div class="label">發現問題、專家或客戶有新說法？</div>
+          <div class="row"><input type="text" id="changeText" style="flex:1" placeholder="例：店長說兼職人員也有特休、實作時發現餘額算錯…">
+            <button class="btn" id="changeBtn">交給 AI 判斷</button></div>
+          <div class="small muted" style="margin-top:6px">AI 會判斷要回哪一步、影響多大，先提出方案，不會直接改。</div>
+        </section>
         ${past.length ? `<details class="past"><summary>之前的關卡（${past.length}）</summary>${past.map(x => `<a href="#/r/${enc(x.path)}/finish">${esc(x.date)} ${esc(stepName(x.step))}${x.counts && !x.counts.open ? ' ✓' : ''}</a>`).join('')}</details>` : ''}
       </section>
     </div>`;
-  const askNext = $('#askNext');
-  if (askNext) askNext.onclick = () => aiPrompt('繼續做下一步');
-  const er = $('#expertReply');
-  if (er) er.onclick = () => aiPrompt('專家回覆了：EQ-', false);
+  bindWaiting();
+  const sa = $('#showAi'); if (sa) sa.onclick = openAi;
+  const ds = $('#doStep');
+  if (ds) ds.onclick = () => {
+    const n = designDone ? 6 : h.next.n;
+    runAi(slice, `第 ${n} 步`, `/domain-step ${n} ${slice}`);
+  };
+  const ho = $('#handover');
+  if (ho) ho.onclick = () => { const r0 = h.reviews[0]; runAi(slice, `審查 ${r0.step}`, `審查好了。審查頁：${r0.path}`, { review: r0.path }); };
+  const fz = $('#freeze');
+  if (fz) fz.onclick = () => { const r0 = h.reviews[0]; runAi(slice, `凍結 ${r0.step}`, `/domain-freeze ${(r0.step.match(/\d+/g) || []).map(Number).join(',')} ${slice}`, { review: r0.path }); };
+  const cb = $('#changeBtn');
+  const change = () => { const v = $('#changeText').value.trim(); if (v) runAi(slice, '修改', `/domain-change ${v}`); };
+  cb.onclick = change;
+  $('#changeText').onkeydown = e => { if (e.key === 'Enter') change(); };
 }
 
 // ---------- 一次一個決定 ----------
@@ -724,12 +824,10 @@ async function renderFinish(path) {
     if (await write('/api/review/cells', { line: x.line, cells: { [key]: who, '日期': today(), '結論': b.dataset.v } })) renderFinish(path);
   });
   const ho = $('#handover');
-  if (ho) ho.onclick = () => aiPrompt(`審查好了。審查頁：${path}`, true);
+  const step = (path.match(/_([\d-]+)(?:-\d)?\.md$/) || [])[1] || '';
+  if (ho) ho.onclick = () => runAi(r.slice, `審查 ${step}`, `審查好了。審查頁：${path}`, { review: path });
   const fz = $('#freeze');
-  if (fz) fz.onclick = () => {
-    const step = (path.match(/_([\d-]+)\.md$/) || [])[1] || '';
-    aiPrompt(`/domain-freeze ${(step.match(/\d+/g) || []).map(Number).join(' ')}`, false);
-  };
+  if (fz) fz.onclick = () => runAi(r.slice, `凍結 ${step}`, `/domain-freeze ${(step.match(/\d+/g) || []).map(Number).join(',')} ${r.slice}`, { review: path });
 }
 
 // ---------- 檔案 ----------
@@ -748,148 +846,770 @@ async function openFile(file, line) {
 }
 
 // ---------- AI session ----------
+// 範圍（scope）：規劃用 _plan，其他用切片代號。一個範圍同一時間一個使用中的 session。
+// 換一件事（用途不同）或 session 經過摘要壓縮時，用選擇題問要不要開新的（精簡版「換 session 的時機」）。
 
-function curSession() {
-  const s = state.slices.find(x => x.slice === state.slice);
-  return s && s.session;
-}
-function curPurpose() {
-  const m = (state.path || '').match(/_([^/]+)\.md$/);
-  return m ? `審查 ${m[1]}` : '設計';
+function sessionOf(scope) { return state.sessions.find(s => s.slice === scope && s.status === '使用中'); }
+// AI 抽屜跟著「最後交給 AI 的範圍」走，換頁不會斷；頁面自己的範圍是 state.scope
+function aiScope() { return state.aiScope || state.scope; }
+function curSession() { return sessionOf(aiScope()); }
+function scopeName(scope) { return scope === '_plan' ? '規劃' : scope; }
+
+async function refreshSessions() {
+  const r = await api('/api/sessions');
+  state.sessions = r.sessions;
+  state.gitignored = r.gitignored;
+  for (const s of state.sessions) if (s.running) watch(s.id);
+  renderAiHead();
 }
 
 async function refreshSlices() {
   const st = await api('/api/status');
   state.slices = st.slices;
-  state.gitignored = st.gitignored;
   syncSlicePick();
-  renderAiHead();
+  await refreshSessions();
 }
 
 function syncSlicePick() {
   const sel = $('#slicePick');
-  sel.innerHTML = state.slices.map(s => `<option value="${esc(s.slice)}" ${s.slice === state.slice ? 'selected' : ''}>${esc(s.slice)}</option>`).join('');
+  sel.innerHTML = `<option value="">總覽</option>` + state.slices.map(s => `<option value="${esc(s.slice)}" ${s.slice === state.slice ? 'selected' : ''}>${esc(s.slice)}</option>`).join('');
+  if (!state.slice) sel.value = '';
 }
+
+function anyRunning() { return state.sessions.some(s => s.running); }
 
 function renderAiHead() {
   const s = curSession();
-  $('#aiDot').className = 'dot ' + (state.busy ? 'busy' : s ? 'on' : '');
-  $('#aiLabel').textContent = state.busy ? 'AI 處理中' : s ? 'AI 待命中' : 'AI';
+  const run = state.sessions.find(x => x.running);
+  $('#aiDot').className = 'dot ' + (run ? 'busy' : s ? 'on' : '');
+  $('#aiLabel').textContent = run ? `AI 處理中（${scopeName(run.slice)}）` : s ? 'AI 待命中' : 'AI';
 }
 
-function openAi() { $('#aiDrawer').hidden = false; renderAi(); }
+function openAi(scope) { if (scope) state.aiScope = scope; else if (state.scope) state.aiScope = state.scope; $('#aiDrawer').hidden = false; renderAi(); }
 
 async function renderAi() {
   const box = $('#aiSession');
-  if (!state.slice) { box.innerHTML = '先選一條切片。'; return; }
+  const warn = state.gitignored === false ? `<div class="small" style="background:var(--hint);padding:6px 10px;border-radius:10px">設計 repo 的 <code>.gitignore</code> 沒有排除 <code>.domain-web/</code>（AI session 的登記與紀錄放在這裡），請加上這一行。</div>` : '';
+  if (state.pending) { box.innerHTML = warn + state.pending.html; state.pending.bind(); return; }
   const s = curSession();
-  let warn = state.gitignored === false ? `<div class="small" style="background:var(--hint);padding:6px 10px;border-radius:10px">切片 repo 的 <code>.gitignore</code> 沒有排除 <code>.domain-web/</code>（session 登記表放在這裡），請加上這一行。</div>` : '';
-  if (!s) { box.innerHTML = warn + await newSessionCard(`<b>${esc(state.slice)}</b> 還沒有使用中的 AI session。`); bindNewSession(); return; }
-  const mismatch = s.purpose !== curPurpose();
-  if ((mismatch || s.compacted) && state.sessionChoice !== s.id) {
-    const why = s.compacted ? '這個 session 經過摘要壓縮，容易憑記憶回答' : `使用中的 session 是「${esc(s.purpose)}」，現在要做的是「${esc(curPurpose())}」`;
-    box.innerHTML = warn + await newSessionCard(`${why}。要開新的 session 嗎？`, true);
-    bindNewSession();
-    $('#keepSession').onclick = () => { state.sessionChoice = s.id; renderAi(); };
-    return;
-  }
-  box.innerHTML = warn + `<div>session：<b>${esc(s.name)}</b>（第 ${s.turns} 次）</div>
+  if (!aiScope()) { box.innerHTML = warn + '<div class="muted">在總覽頁時，AI 對話跟著你按的按鈕走（規劃或某條切片）。</div>'; $('#aiLog').innerHTML = ''; return; }
+  if (!s) { box.innerHTML = warn + `<div><b>${esc(scopeName(aiScope()))}</b> 還沒有 AI session。按畫面上的按鈕交給 AI 時會自動開一個。</div>`; $('#aiLog').innerHTML = ''; return; }
+  box.innerHTML = warn + `<div>session：<b>${esc(s.name)}</b>（第 ${s.turns} 次）${s.running ? '　<span class="chip turn">處理中</span>' : ''}</div>
     <details class="tech"><summary>在 terminal 接著做</summary><code>claude --resume ${esc(s.id)}</code></details>
-    <div><button class="btn" id="endSession">結束這個 session</button></div>`;
-  $('#endSession').onclick = async () => { await api(`/api/sessions/${s.id}/end`, {}); await refreshSlices(); renderAi(); };
+    <div><button class="btn" id="endSession" ${s.running ? 'disabled' : ''}>結束這個 session</button></div>`;
+  $('#endSession').onclick = async () => { await api(`/api/sessions/${s.id}/end`, {}); await refreshSessions(); renderAi(); };
+  const ev = await api(`/api/sessions/${s.id}/events`);
+  const log = $('#aiLog');
+  log.innerHTML = '';
+  ev.events.slice(-300).forEach(showEvent);
+  log.dataset.sid = s.id;
+  log.dataset.n = ev.n;
 }
 
-async function newSessionCard(msg, withKeep) {
-  const h = await api(`/api/handoff?slice=${enc(state.slice)}&purpose=${enc(curPurpose())}&review=${enc(state.path || '')}`);
-  return `<div>${msg}</div>
-    <details><summary class="small">交接提示（由檔案產生，送出前可以改）</summary><textarea id="handoff">${esc(h.text)}</textarea></details>
-    <div class="row"><button class="btn primary" id="newSession">A（建議）：開新的 session</button>
-    ${withKeep ? '<button class="btn" id="keepSession">B：繼續用這個</button>' : ''}</div>`;
-}
-
-function bindNewSession() {
-  $('#newSession').onclick = async () => {
-    try {
-      const s = await api('/api/sessions', { slice: state.slice, purpose: curPurpose(), handoff: $('#handoff').value });
-      await refreshSlices();
-      await renderAi();
-      await aiSend(s.handoff);
-    } catch (e) { toast(e.message); }
+// 交給 AI 的唯一入口：scope 範圍、purpose 用途、message 要說的話
+async function runAi(scope, purpose, message, opts = {}) {
+  await refreshSessions();
+  const s = sessionOf(scope);
+  state.aiScope = scope;
+  if (s && s.running) { openAi(scope); toast('AI 還在處理上一件事，做完再交下一件'); return; }
+  const same = s && s.purpose === purpose && !s.compacted;
+  if (same || (s && opts.keep)) return send(s, message, opts);
+  if (!s) return startNew(scope, purpose, message, opts);
+  // 用途不同或壓縮過：問人
+  const why = s.compacted ? '現在的 session 經過摘要壓縮，容易憑記憶回答' : `現在的 session 是「${esc(s.purpose)}」，這件事是「${esc(purpose)}」`;
+  const h = await api(`/api/handoff?slice=${enc(scope)}&purpose=${enc(purpose)}&review=${enc(opts.review || '')}`);
+  state.pending = {
+    html: `<div class="card hint" style="padding:12px 14px"><b>${why}。</b>要開新的 session 嗎？
+      <details style="margin-top:6px"><summary class="small">新 session 的交接提示（由檔案產生，可以改）</summary><textarea id="handoff">${esc(h.text)}</textarea></details>
+      <div class="row" style="margin-top:8px"><button class="btn primary" id="newSession">A（建議）：開新的</button><button class="btn" id="keepSession">B：繼續用這個</button></div></div>`,
+    bind() {
+      $('#newSession').onclick = () => { const t = $('#handoff').value; state.pending = null; startNew(scope, purpose, message, opts, t); };
+      $('#keepSession').onclick = () => { state.pending = null; send(s, message, opts); };
+    },
   };
+  openAi(scope);
 }
 
-// 主要動作：打開 AI 抽屜；send=true 直接送出，false 只填進輸入框讓人補完
-async function aiPrompt(text, send = true) {
-  openAi();
-  if (!curSession()) { $('#aiInput').value = text; toast('先開一個 AI session，再送出'); return; }
-  if (send) aiSend(text);
-  else { $('#aiInput').value = text; $('#aiInput').focus(); }
+async function startNew(scope, purpose, message, opts, handoffText) {
+  try {
+    if (handoffText === undefined) handoffText = (await api(`/api/handoff?slice=${enc(scope)}&purpose=${enc(purpose)}&review=${enc(opts.review || '')}`)).text;
+    // 交接提示叫 AI 先讀檔、執行 /domain-status；接著做這件事，不用再等一輪
+    const first = handoffText.replace(/讀完後執行 \/domain-status，用一句話說明現在的狀態與下一步，等我指示。/, '讀完後執行 /domain-status，然後做下面這件事。') + '\n\n' + message;
+    const s = await api('/api/sessions', { slice: scope, purpose, handoff: handoffText });
+    await refreshSessions();
+    return send(s, first, opts);
+  } catch (e) { toast(e.message); }
 }
 
-// 行內問 AI：答案顯示在題目旁邊，不必打開抽屜
+async function send(s, text, opts = {}) {
+  try {
+    await api(`/api/sessions/${s.id}/send`, { text });
+  } catch (e) { toast(e.message); return; }
+  state.aiScope = s.slice;
+  await refreshSessions();
+  if (!opts.quiet) openAi(s.slice);
+  watch(s.id, opts.onEvent);
+  if (!opts.quiet) route();
+}
+
+// 輪詢背景工作的事件；做完時重新整理畫面（AI 可能改了檔案）
+function watch(sid, onEvent) {
+  const w = state.watching[sid] = state.watching[sid] || { n: 0 };
+  if (onEvent) w.onEvent = onEvent;
+  if (w.timer) return;
+  const tick = async () => {
+    let r;
+    try { r = await api(`/api/sessions/${sid}/events?after=${w.n}`); } catch (e) { w.timer = null; return; }
+    const log = $('#aiLog');
+    const shown = !$('#aiDrawer').hidden && log.dataset.sid === sid;
+    r.events.forEach((ev, k) => {
+      if (shown && w.n + k >= +log.dataset.n) { showEvent(ev); log.dataset.n = w.n + k + 1; }
+    });
+    w.n += r.events.length;
+    for (const ev of r.events) {
+      if (w.onEvent) w.onEvent(ev);
+      if (ev.kind === 'tool' && !ev.sub) state.lastTool = `${ev.name} ${ev.brief}`;
+    }
+    const live = $('#liveTool');
+    if (live && state.lastTool) live.textContent = state.lastTool;
+    if (r.running) { w.timer = setTimeout(tick, 1500); return; }
+    w.timer = null; w.onEvent = null;
+    await refreshSessions();
+    if (!$('#aiDrawer').hidden) renderAi();
+    if (!w.quietDone) { toast('AI 做完了，畫面已更新'); route(); }
+    w.quietDone = false;
+  };
+  w.timer = setTimeout(tick, 300);
+}
+
+// 行內問 AI：答案顯示在題目旁邊；用這條切片目前的 session，只解釋不改檔
 async function askAi(text, out) {
-  if (!curSession()) { openAi(); toast('先開一個 AI session（右邊），再問'); return; }
+  const scope = state.scope;
+  state.aiScope = scope;
+  const s = sessionOf(scope);
   out.hidden = false;
   out.innerHTML = '<span class="tool">AI 思考中…</span>';
   let first = true;
-  await aiSend(text, ev => {
+  const onEvent = ev => {
+    if (ev.kind === 'me') return;
     if (first) { out.innerHTML = ''; first = false; }
     if (ev.kind === 'text' && !ev.sub) out.insertAdjacentHTML('beforeend', inline(ev.text) + '\n');
     else if (ev.kind === 'tool' && !ev.sub) out.insertAdjacentHTML('beforeend', `<span class="tool">· ${esc(ev.name)} ${esc(ev.brief)}</span>\n`);
-  }, true);
+  };
+  if (s && s.running) { out.innerHTML = 'AI 還在處理別的事，等一下再問。'; return; }
+  const w = s && (state.watching[s.id] = state.watching[s.id] || { n: 0 });
+  if (w) w.quietDone = true;
+  if (s) return send(s, text, { quiet: true, onEvent });
+  await startNew(scope, curPurpose(), text, { quiet: true, onEvent });
 }
 
-async function aiSend(text, onEvent, quiet) {
-  const s = curSession();
-  if (!s) { openAi(); return; }
-  if (state.busy) { toast('AI 還在處理上一件事'); return; }
-  const log = $('#aiLog');
-  log.insertAdjacentHTML('beforeend', `<div class="me">› ${esc(text)}</div>`);
-  if (!quiet) $('#aiDrawer').hidden = false;
-  state.busy = true; renderAiHead();
-  $('#aiSend').disabled = true;
-  try {
-    const r = await fetch(`/api/sessions/${s.id}/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
-    if (!r.ok) throw new Error((await r.json()).detail);
-    const reader = r.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '';
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let k;
-      while ((k = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, k); buf = buf.slice(k + 1);
-        if (!line.trim()) continue;
-        const ev = JSON.parse(line);
-        showEvent(ev);
-        if (onEvent) onEvent(ev);
-      }
-    }
-  } catch (e) { toast(e.message); }
-  state.busy = false;
-  $('#aiSend').disabled = false;
-  await refreshSlices();
-  if (!quiet) route();  // AI 可能改了審查頁或產生了新的
+function curPurpose() {
+  const m = (state.path || '').match(/_([^/]+)\.md$/);
+  return m ? `審查 ${m[1]}` : '設計';
 }
 
 function showEvent(ev) {
   const log = $('#aiLog');
   const sub = ev.sub ? ' sub' : '';
-  if (ev.kind === 'text') log.insertAdjacentHTML('beforeend', `<div class="t${sub}">${inline(ev.text)}</div>`);
+  if (ev.kind === 'me') state.lastText = '';
+  if (ev.kind === 'me') log.insertAdjacentHTML('beforeend', `<div class="me">› ${esc(ev.text.length > 600 ? ev.text.slice(0, 600) + '…' : ev.text)}</div>`);
+  else if (ev.kind === 'text') { log.insertAdjacentHTML('beforeend', `<div class="t${sub}">${inline(ev.text)}</div>`); if (!ev.sub) state.lastText = ev.text; }
   else if (ev.kind === 'tool') log.insertAdjacentHTML('beforeend', `<div class="tool${sub}">· ${esc(ev.name)} ${esc(ev.brief)}</div>`);
   else if (ev.kind === 'compacted') log.insertAdjacentHTML('beforeend', '<div class="deny">這個 session 剛經過摘要壓縮，建議做完這一段就開新的 session。</div>');
   else if (ev.kind === 'error') log.insertAdjacentHTML('beforeend', `<div class="err">${esc(ev.text)}</div>`);
   else if (ev.kind === 'result') {
-    for (const d of ev.denials || []) log.insertAdjacentHTML('beforeend', `<div class="deny">被擋下（要核准）：${esc(d.tool)}。請在 terminal 用 <code>claude --resume</code> 處理。</div>`);
+    for (const d of ev.denials || []) log.insertAdjacentHTML('beforeend', `<div class="deny">被擋下（要核准）：${esc(d.tool)} ${esc(JSON.stringify(d.input || '').slice(0, 160))}。請在 terminal 用 <code>claude --resume</code> 處理。</div>`);
     if (!ev.ok) log.insertAdjacentHTML('beforeend', `<div class="err">${esc(ev.text)}</div>`);
+    else if (ev.text && ev.text.trim() !== (state.lastText || '').trim()) log.insertAdjacentHTML('beforeend', `<div class="t">${inline(ev.text)}</div>`);
+    log.insertAdjacentHTML('beforeend', '<div class="tool">— 這一輪結束 —</div>');
   }
   log.scrollTop = log.scrollHeight;
 }
 
+// AI 最後一則回覆裡的選擇題（WEB_PROMPT 要它照「問題／例子／A（建議）／B／其他」寫）
+function parseAsk(text) {
+  const lines = String(text || '').split('\n').map(l => l.replace(/^\s*[-*]\s*/, '').replace(/\*\*/g, '').trim());
+  const opts = [];
+  let q = '', ex = '';
+  for (const l of lines) {
+    let m;
+    if ((m = l.match(/^問題[：:]\s*(.+)$/))) q = m[1];
+    else if ((m = l.match(/^例子[：:]\s*(.+)$/))) ex = m[1];
+    else if ((m = l.match(/^([A-H])(（建議）)?[：:]\s*(.+)$/))) {
+      const [sum, out] = m[3].split(/\s*→\s*/);
+      opts.push({ key: m[1], rec: !!m[2], sum, out: out || '' });
+    }
+  }
+  return opts.length >= 2 ? { q, ex, opts } : null;
+}
+
+// 「AI 在等你」：範圍內的 session 最後一則回覆；有選擇題就做成按鈕
+function waitingCard(scope) {
+  const s = sessionOf(scope);
+  if (!s || s.running || !s.last_reply) return '';
+  const key = 'seen:' + s.id + ':' + s.last_at;
+  if (remember(key)) return '';
+  const ask = parseAsk(s.last_reply);
+  const body = ask
+    ? `${ask.q ? `<h2 style="margin:6px 0">${esc(ask.q)}</h2>` : ''}${ask.ex ? `<div class="box"><div class="label">舉個例子</div>${inline(ask.ex)}</div>` : ''}
+       <div class="opts" style="margin-top:10px">${ask.opts.map(o => `<button class="opt ${o.rec ? 'rec' : ''}" data-reply="${o.key}"><span class="row spread"><span class="k">${o.key}</span>${o.rec ? '<span class="badge-rec">★ AI 建議</span>' : ''}</span><span class="sum">${inline(o.sum)}</span>${o.out ? `<span class="out">選了之後：${inline(o.out)}</span>` : ''}</button>`).join('')}</div>`
+    : '';
+  if (!ask) {
+    const first = s.last_reply.split('\n').map(x => x.trim()).filter(Boolean).pop() || '';
+    return `<details class="card waiting quiet" data-scope="${esc(scope)}"><summary><span class="chip">AI 上次說</span> ${esc(plain(first).slice(0, 120))}</summary>
+      <div class="ai-said">${md(s.last_reply.length > 1500 ? s.last_reply.slice(-1500) : s.last_reply)}</div>
+      <div class="row" style="margin-top:10px"><input type="text" class="soft" data-replytext style="flex:1" placeholder="回覆 AI（例：好，繼續）"><button class="btn primary" data-replysend>送出</button><button class="btn ghost small-btn" data-seen="${esc(key)}">收起來</button></div></details>`;
+  }
+  return `<section class="card lift waiting" data-scope="${esc(scope)}">
+    <div class="row spread"><span class="chip turn">${ask ? 'AI 在等你回答' : 'AI 上次說'}</span><button class="btn ghost small-btn" data-seen="${esc(key)}">不用回了</button></div>
+    ${body}
+    <div class="row" style="margin-top:10px"><input type="text" class="soft" data-replytext style="flex:1" placeholder="都不是？寫一句"><button class="btn primary" data-replysend>送出</button></div>
+  </section>`;
+}
+
+function bindWaiting() {
+  $$('.waiting').forEach(card => {
+    const scope = card.dataset.scope;
+    const s = sessionOf(scope);
+    const reply = v => runAi(scope, s.purpose, v, { keep: true });
+    $$('[data-reply]', card).forEach(b => b.onclick = () => reply(b.dataset.reply));
+    const inp = $('[data-replytext]', card);
+    const go1 = () => { const v = inp.value.trim(); if (v) reply(v); };
+    $('[data-replysend]', card).onclick = go1;
+    inp.onkeydown = e => { if (e.key === 'Enter') go1(); };
+    $('[data-seen]', card).onclick = () => { remember($('[data-seen]', card).dataset.seen, '1'); card.remove(); };
+  });
+}
+
+// 「AI 正在做…」：範圍內有背景工作時顯示
+function runningCard(scope, what) {
+  const s = sessionOf(scope);
+  if (!s || !s.running) return '';
+  return `<section class="hero idle working">
+    <div style="flex:999 1 480px;min-width:0">
+      <span class="chip">輪到 AI</span><h1>${esc(what || `AI 正在做：${s.purpose}`)}</h1>
+      <p class="muted small">做完畫面會自動更新。可以先去做別的事，或打開右上角的 AI 看過程。</p>
+      <p class="small live"><span class="dot busy"></span> <span id="liveTool">${esc(state.lastTool || '準備中…')}</span></p>
+    </div>
+    <button class="btn big" id="showAi">看過程</button>
+  </section>`;
+}
+
+// ---------- 總覽：整個 domain 走到哪 ----------
+
+async function loadProject() { state.project = await api('/api/project'); return state.project; }
+
+function planSlices(P) {
+  // 地圖上的切片，依建議順序；加上資料夾裡的進度
+  const rows = (P.plan ? P.plan.slices : []).slice().sort((a, b) => (+a['建議順序'] || 99) - (+b['建議順序'] || 99));
+  const folders = new Map(P.slices.map(x => [x.slice, x]));
+  const out = rows.map(r => ({ code: r['切片'], row: r, f: folders.get(r['切片']) }));
+  for (const f of P.slices) if (!rows.some(r => r['切片'] === f.slice)) out.push({ code: f.slice, row: null, f });
+  return out;
+}
+
+function scenario(text) {
+  const parts = String(text || '').split(/\s*→\s*/);
+  return parts.length > 1 ? `<span class="scn">${parts.map((x, k) => `<span class="${k === 0 ? 'from' : k === parts.length - 1 ? 'to' : 'mid'}">${inline(x)}</span>`).join('<i>→</i>')}</span>` : inline(text);
+}
+
+function miniSteps(f) {
+  if (!f) return '';
+  return `<span class="mini">${f.steps.map(x => `<i class="${x.status.startsWith('已凍結') ? 'frozen' : x.status === '待檢查' ? 'wait' : x.status === '未開始' ? '' : 'draft'}" title="${CIRCLED[x.n]} ${esc(x.name)}：${esc(x.status)}">${CIRCLED[x.n]}</i>`).join('')}</span>`;
+}
+
+// 現在整個 domain 輪到誰、做什麼
+function nextOfProject(P) {
+  const plan = P.plan;
+  const ps = P.plan_session;
+  if (ps && ps.running) return { kind: 'running', scope: '_plan' };
+  if (!plan && !P.topic) return { kind: 'start' };
+  if (!plan) return { kind: 'plan-ai' };
+  if (!plan.agreed) return { kind: 'plan' };
+  const list = planSlices(P);
+  const active = list.find(x => x.f && x.f.next && x.f.next.n <= 5);
+  if (active) {
+    const f = active.f;
+    if (f.session && f.session.running) return { kind: 'running', scope: f.slice, item: active };
+    return { kind: f.review ? 'review' : 'slice', item: active };
+  }
+  const nxt = list.find(x => !x.f && x.row && x.row['狀態'] === '候選');
+  if (nxt) return { kind: 'pick', item: nxt };
+  return { kind: 'done' };
+}
+
+async function renderHub() {
+  state.slice = null; state.scope = null; state.path = null;
+  syncSlicePick();
+  setTop(null, '');
+  const P = await loadProject();
+  const N = nextOfProject(P);
+  const plan = P.plan;
+  const list = planSlices(P);
+  const pendingDrafts = P.drafts.filter(d => d.pending).length;
+  const toProvide = plan ? plan.inventory.filter(x => x['狀態'] === '待提供').length : 0;
+  const pq = plan ? plan.pending.filter(x => x['狀態'] !== '已回覆' && !x['答覆']).length : 0;
+  const stage = { start: 0, 'plan-ai': 1, plan: 1, running: N.scope === '_plan' ? 1 : 2, pick: 2, slice: 2, review: 2, done: 3 }[N.kind];
+  const journey = ['主題草案', '規劃：資料、切片地圖、名詞', '一條一條切片做 ①～⑤', '設計完成，有系統再做 ⑥'];
+
+  let hero;
+  if (N.kind === 'start') hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">從這裡開始</span>
+      <h1>想做什麼系統？</h1><p>先用幾句話寫下方向：給誰用、要解決什麼、明確不做什麼。不用懂這套流程，AI 會依它問清楚、盤點資料、提出怎麼切。</p></div>
+      <a class="btn big yellow" href="#/start">寫主題草案 ›</a></section>`;
+  else if (N.kind === 'plan-ai') hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到 AI</span>
+      <h1>主題草案寫好了，請 AI 規劃</h1><p>AI 會盤點這個領域通常有哪些資料（你有的、公開找得到的、只能先推想的），把要做的事切成一條條情境（切片），並列出全局會用到的名詞。</p>
+      <p class="muted small">之後輪到你：補資料、看推想草稿、看切片地圖，同意後才開始第一條。</p></div>
+      <button class="btn big primary" id="doPlan">請 AI 規劃 ›</button></section>`;
+  else if (N.kind === 'running') hero = runningCard(N.scope, N.scope === '_plan' ? 'AI 正在規劃' : `AI 正在做 ${N.scope}`);
+  else if (N.kind === 'plan') {
+    const parts = [];
+    if (pendingDrafts) parts.push(`<strong>${pendingDrafts} 份推想草稿</strong>要你看`);
+    if (toProvide) parts.push(`<strong>${toProvide} 份資料</strong>等你提供`);
+    if (pq) parts.push(`<strong>${pq} 個待釐清</strong>`);
+    hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到你</span>
+      <h1>看規劃：${plan.slices.length} 條切片、${P.sketch ? P.sketch.nouns.length : 0} 個名詞</h1>
+      <p>${parts.length ? parts.join('、') + '；' : ''}看完切片地圖與名詞草圖，有意見就寫，沒問題就同意。</p></div>
+      <a class="btn big yellow" href="#/plan">看規劃 ›</a></section>`;
+  } else if (N.kind === 'review') {
+    const f = N.item.f;
+    hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到你</span>
+      <h1>審查 ${esc(f.slice)} ${esc(stepName(f.review.step))}</h1><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p>
+      <p>還有 ${f.review.counts.open} 件事要做。</p></div><a class="btn big yellow" href="#/s/${enc(f.slice)}">去審查 ›</a></section>`;
+  } else if (N.kind === 'slice') {
+    const f = N.item.f;
+    hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">進行中</span>
+      <h1>${esc(f.slice)}：下一關 ${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}</h1><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p></div>
+      <a class="btn big primary" href="#/s/${enc(f.slice)}">打開 ›</a></section>`;
+  } else if (N.kind === 'pick') {
+    const r = N.item.row;
+    hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">下一條切片</span>
+      <h1>${esc(r['切片'])}</h1><p class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'])}</p>
+      <p class="small">建議順序 ${esc(r['建議順序'])}${r['依賴'] && r['依賴'] !== '—' ? `　依賴：${esc(r['依賴'])}` : ''}</p></div>
+      <a class="btn big yellow" href="#/new/${enc(r['切片'])}">開始這一條 ›</a></section>`;
+  } else hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>地圖上的切片都做完了</h1>
+      <p class="muted">有新的情境或需求，到「規劃」補進地圖。</p><a class="btn big" href="#/plan">看規劃</a></section>`;
+
+  const eqTotal = P.slices.reduce((n, x) => n + x.eq_open, 0);
+  $('#app').innerHTML = `
+    <nav class="journey">${journey.map((j, k) => `<div class="${k < stage ? 'done' : k === stage ? 'now' : ''}"><b>${k + 1}</b><span>${esc(j)}</span></div>`).join('')}</nav>
+    ${waitingCard('_plan')}
+    ${hero}
+    ${list.length ? `<section><div class="row spread"><h2 style="margin:0">切片</h2>${plan ? `<a href="#/plan">切片地圖${plan.agreed ? '（已同意）' : '（討論中）'}</a>` : ''}</div>
+      <div class="slices">${list.map(x => {
+        const r = x.row || {};
+        const st = x.f ? (x.f.review ? '輪到你審查' : x.f.session && x.f.session.running ? 'AI 進行中' : !x.f.next ? '完成' : x.f.next.n === 6 ? '設計完成（待驗證）' : `下一關 ${CIRCLED[x.f.next.n]}`) : r['狀態'] || '';
+        const href = x.f ? `#/s/${enc(x.code)}` : plan && plan.agreed && r['狀態'] === '候選' ? `#/new/${enc(x.code)}` : '#/plan';
+        return `<a class="slice ${x.f && x.f.review ? 'turn' : ''}" href="${href}">
+          <span class="row spread"><b>${esc(x.code)}</b><span class="chip ${x.f && x.f.review ? 'turn' : ''}">${esc(st)}</span></span>
+          <span class="small">${scenario(r['情境（起點 → 可驗證的結果）'] || '')}</span>
+          ${miniSteps(x.f)}
+          ${x.f && (x.f.eq_open || x.f.eq_answered) ? `<span class="small muted">專家問題：${x.f.eq_open} 題等答覆${x.f.eq_answered ? `、${x.f.eq_answered} 題答覆了待處理` : ''}</span>` : ''}
+        </a>`;
+      }).join('')}</div></section>` : ''}
+    <div class="cols">
+      <section class="wide">
+        <div class="card"><div class="row spread"><div><div class="label">資料（inputs/）</div>
+          <span class="small">${Object.entries(P.inputs).map(([d, fs]) => `${esc(d.replace(/^inputs\/?/, '') || '根目錄')} ${fs.length}`).join('、') || '還沒有資料'}</span></div>
+          <button class="btn" id="addInput">加資料</button></div>
+          ${P.topic ? `<div class="small" style="margin-top:8px">主題草案：<a class="ref-link" data-file="${esc(P.topic)}" data-line="1">${esc(P.topic)}</a>　<a href="#/start">補充</a></div>` : ''}
+        </div>
+      </section>
+      <section class="side">${eqTotal ? `<div class="card hint"><strong>支線：${eqTotal} 題專家問題等答覆</strong><div class="small">${P.slices.filter(x => x.eq_open).map(x => `<a href="#/eq/${enc(x.slice)}">${esc(x.slice)} ${x.eq_open}</a>`).join('、')}</div></div>` : ''}</section>
+    </div>`;
+  bindWaiting();
+  const dp = $('#doPlan');
+  if (dp) dp.onclick = () => runAi('_plan', '規劃', `/domain-plan 主題草案在 ${P.topic}（使用者自己寫的方向）。先盤點現實資料，再提出切片地圖與全局名詞草圖。`);
+  const sa = $('#showAi'); if (sa) sa.onclick = () => openAi(N.scope);
+  $('#addInput').onclick = () => inputDialog({ folder: 'shared' });
+}
+
+// ---------- 主題草案 ----------
+
+const TOPIC_Q = [
+  ['想做的系統', '想做什麼系統？一兩句話就好', '例：連鎖飲料店的人資系統，先做請假與特休'],
+  ['給誰用', '給誰用？', '例：店長、員工、總部人資'],
+  ['要解決什麼', '現在哪裡最痛、要解決什麼？', '例：特休天數常算錯、事後補請假很亂'],
+  ['這一階段一定要做到', '這一階段一定要做到什麼？', '例：特休天數正確、到期提醒'],
+  ['明確不做', '明確不做什麼？', '例：薪資計算、招募'],
+  ['有沒有專家或客戶', '有沒有 Domain 專家或客戶端使用者可以問？是誰？', '例：總部人資主管王小姐，每週可以問一次'],
+  ['其他', '其他想讓 AI 知道的（規模、時程、已有的系統）', '例：20 家店、每店 10 人；月初結算'],
+];
+
+async function renderStart() {
+  state.slice = null; state.scope = '_plan';
+  syncSlicePick();
+  setTop(['#/', '總覽'], '<strong>主題草案</strong>');
+  const P = state.project || await loadProject();
+  $('#app').innerHTML = `
+    <div class="narrow">
+      <div><span class="chip">第 1 步</span><h1 class="qtitle">寫下你想做的系統</h1>
+        <p class="muted">用自己的話寫，不用專業術語；空著的 AI 之後會用選擇題問。存成 <code>inputs/shared/主題草案.md</code>${P.topic ? '（已經有了，這次寫的會加成一節「補充」，不改舊的）' : ''}。</p></div>
+      <section class="card lift" style="display:flex;flex-direction:column;gap:16px">
+        ${TOPIC_Q.map(([k, q, ph], i) => `<label class="label" style="color:var(--ink);font-size:16px">${esc(q)}
+          ${i === 0 ? `<textarea data-k="${k}" rows="2" placeholder="${esc(ph)}"></textarea>` : `<input type="text" data-k="${k}" class="soft" placeholder="${esc(ph)}">`}</label>`).join('')}
+      </section>
+      <section class="card">
+        <div class="label">手上有的資料（表單、規章、Excel、訪談）</div>
+        <p class="small muted" style="margin:0 0 8px">可以現在放，也可以之後。放進來的存在 <code>inputs/shared/</code>，原樣保留。</p>
+        <button class="btn" id="addInput">加資料</button>
+      </section>
+      <div class="row"><button class="btn big primary" id="saveTopic">存好，請 AI 規劃 ›</button><button class="btn big" id="saveOnly">只存起來</button></div>
+    </div>`;
+  const collect = () => Object.fromEntries($$('[data-k]').map(x => [x.dataset.k, x.value.trim()]));
+  const save = async () => {
+    const f = collect();
+    if (!Object.values(f).some(Boolean)) { toast('至少寫一項'); return null; }
+    try { return (await api('/api/topic', { fields: f })).path; } catch (e) { toast(e.message); return null; }
+  };
+  $('#saveTopic').onclick = async () => {
+    const p = await save();
+    if (!p) return;
+    await loadProject();
+    const again = !!(state.project.plan);
+    runAi('_plan', '規劃', again
+      ? `/domain-plan 使用者在 ${p} 補充了方向（最後一節）。依它更新切片地圖與名詞草圖。`
+      : `/domain-plan 主題草案在 ${p}（使用者自己寫的方向）。先盤點現實資料，再提出切片地圖與全局名詞草圖。`);
+    go('#/');
+  };
+  $('#saveOnly').onclick = async () => { if (await save()) { toast('存好了'); go('#/'); } };
+  $('#addInput').onclick = () => inputDialog({ folder: 'shared' });
+}
+
+// ---------- 加資料（貼上或上傳） ----------
+
+function inputDialog({ folder = 'shared', name = '', hint = '' } = {}) {
+  const d = $('#dlg');
+  d.innerHTML = `<form method="dialog" class="dlg">
+    <h2 style="margin:0">加資料到 <code>inputs/${esc(folder)}/</code></h2>
+    ${hint ? `<p class="small muted" style="margin:0">${esc(hint)}</p>` : ''}
+    <label class="label" style="color:var(--ink)">名稱<input type="text" id="inName" value="${esc(name)}" placeholder="例：到職檢核表、店長訪談 10-28"></label>
+    <label class="label" style="color:var(--ink)">貼上文字（訪談、規章、需求…）<textarea id="inText" rows="8"></textarea></label>
+    <label class="label" style="color:var(--ink)">或上傳檔案（Excel、PDF、圖片，原樣保存）<input type="file" id="inFile"></label>
+    <div class="row"><button class="btn primary" id="inSave" value="save">存起來</button><button class="btn" value="cancel">取消</button></div>
+  </form>`;
+  d.showModal();
+  $('#inSave').onclick = async e => {
+    e.preventDefault();
+    const file = $('#inFile').files[0];
+    const nm = $('#inName').value.trim() || (file && file.name) || '';
+    try {
+      let r;
+      if (file) {
+        const buf = new Uint8Array(await file.arrayBuffer());
+        let bin = '';
+        for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+        const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '';
+        r = await api('/api/inputs', { folder, name: nm.endsWith(ext) ? nm : nm + ext, b64: btoa(bin) });
+      } else {
+        if (!nm) { toast('寫個名稱'); return; }
+        r = await api('/api/inputs', { folder, name: nm, text: $('#inText').value });
+      }
+      d.close();
+      toast(`存好了：${r.path}`);
+      if (state.onInput) state.onInput(r.path, nm);
+      route();
+    } catch (err) { toast(err.message); }
+  };
+}
+
+// ---------- 規劃：資料、草稿、切片地圖、名詞草圖 ----------
+// 人的意見先放進「回饋籃」，一次交給 AI 改（不一條一條打斷 AI）
+
+function basket(scope) { try { return JSON.parse(remember('fb:' + scope) || '[]'); } catch (e) { return []; } }
+function setBasket(scope, items) { remember('fb:' + scope, JSON.stringify(items)); renderBasket(scope); }
+function addFeedback(scope, text) { const b = basket(scope); b.push(text); setBasket(scope, b); toast('放進回饋了，看完再一起交給 AI'); }
+
+function renderBasket(scope) {
+  const el = $('#basket');
+  if (!el) return;
+  const items = basket(scope);
+  el.hidden = !items.length;
+  el.innerHTML = `<div class="row spread"><strong>你的回饋（${items.length}）</strong><button class="btn primary" id="sendFb">交給 AI 修改 ›</button></div>
+    <ol>${items.map((x, k) => `<li>${esc(x)} <button class="x-del" data-del="${k}" aria-label="刪除">✕</button></li>`).join('')}</ol>`;
+  $$('[data-del]', el).forEach(b => b.onclick = () => { const it = basket(scope); it.splice(+b.dataset.del, 1); setBasket(scope, it); });
+  $('#sendFb').onclick = () => {
+    const msg = `/domain-plan 使用者看了切片地圖、名詞草圖與資料盤點，回饋如下（逐條處理，改了的記 slices/CHANGELOG.md；答覆待釐清的照格式填寫）：\n` + items.map((x, k) => `${k + 1}. ${x}`).join('\n');
+    setBasket(scope, []);
+    runAi('_plan', '規劃', msg);
+  };
+}
+
+function fbButton(text, label = '寫意見') { return `<button class="btn small-btn" data-fb="${esc(text)}">${label}</button>`; }
+
+function bindFb() {
+  $$('[data-fb]').forEach(b => b.onclick = () => {
+    const host = b.closest('.fb-host') || b.parentElement;
+    if ($('.note-box', host)) return;
+    host.insertAdjacentHTML('beforeend', `<div class="note-box row"><input type="text" style="flex:1" placeholder="寫一句，按 Enter"><button class="btn primary">放進回饋</button></div>`);
+    const inp = $('.note-box input', host);
+    inp.focus();
+    const save = () => { const v = inp.value.trim(); if (!v) return; addFeedback('_plan', `${b.dataset.fb}：${v}`); $('.note-box', host).remove(); };
+    $('.note-box button', host).onclick = save;
+    inp.onkeydown = e => { if (e.key === 'Enter') save(); };
+  });
+}
+
+const INV_CLASS = { '已有': 'ok', '已蒐集': 'ok', '推想草稿': 'guess', '待提供': 'need', '找不到': 'none' };
+
+async function renderPlan() {
+  state.slice = null; state.scope = '_plan';
+  syncSlicePick();
+  setTop(['#/', '總覽'], '<strong>規劃</strong>');
+  const P = await loadProject();
+  const plan = P.plan;
+  if (!plan) { $('#app').innerHTML = runningCard('_plan', 'AI 正在規劃') || `<div class="card">還沒有切片地圖。<a href="#/">回總覽</a>請 AI 規劃。</div>`; const sa = $('#showAi'); if (sa) sa.onclick = openAi; return; }
+  const sk = P.sketch;
+  const drafts = P.drafts;
+  const pendingDrafts = drafts.filter(d => d.pending);
+  const name = remember('reviewer');
+  const byLayer = {};
+  for (const n of (sk ? sk.nouns : [])) (byLayer[n['層'] || '其他'] = byLayer[n['層'] || '其他'] || []).push(n);
+  const aiDecisions = plan.decisions.filter(d => /待確認/.test(d['提出／同意'] || ''));
+  const blockers = [];
+  if (pendingDrafts.length) blockers.push(`${pendingDrafts.length} 份推想草稿還沒接受`);
+  if (basket('_plan').length) blockers.push('回饋還沒交給 AI');
+  const running = sessionOf('_plan') && sessionOf('_plan').running;
+
+  $('#app').innerHTML = `
+    ${runningCard('_plan', 'AI 正在改規劃')}
+    ${waitingCard('_plan')}
+    <div class="row spread"><div><span class="chip ${plan.agreed ? 'new' : ''}">${esc(plan.status || '討論中')}</span>
+      <h1 style="margin:8px 0 0">規劃</h1><p class="muted" style="margin:4px 0 0">${esc(plan.basis)}</p></div>
+      <nav class="tabs"><button data-jump="p-data">資料</button><button data-jump="p-map">切片地圖</button><button data-jump="p-nouns">名詞</button><button data-jump="p-ask">待釐清與決定</button></nav></div>
+
+    <section class="card fb-host"><div class="label">方向（整體目標）</div>
+      <ul class="goals">${plan.goals.map(g => `<li>${inline(g)}</li>`).join('')}</ul>
+      <div class="row">${fbButton('整體目標')}<a class="btn small-btn" href="#/start">補充主題草案</a></div></section>
+
+    <section id="p-data"><h2>1　現實資料</h2>
+      <p class="muted small">AI 先列出這個領域通常有哪些資料。綠色是有了；黃色是 AI 推想的，要你看過、接受才能當假設用；橘色等你提供。</p>
+      ${(() => {
+        const draftOf = x => { const loc = x['位置'] && x['位置'] !== '—' ? x['位置'] : ''; return drafts.find(dd => loc && loc.includes(dd.path.replace(/^inputs\//, ''))); };
+        const todo = plan.inventory.filter(x => x['狀態'] === '待提供' || (draftOf(x) || {}).pending);
+        const rest = plan.inventory.filter(x => !todo.includes(x));
+        const card = x => {
+          const st = x['狀態'];
+          const loc = x['位置'] && x['位置'] !== '—' ? x['位置'] : '';
+          const d = draftOf(x);
+          return `<div class="inv-item ${INV_CLASS[st] || ''} fb-host">
+            <div class="row spread"><b>${esc(x['資料'])}</b><span class="chip">${esc(st)}</span></div>
+            <div class="small">${inline(x['內容'] || '')}</div>
+            ${loc ? `<div class="small muted">${loc.includes('/') ? `<a class="ref-link" data-file="${esc(loc.replace(/[\s、，].*$/, ''))}" data-line="1">${esc(loc)}</a>` : esc(loc)}</div>` : ''}
+            <div class="row">
+              ${st === '待提供' ? `<button class="btn small-btn go" data-give="${esc(x['資料'])}">我有，放進來</button>${fbButton(`資料「${x['資料']}」`, '沒有／說明')}` : ''}
+              ${d ? `<a class="btn small-btn yellow" href="#/draft/${enc(d.path)}">看草稿、決定接不接受</a>` : ''}
+            </div></div>`;
+        };
+        const line = x => {
+          const d = draftOf(x);
+          return `<li class="fb-host"><span class="chip ${INV_CLASS[x['狀態']] === 'ok' ? 'new' : ''}">${esc(x['狀態'])}</span> <b>${esc(x['資料'])}</b> <span class="small muted">${inline(x['內容'] || '')}</span>
+            ${d ? `<a class="small" href="#/draft/${enc(d.path)}">看草稿（${esc(d.status.replace(/（.*/, ''))}）</a>` : ''} ${fbButton(`資料「${x['資料']}」`)}</li>`;
+        };
+        return `${todo.length ? `<div class="inv">${todo.map(card).join('')}</div>` : '<p class="small">資料都處理過了（沒有待提供、待接受的）。</p>'}
+          ${rest.length ? `<details class="card inv-rest" ${todo.length ? '' : 'open'}><summary><b>已有或已處理的資料（${rest.length}）</b></summary><ul>${rest.map(line).join('')}</ul></details>` : ''}`;
+      })()}
+      ${drafts.filter(d => !plan.inventory.some(x => (x['位置'] || '').includes(d.path.replace(/^inputs\//, '')))).map(d => `<a class="small" href="#/draft/${enc(d.path)}">${esc(d.title)}（${esc(d.status)}）</a>`).join('　')}
+      <div class="row" style="margin-top:10px"><button class="btn" id="addInput">加其他資料</button></div>
+    </section>
+
+    <section id="p-map"><h2>2　切片地圖</h2>
+      <p class="muted small">一條切片＝一個情境，從起點走到一個可以驗證的結果。照建議順序一條一條做，第一條通常是正常流程，用來建立共用的名詞。</p>
+      <div class="map">${planSlices(P).filter(x => x.row).map((x, k) => {
+        const r = x.row;
+        const guess = /推想/.test(r['依據'] || '');
+        return `<div class="map-item fb-host">
+          <div class="row spread"><span><span class="order">${esc(r['建議順序'] || k + 1)}</span> <b>${esc(r['切片'])}</b></span>
+            <span class="row" style="gap:6px"><span class="chip ${r['大小估計'] === '太大' ? 'turn' : ''}">${esc(r['大小估計'] || '')}</span><span class="chip">${esc(r['狀態'])}</span></span></div>
+          <div class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'])}</div>
+          <div class="small muted">${esc(r['主要領域'] || '')}${r['會碰到的領域'] && r['會碰到的領域'] !== '—' ? '；也會碰到 ' + esc(r['會碰到的領域']) : ''}${r['依賴'] && r['依賴'] !== '—' ? '　依賴：' + esc(r['依賴']) : ''}</div>
+          <div class="small">依據：${guess ? '<span class="chip guess-chip">推想</span> ' : ''}${inline(r['依據'] || '')}</div>
+          <div class="row">${fbButton(`切片 ${r['切片']}`)}</div></div>`;
+      }).join('')}</div>
+    </section>
+
+    <section id="p-nouns"><h2>3　全局名詞草圖</h2>
+      <p class="muted small">所有切片會用到的名詞，先看全局，避免第一條切片把共用的名詞定得太窄。這裡只是草圖，正式定義在每條切片的第 ② 步。</p>
+      ${sk ? `<details ${plan.agreed ? '' : 'open'}><summary class="small" style="cursor:pointer;margin-bottom:8px">${sk.nouns.length} 個名詞${plan.agreed ? '（地圖已同意，點開看）' : ''}</summary><div class="layers">${['core', 'shared', 'domain', ...Object.keys(byLayer).filter(k => !['core', 'shared', 'domain'].includes(k))].filter(k => byLayer[k]).map(k => `
+        <div class="layer-col"><div class="label">${{ core: 'core：大家共用', shared: 'shared：幾個領域共用', domain: 'domain：這個領域自己的' }[k] || esc(k)}</div>
+          ${byLayer[k].map(n => `<div class="noun fb-host"><b>${esc(n['名詞'])}</b><div class="small">${inline(n['一句意思'] || '')}</div>
+            <div class="small muted">${n['主要關係'] ? '關係：' + esc(n['主要關係']) + '　' : ''}由 ${esc(n['正式定義於'] || '?')} 定義${/推想/.test(n['依據'] || '') ? '　<span class="chip guess-chip">推想</span>' : ''}</div>
+            ${fbButton(`名詞 ${n['名詞']}`)}</div>`).join('')}</div>`).join('')}</div></details>
+        ${sk.unsure.length ? `<div class="card hint fb-host" style="margin-top:12px"><b>AI 拿不準的地方</b><ul>${sk.unsure.map(u => `<li>${inline(u)}</li>`).join('')}</ul>${fbButton('名詞草圖不確定的地方', '回答')}</div>` : ''}`
+      : '<div class="card dashed">還沒有名詞草圖。</div>'}
+    </section>
+
+    <section id="p-ask"><h2>4　待釐清與 AI 的決定</h2>
+      ${plan.pending.length ? plan.pending.map(q => `<div class="card fb-host" style="margin-bottom:10px">
+        <div class="row spread"><b>${esc(q['編號'])}　${inline(q['問題'])}</b><span class="chip">${esc(q['狀態'])}</span></div>
+        <div class="small muted">問誰：${esc(q['問誰'] || '')}${q['答覆'] ? '　答覆：' + inline(q['答覆']) : ''}</div>
+        ${q['答覆'] ? '' : `<div class="row" style="margin-top:6px">${fbButton(`待釐清 ${q['編號']}（${q['問題']}）的答覆`, '我知道答案')}</div>`}</div>`).join('') : '<p class="muted small">沒有待釐清的問題。</p>'}
+      ${aiDecisions.length ? `<div class="label" style="margin-top:12px">AI 提出、還沒有人同意的決定</div>${aiDecisions.map(d => `<div class="card fb-host" style="margin-bottom:10px">
+        <b>${esc(d['#'])}　${inline(d['決定'])}</b><div class="small">理由：${inline(d['理由'] || '')}${d['考慮過的替代做法'] ? '　沒選：' + inline(d['考慮過的替代做法']) : ''}</div>
+        <div class="row" style="margin-top:6px"><button class="btn small-btn go" data-agree="${esc(d['#'])}">同意</button>${fbButton(`決定 ${d['#']}`, '不同意，寫理由')}</div></div>`).join('')}` : ''}
+    </section>
+
+    <section class="card lift agree">
+      <h2 style="margin:0">都看過了？</h2>
+      <p class="muted" style="margin:4px 0 10px">同意後，切片地圖與名詞草圖改為「已同意」，就可以開始第一條切片。之後有新資料、新情境，隨時可以回來改。</p>
+      ${blockers.length ? `<div class="small" style="margin-bottom:8px">還不能同意：${blockers.join('、')}。</div>` : ''}
+      <div class="row"><input type="text" id="who" value="${esc(name)}" placeholder="你的名字" style="max-width:220px">
+        <button class="btn big go" id="agree" ${blockers.length || plan.agreed || running ? 'disabled' : ''}>${plan.agreed ? '已同意' : '同意切片地圖與名詞草圖'}</button></div>
+    </section>
+    <aside class="basket card lift" id="basket" hidden></aside>`;
+  renderBasket('_plan');
+  bindFb();
+  bindWaiting();
+  $$('[data-jump]').forEach(b => b.onclick = () => document.getElementById(b.dataset.jump).scrollIntoView({ behavior: 'smooth' }));
+  const sa = $('#showAi'); if (sa) sa.onclick = openAi;
+  $('#addInput').onclick = () => inputDialog({ folder: 'shared' });
+  $$('[data-give]').forEach(b => b.onclick = () => {
+    state.onInput = (path) => addFeedback('_plan', `資料「${b.dataset.give}」已提供：${path}`);
+    inputDialog({ folder: 'shared', name: b.dataset.give, hint: `AI 列的「${b.dataset.give}」。存好後會放進回饋，交給 AI 時它會改盤點表的狀態與位置。` });
+  });
+  $$('[data-agree]').forEach(b => b.onclick = () => { addFeedback('_plan', `同意決定 ${b.dataset.agree}（${$('#who').value.trim() || '使用者'}，${today()}）`); b.disabled = true; });
+  $('#agree').onclick = () => {
+    const who = $('#who').value.trim();
+    if (!who) { toast('寫你的名字'); return; }
+    remember('reviewer', who);
+    runAi('_plan', '規劃', `我同意切片地圖與全局名詞草圖（同意者：${who}，${today()}）。請照 domain-plan 第 4 節把兩份狀態改為「已同意（${who}，${today()}）」，記 slices/CHANGELOG.md，然後告訴我下一步要開始哪條切片。`);
+  };
+}
+
+// ---------- 推想草稿 ----------
+
+async function renderDraft(path) {
+  state.slice = null; state.scope = '_plan';
+  setTop(['#/plan', '規劃'], '<strong>推想草稿</strong>');
+  const f = await api('/api/file?path=' + enc(path));
+  const P = state.project || await loadProject();
+  const d = P.drafts.find(x => x.path === path) || {};
+  const name = remember('reviewer');
+  const body = f.text.split(/^## 內容\s*$/m);
+  $('#app').innerHTML = `
+    <div class="narrow">
+      <div><span class="chip ${d.pending ? 'turn' : 'new'}">${esc(d.status || '')}</span><h1 class="qtitle">${esc(d.title || path)}</h1>
+        <p class="muted">這是 AI 依一般知識寫的，<b>不是</b>你們的實際做法。判斷標準：這個一般做法大致對嗎、能不能先當假設用？不用逐句確認；有了真實資料會取代它。</p></div>
+      ${d.unsure ? `<section class="card hint"><b>AI 最不確定的地方：</b>${inline(d.unsure)}${d.who ? `<div class="small">需要誰確認：${inline(d.who)}</div>` : ''}</section>` : ''}
+      <section class="card lift draft-body">${md(body.length > 1 ? body[1] : f.text)}</section>
+      ${d.pending ? `<section class="card fb-host" style="display:flex;flex-direction:column;gap:10px">
+        <div class="row"><input type="text" id="who" value="${esc(name)}" placeholder="你的名字" style="max-width:220px">
+          <button class="btn big go" id="accept">大致對，先當假設用</button></div>
+        <div class="row">${fbButton(`推想草稿 ${d.title}`, '有地方不對，寫意見')}</div>
+        <div class="small muted">接受不代表內容已確認；法條數字仍待核對。</div></section>` : ''}
+      <details class="tech"><summary>原始檔</summary><a class="ref-link" data-file="${esc(path)}" data-line="1">${esc(path)}</a></details>
+    </div>
+    <aside class="basket card lift" id="basket" hidden></aside>`;
+  renderBasket('_plan');
+  bindFb();
+  const ac = $('#accept');
+  if (ac) ac.onclick = async () => {
+    const who = $('#who').value.trim();
+    if (!who) { toast('寫你的名字'); return; }
+    remember('reviewer', who);
+    try {
+      await api('/api/draft/accept', { path, who, digest: f.digest });
+      toast('已接受為假設');
+      await loadProject();
+      const nxt = state.project.drafts.find(x => x.pending);
+      go(nxt ? `#/draft/${enc(nxt.path)}` : '#/plan');
+    } catch (e) { toast(e.message); }
+  };
+}
+
+// ---------- 開始一條切片 ----------
+
+async function renderKickoff(code) {
+  state.slice = null; state.scope = code;
+  setTop(['#/', '總覽'], `<strong>開始 ${esc(code)}</strong>`);
+  const P = await loadProject();
+  const r = (P.plan ? P.plan.slices : []).find(x => x['切片'] === code) || {};
+  if (P.slices.some(x => x.slice === code)) { go(`#/s/${enc(code)}`); return; }
+  const qs = [
+    ['不做', '這條切片明確不做什麼？', '例：兼職人員先不處理'],
+    ['專家', '有沒有 Domain 專家或客戶端使用者可以確認？是誰？', '例：總部人資王小姐'],
+    ['替代', '依賴、但這次不實作的東西，先用什麼代替？', '例：班表先用固定的週一到週五'],
+    ['資料', '還有沒有訪談紀錄、既有 User Story？（沒有也可以）', '可以用下面的「加資料」放進來'],
+  ];
+  $('#app').innerHTML = `
+    <div class="narrow">
+      <div><span class="chip">開始一條切片</span><h1 class="qtitle">${esc(code)}</h1>
+        <p class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'] || '')}</p>
+        <p class="muted">開工前先回答幾件事（知道的就寫，不知道空著）。AI 會建立切片資料夾，接著做第 ① 步：範圍與驗收問題。</p></div>
+      <section class="card lift" style="display:flex;flex-direction:column;gap:14px">
+        ${qs.map(([k, q, ph]) => `<label class="label" style="color:var(--ink);font-size:16px">${esc(q)}<input type="text" class="soft" data-k="${k}" placeholder="${esc(ph)}"></label>`).join('')}
+        <div><button class="btn" id="addInput">加資料（放進 inputs/${esc(code)}/）</button></div>
+      </section>
+      <div class="row"><button class="btn big primary" id="go1">開始 ›</button></div>
+    </div>`;
+  $('#addInput').onclick = () => inputDialog({ folder: code });
+  $('#go1').onclick = () => {
+    const a = Object.fromEntries($$('[data-k]').map(x => [x.dataset.k, x.value.trim()]));
+    const lines = qs.map(([k, q]) => `- ${q}${a[k] || '（使用者沒寫）'}`).join('\n');
+    runAi(code, '第 1 步', `/domain-new-slice ${code}\n\n使用者在網頁上先回答了開工的問題（原話，存成 inputs/${code}/ 的檔案時照抄）：\n${lines}\n\n建立好就接著做第 ① 步。`);
+    setTimeout(() => go('#/'), 300);
+  };
+}
+
+// ---------- 專家問題 ----------
+
+async function renderEq(slice) {
+  state.slice = slice; state.scope = slice;
+  syncSlicePick();
+  setTop([`#/s/${enc(slice)}`, slice], '<strong>專家問題</strong>');
+  const h = await api('/api/home?slice=' + enc(slice));
+  const f = await api(`/api/file?path=${enc(`slices/${slice}/questions.md`)}`);
+  const order = { '待問': 0, '已問': 1, '暫依整理': 2, '已回覆': 3 };
+  const eqs = h.eqs.slice().sort((a, b) => (order[a['狀態']] ?? 9) - (order[b['狀態']] ?? 9));
+  const toAsk = eqs.filter(e => e['狀態'] === '待問');
+  $('#app').innerHTML = `
+    <div><h1 style="margin:0">專家問題</h1><p class="muted" style="margin:4px 0 0">AI 答不了、要問 Domain 專家或客戶的事。不擋關卡：相關的地方先標「待專家確認」，答覆回來再交給 AI 回頭改。</p></div>
+    ${toAsk.length ? `<div class="row"><button class="btn primary" id="copyAll">複製 ${toAsk.length} 題待問的（給專家）</button></div>` : ''}
+    <div class="eqs">${eqs.map(e => {
+      const st = e['狀態'];
+      return `<section class="card eq ${st === '待問' ? 'need' : st === '已回覆' ? 'ok' : ''}" data-line="${e.line}">
+        <div class="row spread"><b>${esc(e['編號'])}</b><span class="chip ${st === '待問' ? 'turn' : st === '已回覆' ? 'new' : ''}">${esc(st)}</span></div>
+        <div class="eq-q">${inline(e['問題（業務語言）'] || e['問題'] || '')}</div>
+        <div class="small muted">問誰：${esc(e['問誰'] || '')}　提出於 ${esc(e['提出於'] || '')}</div>
+        ${e['答覆'] ? `<div class="box"><div class="label">答覆（${esc(e['答覆日'] || '')}）</div>${inline(e['答覆'])}</div>` : ''}
+        ${e['影響'] ? `<details class="tech"><summary>影響哪些地方</summary>${inline(e['影響'])}</details>` : ''}
+        <div class="row">
+          ${st === '待問' ? `<button class="btn small-btn" data-copy="${e.line}">複製這題</button><button class="btn small-btn go" data-asked="${e.line}">我問了</button>` : ''}
+          ${st === '已問' || st === '暫依整理' || st === '待問' ? `<button class="btn small-btn primary" data-reply-eq="${esc(e['編號'])}">專家回覆了</button>` : ''}
+          ${st === '已回覆' && !e['處理'] ? `<button class="btn small-btn primary" data-handle="${esc(e['編號'])}">交給 AI 處理</button>` : ''}
+          ${e['處理'] ? `<span class="small">處理：${inline(e['處理'])}</span>` : ''}
+        </div></section>`;
+    }).join('') || '<div class="card dashed">沒有專家問題。</div>'}</div>`;
+  const qText = e => `${e['編號']}：${e['問題（業務語言）'] || e['問題'] || ''}`;
+  const copy = t => navigator.clipboard.writeText(t).then(() => toast('已複製（不含 AI 的建議答案）'), () => toast('複製失敗'));
+  const ca = $('#copyAll'); if (ca) ca.onclick = () => copy(toAsk.map(qText).join('\n\n'));
+  $$('[data-copy]').forEach(b => b.onclick = () => copy(qText(eqs.find(e => e.line === +b.dataset.copy))));
+  $$('[data-asked]').forEach(b => b.onclick = async () => {
+    try { await api('/api/eq/asked', { slice, line: +b.dataset.asked, digest: f.digest }); renderEq(slice); } catch (e) { toast(e.message); }
+  });
+  $$('[data-handle]').forEach(b => b.onclick = () => runAi(slice, '專家回覆', `/domain-expert-reply ${b.dataset.handle}`));
+  $$('[data-reply-eq]').forEach(b => b.onclick = () => {
+    const id = b.dataset.replyEq;
+    const host = b.closest('.eq');
+    if ($('.note-box', host)) return;
+    host.insertAdjacentHTML('beforeend', `<div class="note-box" style="display:flex;flex-direction:column;gap:8px">
+      <textarea rows="4" placeholder="貼上專家的原話（照抄，不要改寫）"></textarea>
+      <div class="row"><input type="text" class="soft" placeholder="誰回答的、怎麼回的（例：王小姐，Line）" style="flex:1"><button class="btn primary">存起來，交給 AI</button></div></div>`);
+    const [ta, who] = [$('.note-box textarea', host), $('.note-box input', host)];
+    ta.focus();
+    $('.note-box button', host).onclick = async () => {
+      const v = ta.value.trim();
+      if (!v) { toast('貼上答覆'); return; }
+      try {
+        const r = await api('/api/inputs', { folder: slice, name: `專家答覆_${id}_${today()}`, text: `- 問題：${id}\n- 回答者：${who.value.trim() || '（沒寫）'}\n\n${v}` });
+        runAi(slice, '專家回覆', `/domain-expert-reply ${id} 專家答覆原文已存成 ${r.path}（照抄，不改寫）。`);
+      } catch (e) { toast(e.message); }
+    };
+  });
+}
+
 // ---------- 路由 ----------
-// #/s/<切片>　#/r/<審查頁>/decide/<n>　#/r/<審查頁>/confirm[/<Entity>]　#/r/<審查頁>/golden/<n>　#/r/<審查頁>/finish
+// #/ 總覽　#/start 主題草案　#/plan 規劃　#/draft/<檔> 推想草稿　#/new/<切片> 開始切片　#/eq/<切片> 專家問題
+// #/s/<切片> 切片首頁　#/r/<審查頁>/decide/<n>　/confirm[/<Entity>]　/golden/<n>　/finish
 
 async function route() {
   $('#fileDrawer').hidden = true;
@@ -899,7 +1619,7 @@ async function route() {
     if (parts[0] === 'r' && parts[1]) {
       const path = parts[1];
       const m = path.match(/^slices\/([^/]+)\//);
-      if (m) { state.slice = m[1]; syncSlicePick(); renderAiHead(); }
+      if (m) { state.slice = m[1]; state.scope = m[1]; syncSlicePick(); renderAiHead(); }
       if (state.path !== path) await loadReview(path);
       const view = parts[2] || 'decide';
       if (view === 'decide') return await renderDecide(path, +parts[3] || 0);
@@ -907,9 +1627,13 @@ async function route() {
       if (view === 'golden') return await renderGolden(path, +parts[3] || 0);
       return await renderFinish(path);
     }
-    const first = state.slices.find(s => s.reviews.some(r => r.counts && r.counts.open)) || state.slices[0];
-    if (first) go(`#/s/${enc(first.slice)}`);
-    else $('#app').innerHTML = '<div class="card">這個 repo 的 <code>slices/</code> 底下還沒有切片。請 AI 先做規劃（<code>/domain-plan</code>）。</div>';
+    state.path = null;
+    if (parts[0] === 'start') return await renderStart();
+    if (parts[0] === 'plan') return await renderPlan();
+    if (parts[0] === 'draft' && parts[1]) return await renderDraft(parts.slice(1).join('/'));
+    if (parts[0] === 'new' && parts[1]) return await renderKickoff(parts[1]);
+    if (parts[0] === 'eq' && parts[1]) return await renderEq(parts[1]);
+    return await renderHub();
   } catch (e) { toast(e.message); }
 }
 
@@ -923,11 +1647,15 @@ document.addEventListener('click', e => {
 }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('#fileDrawer').hidden = true; $('#aiDrawer').hidden = true; } });
 $('#aiBtn').onclick = () => { if ($('#aiDrawer').hidden) openAi(); else $('#aiDrawer').hidden = true; };
-$('#slicePick').onchange = e => go(`#/s/${enc(e.target.value)}`);
+$('#slicePick').onchange = e => go(e.target.value ? `#/s/${enc(e.target.value)}` : '#/');
 $('#aiForm').onsubmit = e => {
   e.preventDefault();
   const v = $('#aiInput').value.trim();
-  if (v) { $('#aiInput').value = ''; aiSend(v); }
+  if (!v) return;
+  if (!state.scope) { toast('先打開一條切片或規劃，再和 AI 對話'); return; }
+  $('#aiInput').value = '';
+  const s = curSession();
+  runAi(state.scope, s ? s.purpose : '對話', v, { keep: true });
 };
 window.addEventListener('hashchange', route);
 

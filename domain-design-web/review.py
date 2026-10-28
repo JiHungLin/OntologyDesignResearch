@@ -194,8 +194,13 @@ def set_answer(path, line, value, expect_digest=None):
 
 
 def set_cells(path, line, values, expect_digest=None):
-    """改表格某一列的幾個欄位（欄名 → 值）。只能改人填的欄。"""
+    """改審查頁表格某一列的幾個欄位（欄名 → 值）。只能改人填的欄。"""
     allowed = {'確認', '抽查了哪幾條', '結果', '審查者（非產出者）', '審查者', '日期', '結論'}
+    return set_row(path, line, values, allowed, expect_digest)
+
+
+def set_row(path, line, values, allowed, expect_digest=None):
+    """改任一個 .md 表格某一列的幾個欄位；allowed 以外的欄不能改，其他行不動。"""
     lines = _load(path, expect_digest)
     header = _header_of(lines, line)
     if header is None:
