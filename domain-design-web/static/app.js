@@ -759,57 +759,81 @@ async function renderGolden(path, i) {
 
 // ---------- 抽查與簽名過關 ----------
 
-async function renderFinish(path) {
+async function renderFinish(path, focus) {
   const r = state.review && state.path === path ? state.review : await loadReview(path);
   const c = r.counts;
+  const p = enc(path);
   setTop([`#/s/${enc(r.slice)}`, '關卡'], '<strong>最後一關：抽查與簽名</strong>');
   const left = [];
-  if (c.questions_open) left.push(`<a href="#/r/${enc(path)}/decide/${firstOpenQ(r)}">${c.questions_open} 個決定</a>`);
-  if (c.confirms_open) left.push(`<a href="#/r/${enc(path)}/confirm">${c.confirms_open} 項確認</a>`);
-  if (c.cases_open) left.push(`<a href="#/r/${enc(path)}/golden/0">${c.cases_open} 個案例</a>`);
+  if (c.questions_open) left.push(`<a href="#/r/${p}/decide/${firstOpenQ(r)}">${c.questions_open} 個決定</a>`);
+  if (c.confirms_open) left.push(`<a href="#/r/${p}/confirm">${c.confirms_open} 項確認</a>`);
+  if (c.cases_open) left.push(`<a href="#/r/${p}/golden/0">${c.cases_open} 個案例</a>`);
   const spotRow = r.spot.find(s => s.items.trim()) || r.spot[0];
-  // 抽查：審查頁寫「① 第 1、4 條；③ 第 2 條」；畫面上一條的代號是「①1」這種（步驟＋第幾條）
-  const items = r.spot_items;
-  const pickedFrom = txt => {
-    const ids = new Set();
-    for (const m of String(txt || '').matchAll(/([①-⑥])?[^第①-⑥]*?第\s*([\d、，, ]+)\s*條/g))
-      for (const k of m[2].match(/\d+/g) || []) ids.add((m[1] || (items[0] || {}).step || '') + k);
-    return ids;
-  };
-  const picked = pickedFrom(spotRow && spotRow.items);
-  const pickedText = () => {
-    const by = new Map();
-    for (const it of items) if (picked.has(it.id)) by.set(it.step, (by.get(it.step) || []).concat(it.n));
-    return [...by].map(([st, ns]) => `${st || items[0].file.split('/').pop() + ' 完成標準'} 第 ${ns.join('、')} 條`).join('；');
-  };
   const name = remember('reviewer');
   const signed = c.conclusion_done;
+
+  // 抽查一次看一條：清單挑一條 → 這一條的完成標準、AI 說、證據（AI 寫的編號與行號已換成內容）、判斷按鈕放在同一張卡
+  // 審查頁的寫法是「① 第 1、4 條；③ 第 2 條」；畫面上一條的代號是「①1」（步驟＋第幾條）
+  const items = r.spot_items;
+  const vkey = 'spot:' + path;
+  let verdicts = {};
+  try { verdicts = JSON.parse(localStorage.getItem(vkey) || '{}'); } catch (e) { }
+  if (spotRow && spotRow.items && (spotRow.result || '').trim() && !Object.keys(verdicts).length) {   // 別的瀏覽器填的：照審查頁還原（只挑了、還沒判斷的不算）
+    const bad = /不實/.test(spotRow.result);
+    for (const m of spotRow.items.matchAll(/([①-⑥])?[^第①-⑥]*?第\s*([\d、，, ]+)\s*條/g))
+      for (const k of m[2].match(/\d+/g) || []) verdicts[(m[1] || (items[0] || {}).step || '') + k] = { ok: !bad, note: bad ? spotRow.result : '' };
+  }
+  const done = items.filter(it => verdicts[it.id]);
+  const label = it => `${it.step} 第 ${it.n} 條`;
+  const cur = focus && items.find(it => it.id === focus);
+
+  const evHtml = e => {
+    const fields = (e.fields || []).filter(([h, v], k) => !(k === 0 && v === e.ref) && v && v !== '—');
+    return `<div class="ev-card">
+      <div class="row spread"><b>${esc(e.ref)}${e.title ? `<span class="muted small">　${esc(e.title)}</span>` : ''}</b>
+        <a class="small ref-link" data-file="${esc(e.file)}" data-line="${e.line || 1}">${esc(e.file.split('/').pop())} 第 ${e.line} 行 ›</a></div>
+      ${fields.length ? `<dl>${fields.map(([h, v]) => `<dt>${esc(h)}</dt><dd>${inline(v)}</dd>`).join('')}</dl>` : e.text ? `<div class="orig">${inline(e.text)}</div>` : ''}
+    </div>`;
+  };
+
+  let spotHtml;
+  if (!items.length) {
+    spotHtml = `<div class="small">${inline(r.spot_hint || '（審查頁沒有列出可挑的條目）')}</div>
+      <div class="row"><input type="text" id="spotItems" style="flex:1" value="${esc(spotRow ? spotRow.items : '')}" placeholder="抽查了哪幾條，例：① 第 3、7 條">
+        <button class="btn go" id="spotOk">核對過，屬實</button></div>
+      <input type="text" id="spotBad" class="soft" placeholder="或寫一句哪裡不對，按 Enter">`;
+  } else if (cur) {
+    const v = verdicts[cur.id];
+    spotHtml = `<a href="#/r/${p}/finish" class="small">← 回清單、換一條</a>
+      <div class="row spread"><b>${esc(label(cur))}</b>${cur.kind ? `<span class="chip ${/關鍵/.test(cur.kind) ? 'turn' : ''}">${esc(cur.kind)}</span>` : ''}</div>
+      <h2 style="margin:0;font-size:20px;line-height:1.5">${inline(cur.text.replace(/\*\*/g, ''))}</h2>
+      <div class="box"><div class="label">AI 說它做到了</div>${inline(plain(cur.self))}</div>
+      <div><div class="label">證據（AI 提到的地方，已經幫你找出來）</div>
+        ${cur.evidence.length ? `<div class="evs">${cur.evidence.map(evHtml).join('')}</div>`
+          : `<div class="small muted">AI 沒有寫出處。<a class="ref-link" data-file="${esc(cur.file)}" data-line="${cur.line}">打開 ${esc(cur.file.split('/').pop())}</a>，自己找這條標準說的內容在哪一段。</div>`}</div>
+      <div class="judge">
+        <div class="label" style="color:var(--ink);font-size:15px">AI 說的，和證據對得上嗎？</div>
+        <div class="row"><button class="btn go" id="vOk">對得上，屬實</button><button class="btn" id="vBad">對不上</button>
+          ${v ? `<span class="small">已記下：${v.ok ? '屬實' : '不實：' + esc(v.note)}</span>` : ''}</div>
+        <div class="row" id="badBox" hidden><input type="text" id="badNote" class="soft" style="flex:1" placeholder="哪裡不對？寫一句（例：D-01 只寫了結論，沒寫為什麼不用輕量）"><button class="btn primary" id="badSave">記下</button></div>
+      </div>`;
+  } else {
+    spotHtml = `<p class="small muted" style="margin:0">AI 自評下面每一條都做到了。<b>挑 1～2 條</b>你最在意的（建議「關鍵決定」類），點進去看證據、判斷對不對。有一條不實，這一步就改成逐條審查。</p>
+      ${done.length ? `<div class="small"><b>已核對 ${done.length} 條：</b>${done.map(it => `${esc(label(it))} ${verdicts[it.id].ok ? '✓ 屬實' : '✗ 不實'}`).join('、')}${done.length >= 1 ? '　（夠了的話往下簽名）' : ''}</div>` : ''}
+      <div class="spot-list">${items.map(it => `
+        <a class="spot-item ${verdicts[it.id] ? (verdicts[it.id].ok ? 'ok' : 'bad') : ''}" href="#/r/${p}/finish/${enc(it.id)}">
+          <span class="row spread"><b>${esc(label(it))}</b><span class="row" style="gap:6px">${verdicts[it.id] ? `<span class="chip ${verdicts[it.id].ok ? 'new' : 'turn'}">${verdicts[it.id].ok ? '屬實' : '不實'}</span>` : ''}${it.kind ? `<span class="chip ${/關鍵/.test(it.kind) ? 'turn' : ''}">${esc(it.kind)}</span>` : ''}</span></span>
+          <span>${inline(it.text.replace(/\*\*/g, ''))}</span></a>`).join('')}</div>`;
+  }
+
   $('#app').innerHTML = `
     <div class="narrow">
       ${left.length ? `<div class="card hint">還有 ${left.join('、')} 沒完成，完成後才能簽名。</div>` : ''}
       <section class="card lift spot" style="display:flex;flex-direction:column;gap:16px">
-        <div><span class="chip">抽查</span><h2 style="margin:8px 0 0">AI 說它做到了：挑 1～2 條核對</h2>
-          <ol class="spot-how">
-            <li>下面是這一步的完成標準，AI 自評都做到了。<b>不用每條都看</b>，只挑 1～2 條。</li>
-            <li>挑你最在意、或最可能出錯的；建議挑「關鍵決定」類。</li>
-            <li>看「AI 說」它怎麼做到的，按「打開檔案對照」，看檔案裡是不是真的這樣。</li>
-            <li>是真的就按「核對過，屬實」；不是就寫一句哪裡不對。只要有一條不實，這一步改成逐條審查。</li>
-          </ol></div>
-        ${items.length ? `<div class="picks">${items.map(s => `
-          <div class="pick ${picked.has(s.id) ? 'on' : ''}" data-pick="${esc(s.id)}" role="button" tabindex="0">
-            <div class="row spread"><b>${esc(s.step)} 第 ${s.n} 條</b>${s.kind ? `<span class="chip ${/關鍵/.test(s.kind) ? 'turn' : ''}">${esc(s.kind)}</span>` : ''}</div>
-            <div class="crit">${inline(s.text.replace(/\*\*/g, ''))}</div>
-            <div class="self"><div class="${picked.has(s.id) ? '' : 'clamp2'}"><span class="label" style="display:inline;margin-right:6px">AI 說</span>${esc(plain(s.self))}</div></div>
-            ${picked.has(s.id) ? `<div><a class="btn small-btn ref-link" data-file="${esc(s.file)}" data-line="${s.line}">打開檔案對照 ›</a></div>` : ''}
-          </div>`).join('')}</div>`
-          : `<div class="small">${inline(r.spot_hint || '（審查頁沒有列出可挑的條目）')}</div><input type="text" id="spotItems" value="${esc(spotRow ? spotRow.items : '')}" placeholder="抽查了哪幾條，例：① 第 3、7 條">`}
-        <div class="row">
-          <button class="btn go" id="spotOk" ${picked.size || !items.length ? '' : 'disabled'}>核對過，屬實</button>
-          <input type="text" id="spotBad" style="flex:1;min-width:200px" class="soft" placeholder="或寫一句哪裡不對，按 Enter" value="${spotRow && spotRow.result && !/^(屬實|符合|✓|自評屬實)/.test(spotRow.result) ? esc(spotRow.result) : ''}">
-        </div>
-        ${spotRow && spotRow.result ? `<div class="small"><b>已記下：</b>${esc(spotRow.items)} → ${esc(spotRow.result)}</div>` : ''}
+        ${cur ? '' : '<div><span class="chip">抽查</span><h2 style="margin:8px 0 0">AI 說它做到了：挑 1～2 條核對</h2></div>'}
+        ${spotHtml}
       </section>
-      <section class="card lift" style="display:flex;flex-direction:column;gap:12px">
+      ${cur ? '' : `      <section class="card lift" style="display:flex;flex-direction:column;gap:12px">
         <div><span class="chip">簽名過關</span><h2 style="margin:8px 0 0">你是審查者（不是產出這一步的人）</h2></div>
         <input type="text" id="who" value="${esc(name)}" placeholder="你的名字">
         ${r.conclusion.map(x => `
@@ -829,26 +853,44 @@ async function renderFinish(path) {
           <button class="btn big" id="freeze">請 AI 凍結</button>
         </div>
       </section>` : ''}
+`}
     </div>`;
+  if (cur) window.scrollTo(0, 0);
 
   const spotLine = spotRow ? spotRow.line : null;
-  const saveSpot = async (items, result) => {
-    if (!spotLine) { toast('審查頁沒有抽查表'); return; }
-    if (await write('/api/review/cells', { line: spotLine, cells: { '抽查了哪幾條': items, '結果': result } })) renderFinish(path);
+  const saveSpot = async (itemsTxt, result) => {
+    if (!spotLine) { toast('審查頁沒有抽查表'); return false; }
+    return write('/api/review/cells', { line: spotLine, cells: { '抽查了哪幾條': itemsTxt, '結果': result } });
   };
-  const itemsText = () => { const inp = $('#spotItems'); return inp ? inp.value.trim() : pickedText(); };
-  $$('[data-pick]').forEach(b => b.onclick = async e => {
-    if (e.target.closest('.ref-link')) return;
-    const id = b.dataset.pick;
-    if (picked.has(id)) picked.delete(id); else picked.add(id);
-    if (picked.size > 2) { picked.delete(id); toast('挑 1～2 條就好'); return; }
-    await saveSpot(pickedText(), '');
-  });
-  $('#spotOk').onclick = () => { const it = itemsText(); if (!it) { toast('先挑 1～2 條'); return; } saveSpot(it, '屬實'); };
-  $('#spotBad').onkeydown = e => {
-    const v = e.target.value.trim();
-    if (e.key === 'Enter' && v) { const it = itemsText(); if (!it) { toast('先挑 1～2 條'); return; } saveSpot(it, v); }
+  const saveVerdicts = async () => {
+    try { localStorage.setItem(vkey, JSON.stringify(verdicts)); } catch (e) { }
+    const ds = items.filter(it => verdicts[it.id]);
+    const by = new Map();
+    for (const it of ds) by.set(it.step, (by.get(it.step) || []).concat(it.n));
+    const txt = [...by].map(([st, ns]) => `${st || items[0].file.split('/').pop() + ' 完成標準'} 第 ${ns.join('、')} 條`).join('；');
+    const bad = ds.filter(it => !verdicts[it.id].ok);
+    return saveSpot(txt, bad.length ? ds.map(it => verdicts[it.id].ok ? `${label(it)}屬實` : `${label(it)}不實：${verdicts[it.id].note}`).join('；') : '屬實');
   };
+  if (cur) {
+    $('#vOk').onclick = async () => { verdicts[cur.id] = { ok: true, note: '' }; if (await saveVerdicts()) { toast(`${label(cur)}：屬實`); go(`#/r/${p}/finish`); } };
+    $('#vBad').onclick = () => { $('#badBox').hidden = false; $('#badNote').focus(); };
+    const saveBad = async () => {
+      const note = $('#badNote').value.trim();
+      if (!note) { toast('寫一句哪裡不對'); return; }
+      verdicts[cur.id] = { ok: false, note };
+      if (await saveVerdicts()) { toast(`${label(cur)}：不實，已記下`); go(`#/r/${p}/finish`); }
+    };
+    $('#badSave').onclick = saveBad;
+    $('#badNote').onkeydown = e => { if (e.key === 'Enter') saveBad(); };
+    return;
+  }
+  if (!items.length) {
+    $('#spotOk').onclick = () => { const it = $('#spotItems').value.trim(); if (!it) { toast('寫抽查了哪幾條'); return; } saveSpot(it, '屬實').then(ok => ok && renderFinish(path)); };
+    $('#spotBad').onkeydown = e => {
+      const v = e.target.value.trim(), it = $('#spotItems').value.trim();
+      if (e.key === 'Enter' && v) { if (!it) { toast('寫抽查了哪幾條'); return; } saveSpot(it, v).then(ok => ok && renderFinish(path)); }
+    };
+  }
   $$('[data-verdict]').forEach(b => b.onclick = async () => {
     const who = $('#who').value.trim();
     if (!who) { toast('先寫你的名字'); return; }
@@ -1942,7 +1984,7 @@ async function route() {
       if (view === 'decide') return await renderDecide(path, +parts[3] || 0);
       if (view === 'confirm') return await renderConfirm(path, parts[3] || null);
       if (view === 'golden') return await renderGolden(path, +parts[3] || 0);
-      return await renderFinish(path);
+      return await renderFinish(path, parts[3] || null);
     }
     state.path = null;
     if (parts[0] === 'start') return await renderStart();

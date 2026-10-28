@@ -255,6 +255,19 @@ details.tech summary { cursor: pointer; }
 .pick { display: flex; flex-direction: column; gap: 8px; }
 .pick .crit { font-weight: 700; }
 .pick .self { font-size: 13px; color: var(--muted); background: var(--bg); border-radius: 10px; padding: 8px 12px; }
+.spot-list { display: flex; flex-direction: column; gap: 10px; }
+.spot-item { display: flex; flex-direction: column; gap: 6px; padding: 14px 18px; border: 2px solid var(--line); border-radius: 14px; color: var(--ink); text-decoration: none; }
+.spot-item:hover { border-color: var(--ink); background: #F7F6FF; }
+.spot-item.ok { border-color: var(--done); background: #E3F7EC; }
+.spot-item.bad { border-color: var(--turn); background: #FFF1E6; }
+.evs { display: flex; flex-direction: column; gap: 10px; }
+.ev-card { border: 2px solid var(--line); border-radius: 14px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.ev-card dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; font-size: 14px; }
+.ev-card dt { color: var(--muted); font-weight: 700; }
+.ev-card dd { margin: 0; }
+.ev-card .orig { background: var(--bg); border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+.judge { border-top: 2px solid var(--line); padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+@container page (max-width: 560px) { .ev-card dl { grid-template-columns: 1fr; } .ev-card dt { margin-top: 4px; } }
 .spot-how { margin: 12px 0 0; padding-left: 22px; font-size: 14px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
 .verdict { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .verdict .btn { min-height: 64px; font-size: 20px; }
