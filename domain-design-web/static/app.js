@@ -1110,6 +1110,9 @@ async function runAi(scope, purpose, message, opts = {}) {
   const s = sessionOf(scope);
   state.aiScope = scope;
   if (s && s.running) { openAi(scope); toast('AI 還在處理上一件事，做完再交下一件'); return; }
+  // 整個設計 repo 一次只跑一件（共用同一份檔案與 git）；伺服器也會擋
+  const other = state.sessions.find(x => x.running && x.slice !== scope);
+  if (other) { openAi(other.slice); toast(`AI 正在做「${scopeName(other.slice)}・${other.purpose}」，做完再交下一件（同一個 repo 一次只跑一件）`); return; }
   const long = s && s.turns >= LONG_TURNS;
   const same = s && s.purpose === purpose && !s.compacted && !long;
   if (same || (s && opts.keep)) return send(s, message, opts);
@@ -1773,6 +1776,7 @@ async function renderKickoff(code) {
   const P = await loadProject();
   const r = (P.plan ? P.plan.slices : []).find(x => x['切片'] === code) || {};
   if (P.slices.some(x => x.slice === code)) { go(`#/s/${enc(code)}`); return; }
+  const busySlices = P.slices.filter(x => x.next && x.next.n <= 5);   // ①～⑤ 還沒都凍結的切片
   const qs = [
     ['不做', '這條切片明確不做什麼？', '例：兼職人員先不處理'],
     ['專家', '有沒有 Domain 專家或客戶端使用者可以確認？是誰？', '例：總部人資王小姐'],
@@ -1781,6 +1785,9 @@ async function renderKickoff(code) {
   ];
   $('#app').innerHTML = `
     <div class="narrow">
+      ${busySlices.length ? `<section class="card hint"><b>${busySlices.map(x => esc(x.slice)).join('、')} 還沒做完（下一關 ${busySlices.map(x => CIRCLED[x.next.n]).join('、')}）。</b>
+        <p class="small" style="margin:6px 0 10px">流程是一條一條做：先做完的切片會把共用名詞定下來，下一條直接引用。同時開兩條，同一個名詞容易被定兩次，審查也會分散。要平行做，建議由不同的人各自 clone、開分支，用 PR 合併。</p>
+        <div class="row"><a class="btn primary" href="#/s/${enc(busySlices[0].slice)}">回去做 ${esc(busySlices[0].slice)} ›</a><span class="small muted">仍要開始的話，照下面填寫。</span></div></section>` : ''}
       <div><span class="chip">開始一條切片</span><h1 class="qtitle">${esc(code)}</h1>
         <p class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'] || '')}</p>
         <p class="muted">開工前先回答幾件事（知道的就寫，不知道空著）。AI 會建立切片資料夾，接著做第 ① 步：範圍與驗收問題。</p></div>
