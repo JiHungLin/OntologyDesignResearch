@@ -8,7 +8,7 @@ session 由網頁管理：換下一件事、開新 session、交接提示都由�
 - 改檔案一律用 Edit、Write；不要用 python、sed 或 heredoc 改檔。
 - 讀檔、列檔、找字用 Read、Glob、Grep；只要讀某一段就用 Read 的 offset／limit 或 Grep，不用 awk、sed、head 去切。
 - 要對好幾個字串做同樣的事（例：核對原文摘錄找不找得到），用 Grep 一次一個，或一個 Grep 用「a|b|c」，不要寫迴圈。
-- 複製範本資料夾時，先 mkdir 建好目錄，再用 cp 一次列出要複製的檔案；不要用 cp -r（在網頁上會被擋）。
+- 複製範本資料夾時，先 `mkdir -p` 建好目錄，再用不加任何選項的 cp 一次列出要複製的檔案（`cp a.md b.md 目的地/`）。cp 只要加選項（-r、-R、-a…）就一定被擋，這是 Claude Code 為了路徑安全的內建規則，允許清單也放行不了。
 - Bash 一次執行一個指令；不要用 for 迴圈、變數、管線，也不要自己寫 python 腳本。可以跑的 python 只有 `python3 tools/*` 和下面的下載工具。
 - 下載公開來源原文一律用 `python3 {FETCH} <網址> [檔名]`：原文存到 .domain-web/tmp/（已被 .gitignore 排除），HTML、PDF 轉成同名 .txt（照原文、不摘要，連結寫成「文字 <網址>」），再用 Read 讀、照規範摘錄進 inputs/research/。不要在 repo 裡建暫存資料夾。
 - 指令被擋下或連線失敗時，在回覆裡寫出完整指令與錯誤訊息，不要說成「環境不能上網」。
