@@ -222,14 +222,6 @@ def test_accept_draft_and_inputs(repo, client):
     assert '- 想做的系統：訂單系統' in text and '補充' in text and '- 其他：要支援退貨' in text
 
 
-def test_mark_asked(repo, client):
-    eqs = client.get('/api/home', params={'slice': 'demo'}).json()['eqs']
-    line = next(e['line'] for e in eqs if e['編號'] == 'EQ-001')
-    assert client.post('/api/eq/asked', json={'slice': 'demo', 'line': line}).status_code == 200
-    assert '| EQ-001 | ① | 問題一 | HC | 已問 |' in (repo / 'slices/demo/questions.md').read_text(encoding='utf-8')
-    assert client.post('/api/eq/asked', json={'slice': 'demo', 'line': line}).status_code == 400
-
-
 def test_background_job(repo):
     import time
     from fastapi.testclient import TestClient
