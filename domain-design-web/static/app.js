@@ -903,7 +903,7 @@ function renderNav() {
   const fileA = (path, label) => a(`#/f/${enc(path)}`, esc(label || path.split('/').pop()));
   const node = (key, summary, body, dflt) => {
     const isOpen = open.has(key) || (dflt && !open.has('!' + key));
-    return `<details class="nav-node" data-k="${esc(key)}" ${isOpen ? 'open' : ''}><summary>${summary}</summary><div class="nav-kids">${body}</div></details>`;
+    return `<details class="nav-node" data-nav="${esc(key)}" ${isOpen ? 'open' : ''}><summary>${summary}</summary><div class="nav-kids">${body}</div></details>`;
   };
   const folderTree = (groups, top, fileLink) => {
     const dirs = Object.keys(groups).sort();
@@ -954,7 +954,7 @@ function renderNav() {
       + `<button class="nav-add" id="navAddInput">＋ 加資料</button>`)}
     ${a('#/f/' + enc('slices/CHANGELOG.md'), '變更紀錄 CHANGELOG')}`;
   nav.querySelectorAll('details.nav-node').forEach(d => d.addEventListener('toggle', () => {
-    const set = navOpenSet(), k = d.dataset.k;
+    const set = navOpenSet(), k = d.dataset.nav;
     set.delete(k); set.delete('!' + k);
     set.add(d.open ? k : '!' + k);
     navSaveOpen(set);
