@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
-"""Domain 設計流程網頁（第一版：審查）。
-用法：python3 server.py --repo <切片 repo> [--port 8765]
+"""Domain 設計流程網頁：從主題草案、規劃、開切片到每一步的審查與凍結。
+用法：python3 server.py --repo <設計 repo> [--port 8765]
+      python3 server.py --repo <空資料夾> --init   # 建立新的設計 repo（複製工具包、git init）
 只綁 127.0.0.1，單人在本機使用。"""
 import argparse
-import json
+import base64
 import os
 import re
+import shutil
 import subprocess
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import kit
 import model
+import project
 import review
 import sessions
 
@@ -91,22 +94,112 @@ def home(slice: str):
     st = status()
     s = next(x for x in st['slices'] if x['slice'] == slice)
     current = next((r for r in s['reviews'] if r.get('counts') and r['counts']['open']), None)
-    tags = _tags(slice)
     on = _review_steps(current['step']) if current else set()
+    steps = project.steps(slice)
     levels = []
-    for code, name, fn in STEPS:
-        n = int(code)
-        frozen = sorted(t for t in tags if t.split('/', 1)[1].startswith(code + '-'))
-        exists = os.path.exists(os.path.join(kit.repo(), 'slices', slice, fn))
-        state = 'review' if n in on else 'frozen' if frozen else 'draft' if exists else 'locked'
-        levels.append({'n': n, 'name': name, 'state': state, 'tag': frozen[-1] if frozen else ''})
+    for x in steps:
+        state = ('review' if x['n'] in on else 'frozen' if x['status'].startswith('已凍結')
+                 else 'wait' if x['status'] == '待檢查' else 'draft' if x['status'] != '未開始' else 'locked')
+        levels.append({'n': x['n'], 'name': x['name'], 'state': state, 'status': x['status'], 'tag': x['version']})
+    nxt = project.next_step(steps)
+    eqs = project.eqs(slice)
     out = {'slice': slice, 'levels': levels, 'reviews': s['reviews'], 'current': None,
-           'eq_open': len(sessions._open_eqs(os.path.join(kit.repo(), 'slices', slice, 'questions.md'))), 'session': s['session']}
+           'next': nxt, 'eqs': eqs, 'eq_open': len([e for e in eqs if e.get('狀態') != '已回覆']),
+           'session': s['session']}
     if current:
         r = get_review(current['path'])
         out['current'] = {'path': r['path'], 'title': r['title'], 'step': current['step'], 'counts': r['counts'],
                           'meta': r['meta'], 'model': bool(r.get('model'))}
     return out
+
+
+# ---- 整個 domain：主題草案 → 規劃 → 切片 ----
+
+@app.get('/api/project')
+def get_project():
+    p = project.plan()
+    slices = []
+    for sl in kit.slices():
+        steps = project.steps(sl)
+        st = next((x for x in status()['slices'] if x['slice'] == sl), {})
+        cur = next((r for r in st.get('reviews', []) if r.get('counts') and r['counts']['open']), None)
+        eqs = project.eqs(sl)
+        slices.append({'slice': sl, 'steps': steps, 'next': project.next_step(steps), 'review': cur,
+                       'eq_open': len([e for e in eqs if e.get('狀態') != '已回覆']),
+                       'eq_answered': len([e for e in eqs if e.get('狀態') == '已回覆' and not e.get('處理')]),
+                       'session': sessions.active(sl)})
+    return {'repo': kit.repo(), 'gitignored': sessions.gitignored(), 'topic': project.topic(),
+            'plan': p, 'sketch': project.sketch(), 'drafts': project.drafts(), 'inputs': project.inputs(),
+            'slices': slices, 'plan_session': sessions.active('_plan')}
+
+
+class Topic(BaseModel):
+    fields: dict
+
+
+@app.post('/api/topic')
+def post_topic(t: Topic):
+    try:
+        return {'path': project.write_topic({k: str(v) for k, v in t.fields.items()})}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class NewInput(BaseModel):
+    folder: str = 'shared'
+    name: str
+    text: str = ''
+    b64: str = ''
+
+
+@app.post('/api/inputs')
+def post_input(n: NewInput):
+    try:
+        if n.b64:
+            return {'path': project.add_upload(n.folder, n.name, base64.b64decode(n.b64))}
+        if not n.text.strip():
+            raise ValueError('內容是空的')
+        return {'path': project.add_input(n.folder, n.name, n.text)}
+    except FileExistsError as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class Accept(BaseModel):
+    path: str
+    who: str
+    digest: str = ''
+
+
+@app.post('/api/draft/accept')
+def post_accept(a: Accept):
+    if not a.who.strip() or re.fullmatch(r'(?i)ai|claude', a.who.strip()):
+        raise HTTPException(400, '接受者要寫人的名字')
+    try:
+        return {'digest': project.accept_draft(a.path, a.who.strip(), a.digest or None)}
+    except review.Conflict:
+        raise HTTPException(409, '草稿在你打開之後被改過，請重新載入')
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class Asked(BaseModel):
+    slice: str
+    line: int
+    digest: str = ''
+
+
+@app.post('/api/eq/asked')
+def post_asked(a: Asked):
+    if a.slice not in kit.slices():
+        raise HTTPException(404, f'沒有這條切片：{a.slice}')
+    try:
+        return {'digest': project.mark_asked(a.slice, a.line, a.digest or None)}
+    except review.Conflict:
+        raise HTTPException(409, 'questions.md 在你打開之後被改過，請重新載入')
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 def _spot_items(r, p):
@@ -204,14 +297,16 @@ def get_file(path: str, base: str = ''):
     if not p:
         raise HTTPException(404, f'找不到 {path}')
     with open(p, encoding='utf-8', errors='replace') as f:
-        return {'path': kit.rel(p), 'text': f.read()}
+        text = f.read()
+    return {'path': kit.rel(p), 'text': text, 'digest': review.digest(text)}
 
 
 # ---- AI session ----
 
 @app.get('/api/sessions')
 def list_sessions():
-    return {'sessions': sessions.load(), 'gitignored': sessions.gitignored()}
+    items = [dict(s, running=sessions.busy(s['id'])) for s in sessions.load()]
+    return {'sessions': items, 'gitignored': sessions.gitignored()}
 
 
 @app.get('/api/handoff')
@@ -227,7 +322,8 @@ class NewSession(BaseModel):
 
 @app.post('/api/sessions')
 def new_session(n: NewSession):
-    if n.slice != '_plan' and n.slice not in kit.slices():
+    planned = [x.get('切片', '') for x in (project.plan() or {}).get('slices', [])]
+    if n.slice != '_plan' and n.slice not in kit.slices() and n.slice not in planned:
         raise HTTPException(400, f'沒有這條切片：{n.slice}')
     return sessions.create(n.slice, n.purpose, n.handoff)
 
@@ -244,25 +340,57 @@ class Message(BaseModel):
 
 @app.post('/api/sessions/{sid}/send')
 async def send(sid: str, m: Message):
+    """在背景交給 AI；進度用 /events 取（重新整理頁面也接得回來）。"""
+    try:
+        sessions.start(sid, m.text)
+    except KeyError:
+        raise HTTPException(404, '找不到這個 session')
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    return {'ok': True}
+
+
+@app.get('/api/sessions/{sid}/events')
+def get_events(sid: str, after: int = 0):
     if sessions.get(sid) is None:
         raise HTTPException(404, '找不到這個 session')
-    if sessions.busy(sid):
-        raise HTTPException(409, '這個 session 上一個請求還沒結束')
+    return sessions.events(sid, after)
 
-    async def stream():
-        async for ev in sessions.send(sid, m.text):
-            yield json.dumps(ev, ensure_ascii=False) + '\n'
-    return StreamingResponse(stream(), media_type='application/x-ndjson')
+
+KIT = os.path.join(HERE, '..', 'domain-design-kit')
+
+
+def init_repo(path):
+    """建立新的設計 repo：複製工具包的檔案（照 CLAUDE.md 同步工具包的清單）、建立 slices/ 與 inputs/、git init。"""
+    path = os.path.realpath(path)
+    if os.path.isdir(path) and [n for n in os.listdir(path) if not n.startswith('.')]:
+        raise SystemExit(f'{path} 不是空的資料夾')
+    files = subprocess.run(['git', '-c', 'core.quotepath=off', 'ls-files', '--', 'CLAUDE.md', 'README.md', '.gitignore',
+                            'docs', 'templates', 'tools', '.claude'], cwd=KIT, capture_output=True, text=True, check=True).stdout.split('\n')
+    for f in filter(None, files):
+        dst = os.path.join(path, f)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(os.path.join(KIT, f), dst)
+    for d in ('slices', 'inputs/shared', 'inputs/research', 'inputs/drafts'):
+        os.makedirs(os.path.join(path, d), exist_ok=True)
+        open(os.path.join(path, d, '.gitkeep'), 'a').close()
+    with open(os.path.join(path, '.gitignore'), 'a', encoding='utf-8') as f:
+        f.write('\n# 流程網頁的 AI session 登記表與紀錄（不是設計內容）\n.domain-web/\n')
+    subprocess.run(['git', 'init', '-q'], cwd=path, check=True)
+    return path
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--repo', default=os.environ.get('DOMAIN_REPO', os.getcwd()), help='切片 repo（工具包攤平在根目錄）')
     ap.add_argument('--port', type=int, default=8765)
+    ap.add_argument('--init', action='store_true', help='在 --repo 指定的空資料夾建立新的設計 repo')
     a = ap.parse_args()
+    if a.init:
+        print(f'已建立設計 repo：{init_repo(a.repo)}')
     kit.set_repo(a.repo)
-    if not os.path.isdir(os.path.join(kit.repo(), 'slices')):
-        ap.error(f'{kit.repo()} 底下沒有 slices/，不是切片 repo')
+    if not os.path.isdir(os.path.join(kit.repo(), 'slices')) and not os.path.isdir(os.path.join(kit.repo(), 'templates')):
+        ap.error(f'{kit.repo()} 不是設計 repo（沒有 slices/ 也沒有 templates/）；新的 domain 請加 --init')
     import uvicorn
     print(f'切片 repo：{kit.repo()}\n打開 http://127.0.0.1:{a.port}/')
     uvicorn.run(app, host='127.0.0.1', port=a.port, log_level='warning')

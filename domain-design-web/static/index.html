@@ -11,7 +11,7 @@
 <body>
 <header class="top">
   <a class="brand" href="#/">DOMAIN 設計</a>
-  <label class="slice-pick"><span class="sr">切片</span><select id="slicePick"></select></label>
+  <label class="slice-pick"><span class="sr">切片或總覽</span><select id="slicePick"></select></label>
   <a class="back" id="back" hidden></a>
   <div class="top-mid" id="topMid"></div>
   <button class="ai-btn" id="aiBtn"><span class="dot" id="aiDot"></span><span id="aiLabel">AI</span></button>
@@ -29,11 +29,12 @@
   <div class="ai-session" id="aiSession"></div>
   <div class="ai-log" id="aiLog"></div>
   <form class="ai-form" id="aiForm">
-    <textarea id="aiInput" rows="2" placeholder="畫面上的按鈕涵蓋不到的事，才在這裡打字"></textarea>
+    <textarea id="aiInput" rows="2" placeholder="畫面上的按鈕涵蓋不到的事，才在這裡打字（Enter 換行）"></textarea>
     <button type="submit" class="btn primary" id="aiSend">送出</button>
   </form>
 </aside>
 
+<dialog id="dlg"></dialog>
 <div class="toast" id="toast" hidden></div>
 
 <script src="/static/app.js"></script>

@@ -133,7 +133,8 @@ def test_model_and_home(client):
     assert [s['n'] for s in r['spot_items']] == [1, 2]
     h = client.get('/api/home', params={'slice': 'demo'}).json()
     assert h['current']['path'] == REVIEW
-    assert [lv['state'] for lv in h['levels']][:3] == ['locked', 'review', 'locked']
+    assert [lv['state'] for lv in h['levels']][:3] == ['frozen', 'review', 'locked']
+    assert h['next']['n'] == 2 and h['eq_open'] == 1
 
 
 def test_file_paths(client):
@@ -165,3 +166,85 @@ def test_summarize():
     res = sessions.summarize({'type': 'result', 'is_error': False, 'result': 'ok',
                               'permission_denials': [{'tool_name': 'Bash', 'tool_input': {'command': 'rm x'}}]})
     assert res['denials'][0]['tool'] == 'Bash'
+
+
+# ---- 整個 domain：規劃與切片進度（2026-10-28） ----
+
+def test_project(client):
+    p = client.get('/api/project').json()
+    assert p['plan']['status'] == '討論中' and not p['plan']['agreed']
+    assert [x['切片'] for x in p['plan']['slices']] == ['demo', 'return-order']
+    assert [x['狀態'] for x in p['plan']['inventory']] == ['推想草稿', '待提供']
+    assert p['plan']['pending'][0]['編號'] == 'P-01'
+    assert p['plan']['goals'][0].startswith('要做的系統與對象')
+    assert [n['名詞'] for n in p['sketch']['nouns']] == ['Customer（客戶）', 'Order（訂單）']
+    assert p['sketch']['unsure'] == ['客戶要不要分會員與訪客']
+    d = p['drafts'][0]
+    assert d['pending'] and d['unsure'] == '貨到付款是否常見'
+    s = p['slices'][0]
+    assert s['slice'] == 'demo' and s['next']['n'] == 2 and s['review']['path'] == REVIEW
+    assert s['eq_open'] == 1 and s['eq_answered'] == 1
+
+
+def test_accept_draft_and_inputs(repo, client):
+    path = 'inputs/drafts/一般下單流程.md'
+    assert client.post('/api/draft/accept', json={'path': path, 'who': 'AI'}).status_code == 400
+    assert client.post('/api/draft/accept', json={'path': path, 'who': '小明', 'digest': 'stale'}).status_code == 409
+    assert client.post('/api/draft/accept', json={'path': path, 'who': '小明'}).status_code == 200
+    text = (repo / path).read_text(encoding='utf-8')
+    assert '| 狀態 | 已接受為假設（小明，' in text and '| 最不確定的地方 | 貨到付款是否常見 |' in text
+    assert client.post('/api/draft/accept', json={'path': path, 'who': '小明'}).status_code == 400  # 已接受過
+    assert client.post('/api/draft/accept', json={'path': 'slices/PLAN.md', 'who': '小明'}).status_code == 400
+
+    r = client.post('/api/inputs', json={'folder': 'shared', 'name': '退貨 案例', 'text': '上週有人退了一半'}).json()
+    assert r['path'] == 'inputs/shared/退貨_案例.md'
+    assert '使用者於對話中提供' in (repo / r['path']).read_text(encoding='utf-8')
+    assert client.post('/api/inputs', json={'folder': 'shared', 'name': '退貨 案例', 'text': 'x'}).status_code == 409
+    assert client.post('/api/inputs', json={'folder': '../x', 'name': 'a', 'text': 'x'}).status_code == 400
+    up = client.post('/api/inputs', json={'folder': 'demo', 'name': '表單.xlsx', 'b64': 'AAEC'}).json()
+    assert (repo / up['path']).read_bytes() == b'\x00\x01\x02'
+
+    t = client.post('/api/topic', json={'fields': {'想做的系統': '訂單系統', '明確不做': '金流'}}).json()
+    text = (repo / t['path']).read_text(encoding='utf-8')
+    assert '- 想做的系統：訂單系統\n- 明確不做：金流' in text
+    client.post('/api/topic', json={'fields': {'其他': '要支援退貨'}})
+    text = (repo / t['path']).read_text(encoding='utf-8')
+    assert '- 想做的系統：訂單系統' in text and '補充' in text and '- 其他：要支援退貨' in text
+
+
+def test_mark_asked(repo, client):
+    eqs = client.get('/api/home', params={'slice': 'demo'}).json()['eqs']
+    line = next(e['line'] for e in eqs if e['編號'] == 'EQ-001')
+    assert client.post('/api/eq/asked', json={'slice': 'demo', 'line': line}).status_code == 200
+    assert '| EQ-001 | ① | 問題一 | HC | 已問 |' in (repo / 'slices/demo/questions.md').read_text(encoding='utf-8')
+    assert client.post('/api/eq/asked', json={'slice': 'demo', 'line': line}).status_code == 400
+
+
+def test_background_job(repo):
+    import time
+    from fastapi.testclient import TestClient
+    import server
+    sessions.CLAUDE = os.path.join(HERE, 'fake_claude.py')
+    with TestClient(server.app) as c:
+        s = c.post('/api/sessions', json={'slice': '_plan', 'purpose': '規劃', 'handoff': 'x'}).json()
+        assert c.post(f"/api/sessions/{s['id']}/send", json={'text': '/domain-plan 訂單'}).status_code == 200
+        for _ in range(50):
+            ev = c.get(f"/api/sessions/{s['id']}/events").json()
+            if not ev['running'] and any(e['kind'] == 'result' for e in ev['events']):
+                break
+            time.sleep(0.1)
+    assert [e['kind'] for e in ev['events']] == ['me', 'tool', 'text', 'result']
+    assert c.get(f"/api/sessions/{s['id']}/events", params={'after': 3}).json()['events'][0]['kind'] == 'result'
+    s2 = sessions.get(s['id'])
+    assert s2['turns'] == 1 and s2['last_reply'].startswith('問題：要先做哪條？')
+    assert '--permission-mode' in sessions._command(s2, 'x')
+
+
+def test_init_repo(tmp_path):
+    import server
+    root = server.init_repo(str(tmp_path / 'new'))
+    for f in ('CLAUDE.md', 'templates/PLAN.md', 'tools/lint.py', '.claude/skills/domain-plan/SKILL.md', 'slices/.gitkeep'):
+        assert os.path.exists(os.path.join(root, f)), f
+    assert '.domain-web/' in open(os.path.join(root, '.gitignore'), encoding='utf-8').read()
+    with pytest.raises(SystemExit):
+        server.init_repo(root)
