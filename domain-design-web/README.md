@@ -26,7 +26,7 @@
 ## 使用
 
 ```bash
-# 新的 domain：在空資料夾建立設計 repo（複製工具包、建立 slices/ 與 inputs/、git init、.gitignore 排除 .domain-web/）
+# 新的 domain：在空資料夾建立設計 repo（複製工具包、建立 slices/ 與 inputs/、.gitignore 排除 .domain-web/、git init 並做初始 commit）
 python3 server.py --repo ~/Projects/my-domain --init
 
 # 已有的設計 repo
