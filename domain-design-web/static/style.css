@@ -28,9 +28,10 @@ code { font-size: .9em; background: var(--bg); border-radius: 6px; padding: 0 4p
 /* ---- 頂列 ---- */
 .top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px; padding: 10px 24px; background: var(--ink); color: #fff; flex-wrap: wrap; }
 .brand { color: #fff; text-decoration: none; font-weight: 900; letter-spacing: .03em; }
-/* 側欄開關：頂列最左邊的 ☰，展開、收起都按它 */
+/* 側欄開關（像 Notion）：收起時在頂列最左邊（☰），展開時在側欄頂列最左邊（側欄圖示），兩個位置重疊 */
 .nav-toggle { flex: 0 0 auto; display: grid; place-items: center; width: 30px; height: 30px; margin-left: -6px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #fff; cursor: pointer; transition: background .15s; }
 .top .nav-toggle:hover { background: var(--dark2); }
+body:not(.nav-closed) .top .nav-toggle { display: none; }
 .page { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
 .back { color: #fff; font-weight: 700; font-size: 14px; text-decoration: none; }
 .top-mid { flex: 1 1 200px; display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -48,9 +49,12 @@ code { font-size: .9em; background: var(--bg); border-radius: 6px; padding: 0 4p
 /* ---- 左側導覽 ---- */
 .shell { display: flex; align-items: flex-start; }
 .shell > .page { align-self: stretch; }
-.side-nav { position: sticky; top: 0; z-index: 25; flex: 0 0 var(--nav-w); width: var(--nav-w); transition: margin-left .25s ease, transform .25s ease, visibility .25s; height: 100vh; overflow-y: auto; background: var(--side-bg); border-right: 1px solid var(--line); padding: 18px 12px 40px; font-size: 15px; display: flex; flex-direction: column; gap: 2px; }
+.side-nav { position: sticky; top: 0; z-index: 25; flex: 0 0 var(--nav-w); width: var(--nav-w); transition: margin-left .25s ease, transform .25s ease, visibility .25s; height: 100vh; overflow-y: auto; background: var(--side-bg); border-right: 1px solid var(--line); padding: 0 12px 40px; font-size: 15px; display: flex; flex-direction: column; gap: 2px; }
 body.nav-closed .side-nav { margin-left: calc(-1 * var(--nav-w)); visibility: hidden; }
 .side-nav > * { flex-shrink: 0; }
+.nav-top { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 14px; height: var(--top-h, 54px); margin: 0 -12px 10px; padding: 0 24px; background: var(--side-bg); }
+.nav-top .nav-toggle { color: var(--muted); }
+.nav-top .nav-toggle:hover { background: var(--line); color: var(--ink); }
 
 .nav-a { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; color: var(--ink); text-decoration: none; font-weight: 500; min-width: 0; }
 .nav-a:hover { background: #ECEAFB; }
@@ -347,7 +351,7 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
 
 @media (max-width: 900px) {
   :root { --nav-w: min(300px, 86vw); }
-  .side-nav { position: fixed; left: 0; top: var(--top-h, 54px); height: calc(100vh - var(--top-h, 54px)); z-index: 30; box-shadow: 6px 0 0 rgba(22, 18, 58, .15); }
+  .side-nav { position: fixed; left: 0; top: 0; z-index: 30; box-shadow: 6px 0 0 rgba(22, 18, 58, .15); }
   body.nav-closed .side-nav { margin-left: 0; transform: translateX(-100%); }
   .levels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
