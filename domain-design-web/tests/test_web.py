@@ -237,6 +237,10 @@ def test_background_job(repo):
     with TestClient(server.app) as c:
         s = c.post('/api/sessions', json={'slice': '_plan', 'purpose': '規劃', 'handoff': 'x'}).json()
         assert c.post(f"/api/sessions/{s['id']}/send", json={'text': '/domain-plan 訂單'}).status_code == 200
+        # 同一個 repo 一次只跑一件：另一個範圍的 session 這時送不出去
+        other = c.post('/api/sessions', json={'slice': 'demo', 'purpose': '第 2 步', 'handoff': 'x'}).json()
+        r = c.post(f"/api/sessions/{other['id']}/send", json={'text': '/domain-step 2 demo'})
+        assert r.status_code == 409 and '一次只跑一件' in r.json()['detail']
         for _ in range(50):
             ev = c.get(f"/api/sessions/{s['id']}/events").json()
             if not ev['running'] and any(e['kind'] == 'result' for e in ev['events']):

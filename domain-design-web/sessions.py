@@ -209,11 +209,16 @@ def events(sid, after=0):
 
 
 def start(sid, message):
-    """在背景送一則訊息。同一個 session 一次只送一個。"""
+    """在背景送一則訊息。整個設計 repo 同一時間只跑一個。"""
     if get(sid) is None:
         raise KeyError(sid)
     if busy(sid):
         raise RuntimeError('這個 session 上一個請求還沒結束')
+    # 同一個設計 repo 一次只跑一件：所有 session 共用同一份工作目錄與 git（CHANGELOG、core/、commit、tag 會互相踩到）。
+    # 要多條切片平行，照流程各自 clone、開分支，用 PR 合併
+    other = next((x for x in load() if x['id'] != sid and busy(x['id'])), None)
+    if other:
+        raise RuntimeError(f'AI 正在做「{other["name"]}」。同一個設計 repo 一次只跑一件（共用同一份檔案與 git），做完再交下一件')
     _append(sid, {'kind': 'me', 'text': message})
     _running[sid] = asyncio.get_running_loop().create_task(_run(sid, message))
 
