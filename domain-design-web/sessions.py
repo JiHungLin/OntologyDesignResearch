@@ -131,20 +131,18 @@ ALLOWED = os.environ.get('DOMAIN_WEB_ALLOWED', ','.join([
     # 下載公開來源並轉文字（網頁附的小工具，見 fetch_text.py）
     f'Bash(python3 {FETCH} *)'])).split(',')
 
-WEB_PROMPT = (
-    '你在「Domain 設計流程網頁」裡執行（claude -p）。使用者看不到選項介面（AskUserQuestion 不能用），也不能在這裡核准權限。'
-    '要問人時照 docs/01 0.2「問人的方式」寫在回覆最後，一題一段，格式固定：'
-    '「問題：<一句話>」、「例子：<一個具體情況>」、「A（建議）：<做法> → <選了之後設計會怎樣>」、「B：<做法> → <結果>」、「其他：（寫一句）」，然後停下來。'
-    '回報結束時，用一句話說明下一步要人做什麼。'
-    'Bash 一次執行一個指令，不要用 for 迴圈；讀檔、列檔、找字用 Read、Glob、Grep。'
-    f'下載公開來源原文一律用 python3 {FETCH} <網址> [檔名]：原文存到 .domain-web/tmp/（已被 .gitignore 排除），HTML、PDF 轉成同名 .txt（照原文、不摘要，連結寫成「文字 <網址>」），再用 Read 讀、照規範摘錄進 inputs/research/。'
-    '不要自己寫 python 腳本、不要用變數或管線處理下載內容，也不要在 repo 裡建暫存資料夾（這些在網頁上都會被擋）。'
-    '指令被擋下或連線失敗時，在回覆裡寫出完整指令與錯誤訊息，不要說成「環境不能上網」。')
+PROMPT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web_prompt.md')
+
+
+def web_prompt():
+    """附加在 claude -p 的系統提示；每次執行時讀 web_prompt.md，改了不用重開伺服器。"""
+    with open(PROMPT_FILE, encoding='utf-8') as f:
+        return f.read().replace('{FETCH}', FETCH)
 
 
 def _command(s, message):
     cmd = [CLAUDE, '-p', message, '--output-format', 'stream-json', '--verbose',
-           '--permission-mode', 'acceptEdits', '--append-system-prompt', WEB_PROMPT, '--allowedTools', *ALLOWED]
+           '--permission-mode', 'acceptEdits', '--append-system-prompt', web_prompt(), '--allowedTools', *ALLOWED]
     if s['turns'] == 0:
         cmd += ['--session-id', s['id'], '-n', s['name']]
     else:
