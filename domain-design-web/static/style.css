@@ -269,6 +269,8 @@ details.tech summary { cursor: pointer; }
 .ai-log .tool { color: var(--muted); font-size: 12px; }
 .ai-log .sub { margin-left: 16px; }
 .ai-log .err, .ai-log .deny { background: #FFE8D6; border-radius: 10px; padding: 6px 10px; }
+.ai-log details.deny summary { cursor: pointer; font-weight: 700; }
+.ai-log details.deny ul { margin: 4px 0 0; padding-left: 18px; word-break: break-all; }
 .ai-form { display: flex; align-items: flex-end; gap: 8px; padding: 12px 16px; border-top: 2px solid var(--line); }
 .ai-form textarea { flex: 1; resize: none; min-height: 52px; max-height: 220px; overflow-y: auto; }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; background: var(--ink); color: #fff; border-radius: 14px; padding: 12px 18px; max-width: 90vw; box-shadow: 4px 4px 0 var(--turn); }

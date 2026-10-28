@@ -260,3 +260,12 @@ def test_init_repo(tmp_path):
     assert not subprocess.run(['git', 'status', '--porcelain'], cwd=root, capture_output=True, text=True).stdout
     with pytest.raises(SystemExit):
         server.init_repo(root)
+
+
+def test_fetch_text_html():
+    import fetch_text
+    p = fetch_text.Text('https://example.gov.tw/law/')
+    p.feed('<html><script>x=1</script><h1>碳費收費辦法</h1><p>第 1 條 <a href="a.html">附表</a></p><table><tr><td>A</td><td>300</td></tr></table></html>')
+    t = p.text()
+    assert '碳費收費辦法' in t and 'x=1' not in t
+    assert '附表 <https://example.gov.tw/law/a.html>' in t and '| A | 300' in t
