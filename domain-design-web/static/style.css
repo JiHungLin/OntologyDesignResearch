@@ -216,9 +216,11 @@ details.tech summary { cursor: pointer; }
 /* 同一排的卡一樣高，按鈕一律貼在卡片底部，不會忽高忽低 */
 .crow .acts { margin-top: auto; padding-top: 4px; }
 .crow.done { border-color: var(--done); background: #E3F7EC; }
+.crow.noted { border-color: var(--turn); background: #FFF1E6; }
 .crow .acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .crow .acts .btn { min-height: 36px; padding: 0 12px; font-size: 14px; box-shadow: 2px 2px 0 var(--ink); }
-.crow .val { font-weight: 900; color: var(--done); }
+.crow .val { font-weight: 900; color: #0F8A52; margin-right: auto; }
+.crow .val.note { color: #C2410C; font-weight: 700; }
 .groups { display: flex; flex-direction: column; gap: 24px; }
 .group > .row { margin-bottom: 18px; align-items: center; }
 .group > .row .btn { flex: 0 0 auto; }
