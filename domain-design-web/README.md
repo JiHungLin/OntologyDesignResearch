@@ -29,6 +29,9 @@
 # 新的 domain：在空資料夾建立設計 repo（複製工具包、建立 slices/ 與 inputs/、.gitignore 排除 .domain-web/、git init 並做初始 commit）
 python3 server.py --repo ~/Projects/my-domain --init
 
+# 讓同一個網路的其他電腦也能開（會印出區網網址；沒有登入機制，只在信任的網路上用）
+python3 server.py --repo ~/Projects/my-domain --host 0.0.0.0
+
 # 已有的設計 repo
 python3 server.py --repo <設計 repo 的路徑>    # 例：~/Projects/HR-Domain-Desing
 # 打開 http://127.0.0.1:8765/
