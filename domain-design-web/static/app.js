@@ -437,8 +437,9 @@ function groupOf(what) {
 function confirmRow(c) {
   const ans = (c.answer || '').trim();
   return `<div class="crow ${ans ? 'done' : ''}">
-    <div>${inline(c.cells['要看的'] || '')}</div>
-    <div class="orig">${inline(c.cells['原文'] || '')}　${inline(c.cells['在哪裡'] || '')}</div>
+    <div class="what">${inline(c.cells['要看的'] || '')}</div>
+    ${c.cells['原文'] ? `<div class="orig">${inline(c.cells['原文'])}</div>` : ''}
+    ${c.cells['在哪裡'] ? `<div class="where">${inline(c.cells['在哪裡'])}</div>` : ''}
     <div class="acts">
       ${ans ? `<span class="val">${ans === '✓' ? '✓ 沒問題' : '意見：' + esc(ans)}</span>` : ''}
       <button class="btn ${ans ? '' : 'go'}" data-ok="${c.line}">✓ 合理</button>
@@ -591,7 +592,7 @@ async function renderConfirm(path, sel) {
   const groupsHtml = groups.map((g, k) => {
     const open = g.rows.filter(c => !(c.answer || '').trim());
     return `<section class="group card">
-      <div class="row spread"><h3>${esc(g.name)}</h3>${open.length > 1 ? `<button class="btn go" data-group="${k}">這 ${open.length} 項都沒問題</button>` : ''}</div>
+      <div class="row spread"><h3>${esc(g.name)}</h3>${open.length > 1 ? `<button class="btn small-btn go" data-group="${k}">這 ${open.length} 項都沒問題</button>` : ''}</div>
       <div class="list">${g.rows.map(confirmRow).join('')}</div></section>`;
   }).join('');
 
