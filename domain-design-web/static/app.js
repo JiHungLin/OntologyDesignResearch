@@ -928,7 +928,7 @@ function renderNav() {
       + a(`#/eq/${enc(x.code)}`, '專家問題', f.eq_open ? `${f.eq_open} 題待答` : '')
       + `<div class="nav-steps">${steps}</div>`
       + (others.length ? node('files:' + x.code, '<span class="nav-dir">其他檔案</span>', others.map(p => fileA(p)).join('')) : '');
-    return node('s:' + x.code, `<span class="nav-name">${esc(x.code)}</span><span class="nav-st ${st.cls}">${esc(st.text)}</span>`, body, state.slice === x.code);
+    return node('s:' + x.code, `<span class="nav-name" title="${esc(x.code)}">${esc(x.code)}</span><span class="nav-st ${st.cls}">${esc(st.text)}</span>`, body, state.slice === x.code);
   };
 
   nav.innerHTML = `
@@ -978,7 +978,16 @@ async function refreshNav() { try { await loadProject(); renderNav(); } catch (e
 
 function setNav(open) {
   document.body.classList.toggle('nav-closed', !open);
+  syncNavEdge();
   if (!narrow()) try { localStorage.setItem('nav-closed', open ? '' : '1'); } catch (e) { }
+}
+function syncNavEdge() {
+  const closed = document.body.classList.contains('nav-closed');
+  const b = $('#navEdge');
+  b.textContent = closed ? '›' : '‹';
+  b.title = closed ? '展開導覽' : '往左收起導覽';
+  b.setAttribute('aria-label', b.title);
+  b.setAttribute('aria-expanded', String(!closed));
 }
 function narrow() { return matchMedia('(max-width: 900px)').matches; }
 
@@ -1786,6 +1795,8 @@ $('#aiBtn').onclick = () => { if ($('#aiDrawer').hidden) openAi(); else $('#aiDr
 $('#navBtn').onclick = () => setNav(document.body.classList.contains('nav-closed'));
 $('#sideNav').addEventListener('click', e => { if (narrow() && e.target.closest('a.nav-a')) setNav(false); });
 try { if (narrow() || localStorage.getItem('nav-closed')) document.body.classList.add('nav-closed'); } catch (e) { if (narrow()) document.body.classList.add('nav-closed'); }
+$('#navEdge').onclick = () => setNav(document.body.classList.contains('nav-closed'));
+syncNavEdge();
 const fitTop = () => document.documentElement.style.setProperty('--top-h', $('.top').offsetHeight + 'px');
 window.addEventListener('resize', fitTop); fitTop();
 $('#aiForm').onsubmit = e => {
