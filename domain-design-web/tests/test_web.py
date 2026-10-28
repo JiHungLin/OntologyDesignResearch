@@ -184,6 +184,14 @@ def test_project(client):
     s = p['slices'][0]
     assert s['slice'] == 'demo' and s['next']['n'] == 2 and s['review']['path'] == REVIEW
     assert s['eq_open'] == 1 and s['eq_answered'] == 1
+    assert 'slices/demo/01_scope.md' in s['files'] and p['core'] == {}
+
+
+def test_file_binary(repo, client):
+    (repo / 'inputs' / 'shared').mkdir(parents=True, exist_ok=True)
+    (repo / 'inputs' / 'shared' / '薪資表.xlsx').write_bytes(b'PK\x03\x04')
+    f = client.get('/api/file', params={'path': 'inputs/shared/薪資表.xlsx'}).json()
+    assert f['binary'] and f['size'] == 4 and 'text' not in f
 
 
 def test_accept_draft_and_inputs(repo, client):

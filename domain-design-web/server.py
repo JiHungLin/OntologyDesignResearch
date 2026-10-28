@@ -25,6 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 app = FastAPI(title='Domain 設計流程網頁')
 app.mount('/static', StaticFiles(directory=os.path.join(HERE, 'static')), name='static')
 
+TEXT_EXT = {'.md', '.txt', '.yaml', '.yml', '.json', '.js', '.csv', '.py', ''}
 REVIEW_NAME = re.compile(r'^(\d{4}-\d{2}-\d{2})_(.+)\.md$')
 
 
@@ -127,9 +128,10 @@ def get_project():
         slices.append({'slice': sl, 'steps': steps, 'next': project.next_step(steps), 'review': cur,
                        'eq_open': len([e for e in eqs if e.get('狀態') != '已回覆']),
                        'eq_answered': len([e for e in eqs if e.get('狀態') == '已回覆' and not e.get('處理')]),
-                       'session': sessions.active(sl)})
+                       'session': sessions.active(sl), 'files': project.slice_files(sl)})
     return {'repo': kit.repo(), 'gitignored': sessions.gitignored(), 'topic': project.topic(),
             'plan': p, 'sketch': project.sketch(), 'drafts': project.drafts(), 'inputs': project.inputs(),
+            'core': project.files_under('core'),
             'slices': slices, 'plan_session': sessions.active('_plan')}
 
 
@@ -296,6 +298,8 @@ def get_file(path: str, base: str = ''):
     p = kit.resolve(path, os.path.join(kit.repo(), base) if base else None)
     if not p:
         raise HTTPException(404, f'找不到 {path}')
+    if os.path.splitext(p)[1].lower() not in TEXT_EXT:
+        return {'path': kit.rel(p), 'binary': True, 'size': os.path.getsize(p)}
     with open(p, encoding='utf-8', errors='replace') as f:
         text = f.read()
     return {'path': kit.rel(p), 'text': text, 'digest': review.digest(text)}

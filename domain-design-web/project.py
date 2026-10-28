@@ -112,16 +112,29 @@ def drafts():
 
 def inputs():
     """inputs/ 底下的檔案（相對路徑），依資料夾分組。"""
-    root = _p('inputs')
+    return files_under('inputs')
+
+
+def files_under(top):
+    """某個資料夾底下的檔案（相對路徑），依子資料夾分組；隱藏檔不列。"""
+    root = _p(top)
     out = {}
     for dp, dns, fns in os.walk(root):
         dns[:] = sorted(x for x in dns if not x.startswith('.'))
         for f in sorted(fns):
-            if f.startswith('.'):
-                continue
-            rel = kit.rel(os.path.join(dp, f))
-            out.setdefault(os.path.dirname(rel), []).append(rel)
+            if not f.startswith('.'):
+                rel = kit.rel(os.path.join(dp, f))
+                out.setdefault(os.path.dirname(rel), []).append(rel)
     return out
+
+
+def slice_files(slice_):
+    """切片資料夾第一層的檔案（審查頁另外列）。"""
+    d = _p('slices', slice_)
+    if not os.path.isdir(d):
+        return []
+    return [kit.rel(os.path.join(d, n)) for n in sorted(os.listdir(d))
+            if not n.startswith('.') and os.path.isfile(os.path.join(d, n))]
 
 
 def topic():
