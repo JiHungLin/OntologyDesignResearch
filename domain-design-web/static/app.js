@@ -1858,24 +1858,25 @@ async function renderEq(slice) {
   markNav();
   setTop([`#/s/${enc(slice)}`, slice], '<strong>專家問題</strong>');
   const h = await api('/api/home?slice=' + enc(slice));
-  const f = await api(`/api/file?path=${enc(`slices/${slice}/questions.md`)}`);
-  const order = { '待問': 0, '已問': 1, '暫依整理': 2, '已回覆': 3 };
-  const eqs = h.eqs.slice().sort((a, b) => (order[a['狀態']] ?? 9) - (order[b['狀態']] ?? 9));
-  const toAsk = eqs.filter(e => e['狀態'] === '待問');
+  // 待問、已問在網頁上都算「等專家回覆」：問了沒有不用記，等到專家回覆才算有進展（點了「我問了」會像結案，容易誤會）
+  const waitingEq = e => e['狀態'] === '待問' || e['狀態'] === '已問';
+  const order = { '待問': 0, '已問': 0, '暫依整理': 1, '已回覆': 2 };
+  const eqs = h.eqs.slice().sort((a, b) => (order[a['狀態']] ?? 9) - (order[b['狀態']] ?? 9) || a.line - b.line);
+  const toAsk = eqs.filter(waitingEq);
   $('#app').innerHTML = `
     <div><h1 style="margin:0">專家問題</h1><p class="muted" style="margin:4px 0 0">AI 答不了、要問 Domain 專家或客戶的事。不擋關卡：相關的地方先標「待專家確認」，答覆回來再交給 AI 回頭改。</p></div>
-    ${toAsk.length ? `<div class="row"><button class="btn primary" id="copyAll">複製 ${toAsk.length} 題待問的（給專家）</button></div>` : ''}
+    ${toAsk.length ? `<div class="row"><button class="btn primary" id="copyAll">複製 ${toAsk.length} 題等回覆的（給專家）</button></div>` : ''}
     <div class="eqs">${eqs.map(e => {
-      const st = e['狀態'];
-      return `<section class="card eq ${st === '待問' ? 'need' : st === '已回覆' ? 'ok' : ''}" data-line="${e.line}">
-        <div class="row spread"><b>${esc(e['編號'])}</b><span class="chip ${st === '待問' ? 'turn' : st === '已回覆' ? 'new' : ''}">${esc(st)}</span></div>
+      const st = e['狀態'], wait = waitingEq(e);
+      return `<section class="card eq ${wait ? 'need' : st === '已回覆' ? 'ok' : ''}" data-line="${e.line}">
+        <div class="row spread"><b>${esc(e['編號'])}</b><span class="chip ${wait ? 'turn' : st === '已回覆' ? 'new' : ''}">${wait ? '等專家回覆' : esc(st)}</span></div>
         <div class="eq-q">${inline(e['問題（業務語言）'] || e['問題'] || '')}</div>
         <div class="small muted">問誰：${esc(e['問誰'] || '')}　提出於 ${esc(e['提出於'] || '')}</div>
         ${e['答覆'] ? `<div class="box"><div class="label">答覆（${esc(e['答覆日'] || '')}）</div>${inline(e['答覆'])}</div>` : ''}
         ${e['影響'] ? `<details class="tech"><summary>影響哪些地方</summary>${inline(e['影響'])}</details>` : ''}
         <div class="row">
-          ${st === '待問' ? `<button class="btn small-btn" data-copy="${e.line}">複製這題</button><button class="btn small-btn go" data-asked="${e.line}">我問了</button>` : ''}
-          ${st === '已問' || st === '暫依整理' || st === '待問' ? `<button class="btn small-btn primary" data-reply-eq="${esc(e['編號'])}">專家回覆了</button>` : ''}
+          ${wait ? `<button class="btn small-btn" data-copy="${e.line}">複製這題</button>` : ''}
+          ${wait || st === '暫依整理' ? `<button class="btn small-btn primary" data-reply-eq="${esc(e['編號'])}">專家回覆了</button>` : ''}
           ${st === '已回覆' && !e['處理'] ? `<button class="btn small-btn primary" data-handle="${esc(e['編號'])}">交給 AI 處理</button>` : ''}
           ${e['處理'] ? `<span class="small">處理：${inline(e['處理'])}</span>` : ''}
         </div></section>`;
@@ -1884,9 +1885,6 @@ async function renderEq(slice) {
   const copy = t => navigator.clipboard.writeText(t).then(() => toast('已複製（不含 AI 的建議答案）'), () => toast('複製失敗'));
   const ca = $('#copyAll'); if (ca) ca.onclick = () => copy(toAsk.map(qText).join('\n\n'));
   $$('[data-copy]').forEach(b => b.onclick = () => copy(qText(eqs.find(e => e.line === +b.dataset.copy))));
-  $$('[data-asked]').forEach(b => b.onclick = async () => {
-    try { await api('/api/eq/asked', { slice, line: +b.dataset.asked, digest: f.digest }); renderEq(slice); } catch (e) { toast(e.message); }
-  });
   $$('[data-handle]').forEach(b => b.onclick = () => runAi(slice, '專家回覆', `/domain-expert-reply ${b.dataset.handle}`));
   $$('[data-reply-eq]').forEach(b => b.onclick = () => {
     const id = b.dataset.replyEq;

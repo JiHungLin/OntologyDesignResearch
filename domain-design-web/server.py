@@ -186,24 +186,6 @@ def post_accept(a: Accept):
         raise HTTPException(400, str(e))
 
 
-class Asked(BaseModel):
-    slice: str
-    line: int
-    digest: str = ''
-
-
-@app.post('/api/eq/asked')
-def post_asked(a: Asked):
-    if a.slice not in kit.slices():
-        raise HTTPException(404, f'沒有這條切片：{a.slice}')
-    try:
-        return {'digest': project.mark_asked(a.slice, a.line, a.digest or None)}
-    except review.Conflict:
-        raise HTTPException(409, 'questions.md 在你打開之後被改過，請重新載入')
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
 def _spot_items(r, p):
     """抽查可挑的條目：「`02_entities.md` 完成標準表由上往下第 1、2、3 條」→ 取出那幾條的文字。"""
     m = re.search(r'`?([\w.-]+\.md)`?\s*完成標準表[^第]*第\s*([\d、，, ]+)\s*條', r['spot_hint'])

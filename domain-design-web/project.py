@@ -205,15 +205,6 @@ def accept_draft(rel, who, expect_digest=None):
     return review.set_row(path, st['line'], {'內容': f'已接受為假設（{who}，{_today()}）'}, {'內容'}, expect_digest)
 
 
-def mark_asked(slice_, line, expect_digest=None):
-    """專家問題：使用者已經問了專家（待問 → 已問）。"""
-    path = _p('slices', slice_, 'questions.md')
-    row = next((r for r in eqs(slice_) if r['line'] == line), None)
-    if not row or row.get('狀態') != '待問':
-        raise ValueError('這一題不是「待問」')
-    return review.set_row(path, line, {'狀態': '已問'}, {'狀態'}, expect_digest)
-
-
 def add_input(folder, name, text, note='使用者於對話中提供'):
     """把使用者貼上或寫下的東西存成 inputs/ 下的新檔（已存在的不覆寫）。"""
     folder = folder.strip('/')
