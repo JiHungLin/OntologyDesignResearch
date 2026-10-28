@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import md2build as mb
 
 STEP_FILES = {2: '02_entities.md', 3: '03_flows.md', 4: '04_rules.md'}
+EXAMPLE_SINCE = '2026-10-28'   # 審查頁問題要有「例子」、選項要有「→」的起始日（之前的審查頁不回頭補）
 ALL_FILES = ['01_scope.md', '02_entities.md', '03_flows.md', '03_use_cases.md', '04_rules.md', '05_mapping.md']
 HISTORY_H2 = {'決定與理由', '檢查紀錄', '回填紀錄'}
 HISTORY_H3 = {'反例處理', '六問判斷紀錄'}
@@ -932,6 +933,12 @@ class Lint:
                     self.red('審查頁', f"{rel}:{q['no']} {q['title']} 沒有建議答案（A（建議））")
                 if q['options'] < 2:
                     self.red('審查頁', f"{rel}:{q['no']} {q['title']} 除了建議答案，至少還要一個選項（B…）")
+                if os.path.basename(rel)[:10] >= EXAMPLE_SINCE:      # 例子與「→ 結果」：2026-10-28 起的審查頁（先試用）
+                    if not fl.get('例子', (0, ''))[1]:
+                        self.red('審查頁', f"{rel}:{q['no']} {q['title']} 沒有「例子」（一個具體情況，docs/02「審查頁」）")
+                    for k, (ln, v) in fl.items():
+                        if re.match(r'^[A-Z](（建議）)?$', k) and v and '→' not in v:
+                            self.red('審查頁', f"{rel}:{ln} {q['title']} 選項 {k[0]} 沒有用「→」寫出選了之後設計會怎樣")
                 if '你的回答' in fl and not fl['你的回答'][1]:
                     unanswered.append(f"{rel}:{fl['你的回答'][0]} {q['title']}")
             for no, c in r['confirms']:
