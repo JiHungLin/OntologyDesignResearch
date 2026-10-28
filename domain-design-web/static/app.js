@@ -349,7 +349,8 @@ async function renderDecide(path, i) {
         <h1 class="qtitle">${esc(q.question)}</h1>
       </div>
       ${q.example ? `<section class="card"><div class="label">舉個例子</div>${inline(q.example)}</section>` : ''}
-      <fieldset style="border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:14px">
+      ${q.background ? `<section class="why"><div class="label">為什麼要你決定</div>${inline(q.background)}</section>` : ''}
+      <fieldset style="border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:18px">
         <legend class="label">選一個${ans && !chosen ? `（你寫了：${esc(ans)}）` : ''}</legend>
         <div class="opts">${q.options.map(o => `
           <button class="opt ${o.recommended ? 'rec' : ''} ${chosen === o.key ? 'on' : ''}" data-opt="${o.key}">
@@ -357,13 +358,12 @@ async function renderDecide(path, i) {
             <span class="sum">${inline(o.summary || o.text)}</span>
             ${o.outcome ? `<span class="out">選了之後：${inline(o.outcome)}</span>` : ''}
           </button>`).join('')}</div>
-        <label class="label" style="color:var(--ink);font-size:15px">都不是？寫一句你的想法
-          <div class="row" style="margin-top:6px"><input type="text" id="other" style="flex:1" value="${chosen || !ans ? '' : esc(ans)}" placeholder="寫一句，按 Enter 送出">
+        <label class="label" style="color:var(--ink);font-size:15px;margin-top:6px">都不是？寫一句你的想法
+          <div class="row" style="margin-top:10px"><input type="text" id="other" style="flex:1" value="${chosen || !ans ? '' : esc(ans)}" placeholder="寫一句，按 Enter 送出">
           <button class="btn" id="otherSave">送出</button></div>
         </label>
       </fieldset>
-      ${q.background ? `<section class="card hint"><strong>為什麼要你決定：</strong>${inline(q.background)}</section>` : ''}
-      <section class="card">
+      <section class="card soft-card">
         <label class="label" for="ask" style="color:var(--ink);font-size:16px">看不懂？直接問 AI</label>
         <div class="row"><input type="text" id="ask" class="soft" style="flex:1" placeholder="例：選 B 的話，哪裡會不一樣？">
           <button class="btn go" id="askBtn">問</button></div>
@@ -642,7 +642,7 @@ function timelineOf(c) {
     for (const seg of text.split(/[；。，\n]/)) {
       const m = seg.match(/(\d{4})-(\d{2})-(\d{2})/);
       if (!m) continue;
-      const label = seg.replace(m[0], ' ').replace(/\s+/g, ' ').replace(/^[\s、：:]+|[\s、：:]+$/g, '');
+      const label = seg.replace(m[0], ' ').replace(/\s+/g, ' ').replace(/^[\s、：:]+|[\s、：:]+$/g, '').replace(/([^\x00-\xff])\s+(?=[^\x00-\xff])/g, '$1');
       if (!evs.has(m[0])) evs.set(m[0], { date: m[0], t: new Date(m[0]).getTime(), labels: [] });
       if (label && !evs.get(m[0]).labels.includes(label)) evs.get(m[0]).labels.push(label);
     }
@@ -663,8 +663,8 @@ function timelineOf(c) {
   const span = evs.length > 1 ? evs[evs.length - 1].t - evs[0].t : 1;
   let lastLeft = -100;
   evs.forEach(e => {
-    e.left = (e.t - evs[0].t) / span * 82;
-    e.low = e.left - lastLeft < 16 && !(evs[evs.indexOf(e) - 1] || {}).low;
+    e.left = (e.t - evs[0].t) / span * 100;
+    e.low = e.left - lastLeft < 14 && !(evs[evs.indexOf(e) - 1] || {}).low;
     if (!e.low) lastLeft = e.left;
   });
   return evs;
@@ -685,11 +685,14 @@ async function renderGolden(path, i) {
   setTop([`#/s/${enc(r.slice)}`, '關卡'], progressSegs(cs, i, x => !caseOpen(x), k => `#/r/${p}/golden/${k}`) + `<span class="count">案例 ${i + 1} / ${cs.length}</span>`);
   const f = k => (c.fields[k] || {}).value || '';
   const evs = timelineOf(c);
+  const askChip = e => e.ask ? `<span class="chip turn">你來算 ${[...new Set(e.ask)].join('')}</span>` : '';
   const tl = evs.length > 1 ? `
-    <section class="card lift timeline"><div class="tl" style="height:${evs.some(e => e.low) ? 190 : 130}px"><div class="axis"></div>${evs.map(e => `
-      <div class="ev ${e.ask ? 'ask' : ''}" style="left:${e.left}%;${e.low ? 'top:96px' : ''}">
-        <div class="d">${esc(e.date)}</div><div class="o"></div><div class="t">${esc(e.labels.join('；'))}${e.ask ? ` <span class="chip turn" style="font-size:11px">你來算 ${[...new Set(e.ask)].join('')}</span>` : ''}</div></div>`).join('')}
-    </div></section>` : '';
+    <section class="card timeline">
+      <div class="tl-wrap"><div class="tl"><div class="axis"></div>${evs.map((e, k) => `
+        <div class="ev ${e.ask ? 'ask' : ''} ${e.low ? 'low' : ''}" style="left:${e.left}%"><div class="d">${esc(e.date)}</div><div class="o">${k + 1}</div></div>`).join('')}
+      </div></div>
+      <ol class="tl-list">${evs.map((e, k) => `<li class="${e.ask ? 'ask' : ''}"><span class="o">${k + 1}</span><b>${esc(e.date)}</b><span>${esc(e.labels.join('；')) || '<span class="muted">算到這一天</span>'}</span>${askChip(e)}</li>`).join('')}</ol>
+    </section>` : '';
   const [kind, ...rest] = c.title.split('：');
   const done = !caseOpen(c);
   const name = remember('reviewer');
