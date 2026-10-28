@@ -11,6 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 import kit  # noqa: E402
+import project  # noqa: E402
 import review  # noqa: E402
 import sessions  # noqa: E402
 
@@ -281,3 +282,15 @@ def test_one_slice_at_a_time(repo, client):
     assert r.status_code == 409 and 'demo' in r.json()['detail']
     assert client.post('/api/sessions', json={'slice': 'demo', 'purpose': '第 2 步', 'handoff': 'x'}).status_code == 200
     assert client.post('/api/sessions', json={'slice': '_plan', 'purpose': '規劃', 'handoff': 'x'}).status_code == 200
+
+
+def test_untouched_template_is_not_started(repo):
+    # 開切片時複製過來、只換了 {{切片}} 的範本，不算「草稿」
+    (repo / 'templates' / 'slice').mkdir(parents=True)
+    tpl = '# {{切片}} ③ 流程\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 草稿 |\n'
+    (repo / 'templates' / 'slice' / '03_flows.md').write_text(tpl, encoding='utf-8')
+    (repo / 'slices' / 'demo' / '03_flows.md').write_text(tpl.replace('{{切片}}', 'demo'), encoding='utf-8')
+    st = {s['n']: s['status'] for s in project.steps('demo')}
+    assert st[3] == '未開始'
+    (repo / 'slices' / 'demo' / '03_flows.md').write_text(tpl.replace('{{切片}}', 'demo') + '\n開始寫了\n', encoding='utf-8')
+    assert {s['n']: s['status'] for s in project.steps('demo')}[3] == '草稿'
