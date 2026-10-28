@@ -1,6 +1,7 @@
 """執行：cd domain-design-web && python3 -m pytest tests -q
 用 tests/fixture 的副本測試，不動 fixture 本身。"""
 import os
+import subprocess
 import shutil
 import sys
 
@@ -254,5 +255,8 @@ def test_init_repo(tmp_path):
     for f in ('CLAUDE.md', 'templates/PLAN.md', 'tools/lint.py', '.claude/skills/domain-plan/SKILL.md', 'slices/.gitkeep'):
         assert os.path.exists(os.path.join(root, f)), f
     assert '.domain-web/' in open(os.path.join(root, '.gitignore'), encoding='utf-8').read()
+    log = subprocess.run(['git', 'log', '--format=%s'], cwd=root, capture_output=True, text=True).stdout.split('\n')
+    assert log[0] == '建立設計 repo：複製設計工具包'
+    assert not subprocess.run(['git', 'status', '--porcelain'], cwd=root, capture_output=True, text=True).stdout
     with pytest.raises(SystemExit):
         server.init_repo(root)

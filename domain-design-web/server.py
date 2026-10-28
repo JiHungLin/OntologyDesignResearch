@@ -365,7 +365,7 @@ KIT = os.path.join(HERE, '..', 'domain-design-kit')
 
 
 def init_repo(path):
-    """建立新的設計 repo：複製工具包的檔案（照 CLAUDE.md 同步工具包的清單）、建立 slices/ 與 inputs/、git init。"""
+    """建立新的設計 repo：複製工具包的檔案（照 CLAUDE.md 同步工具包的清單）、建立 slices/ 與 inputs/、git init、初始 commit。"""
     path = os.path.realpath(path)
     if os.path.isdir(path) and [n for n in os.listdir(path) if not n.startswith('.')]:
         raise SystemExit(f'{path} 不是空的資料夾')
@@ -381,6 +381,11 @@ def init_repo(path):
     with open(os.path.join(path, '.gitignore'), 'a', encoding='utf-8') as f:
         f.write('\n# 流程網頁的 AI session 登記表與紀錄（不是設計內容）\n.domain-web/\n')
     subprocess.run(['git', 'init', '-q'], cwd=path, check=True)
+    # 初始 commit：之後凍結打 tag、AI commit 都有起點。沒設定 git 使用者時只提醒，不中斷
+    subprocess.run(['git', 'add', '-A'], cwd=path, check=True)
+    r = subprocess.run(['git', 'commit', '-q', '-m', '建立設計 repo：複製設計工具包'], cwd=path, capture_output=True, text=True)
+    if r.returncode:
+        print(f'初始 commit 沒做成（{(r.stderr or r.stdout).strip()}）；設定好 git 使用者後自己 commit 一次')
     return path
 
 
