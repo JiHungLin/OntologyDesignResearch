@@ -123,13 +123,19 @@ ALLOWED = os.environ.get('DOMAIN_WEB_ALLOWED', ','.join([
     'Read', 'Edit', 'Write', 'Glob', 'Grep', 'Agent', 'Skill', 'WebSearch', 'WebFetch',
     'Bash(python3 tools/*)', 'Bash(python3 -I tools/*)', 'Bash(git status*)', 'Bash(git diff*)', 'Bash(git log*)',
     'Bash(git show*)', 'Bash(git tag*)', 'Bash(git add*)', 'Bash(git commit*)', 'Bash(git rev-parse*)',
-    'Bash(ls*)', 'Bash(cp *)', 'Bash(mkdir *)', 'Bash(curl *)', 'Bash(date*)'])).split(',')
+    'Bash(ls*)', 'Bash(cp *)', 'Bash(mkdir *)', 'Bash(curl *)', 'Bash(date*)',
+    # 唯讀的小工具；cd 放行是為了「cd <repo> && …」這種串接（每一段都要在清單內才會過）
+    'Bash(cd *)', 'Bash(cat *)', 'Bash(head *)', 'Bash(tail *)', 'Bash(wc *)', 'Bash(sed -n *)', 'Bash(echo *)',
+    'Bash(sort *)', 'Bash(diff *)'])).split(',')
 
 WEB_PROMPT = (
     '你在「Domain 設計流程網頁」裡執行（claude -p）。使用者看不到選項介面（AskUserQuestion 不能用），也不能在這裡核准權限。'
     '要問人時照 docs/01 0.2「問人的方式」寫在回覆最後，一題一段，格式固定：'
     '「問題：<一句話>」、「例子：<一個具體情況>」、「A（建議）：<做法> → <選了之後設計會怎樣>」、「B：<做法> → <結果>」、「其他：（寫一句）」，然後停下來。'
-    '回報結束時，用一句話說明下一步要人做什麼。')
+    '回報結束時，用一句話說明下一步要人做什麼。'
+    'Bash 一次執行一個指令，不要用 for 迴圈；讀檔、列檔、找字用 Read、Glob、Grep。'
+    '下載公開來源原文用 curl 存到 .domain-web/tmp/（已被 .gitignore 排除，不進設計內容；例：curl -sSL --create-dirs -o .domain-web/tmp/<檔名> <網址>），再用 Read 讀、摘錄進 inputs/research/。'
+    '指令被擋下或連線失敗時，在回覆裡寫出完整指令與錯誤訊息，不要說成「環境不能上網」。')
 
 
 def _command(s, message):

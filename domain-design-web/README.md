@@ -92,7 +92,7 @@ AI 停下來問人時（例：規劃中的取捨），最後一則回覆裡的�
 - 範圍：規劃用 `_plan`，其他用切片代號；一個範圍同一時間一個使用中的 session。
 - 每個按鈕都有用途（規劃、第 N 步、審查 02、凍結 02、專家回覆、修改）。現在的 session 用途不同、或經過摘要壓縮時，網頁用選擇題問要不要開新的（精簡版「換 session 的時機」）；沒有 session 就直接開。新 session 的第一則訊息是由檔案產生的交接提示（CHANGELOG、審查頁、未回覆的 EQ）加上這件事，送出前可以改。
 - **在背景跑**：送出後 `claude -p` 在伺服器端執行，事件寫進 `.domain-web/logs/<id>.jsonl`，網頁每 1.5 秒取一次。關掉或重新整理頁面不會中斷，回來接得上；做完畫面自動更新。
-- **權限**：`-p` 不能互動核准，所以網頁用 `--permission-mode acceptEdits`（只限設計 repo 內的檔案修改）加一份允許清單：讀寫檔、子代理、skills、網路搜尋與讀取、`python3 tools/*`、`git status/diff/log/show/tag/add/commit/rev-parse`、`ls`、`cp`、`mkdir`、`curl`、`date`。`git push`、`rm` 等不在清單內，會被擋下並顯示在 AI 對話中，請到 terminal 用 `claude --resume <id>` 處理。清單可用環境變數 `DOMAIN_WEB_ALLOWED`（逗號分隔）覆寫。使用者自己的 Claude Code 設定仍然有效。
+- **權限**：`-p` 不能互動核准，所以網頁用 `--permission-mode acceptEdits`（只限設計 repo 內的檔案修改）加一份允許清單：讀寫檔、子代理、skills、網路搜尋與讀取、`python3 tools/*`、`git status/diff/log/show/tag/add/commit/rev-parse`、`ls`、`cp`、`mkdir`、`curl`、`date`、`cd`，以及唯讀的 `cat`、`head`、`tail`、`wc`、`sed -n`、`echo`、`sort`、`diff`（串接的指令每一段都要在清單內才會過；系統提示也請 AI 一次一個指令、不用 for 迴圈，下載的原文放 `.domain-web/tmp/`）。`git push`、`rm` 等不在清單內，會被擋下並顯示在 AI 對話中，請到 terminal 用 `claude --resume <id>` 處理。清單可用環境變數 `DOMAIN_WEB_ALLOWED`（逗號分隔）覆寫。使用者自己的 Claude Code 設定仍然有效。
 - **網頁附加的系統提示**（`--append-system-prompt`）只說明執行環境：使用者看不到選項介面，要問人時照 0.2「問人的方式」寫成「問題／例子／A（建議）：做法 → 結果／B／其他」，網頁會把它變成選擇題卡片。流程規則仍以工具包為準。
 - `CLAUDE_BIN` 環境變數可以指定 `claude` 的路徑（測試用假的 `tests/fake_claude.py`）。
 
