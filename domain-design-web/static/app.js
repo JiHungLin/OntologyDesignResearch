@@ -1007,7 +1007,9 @@ function syncNav() {
   b.setAttribute('aria-label', b.title);
   b.setAttribute('aria-expanded', String(!closed));
 }
-function narrow() { return matchMedia('(max-width: 900px)').matches; }
+// 窄螢幕＝側欄放上去主畫面就剩不到 PAGE_MIN（290 + 720）：側欄改成蓋在上面、預設收起（和 style.css 的 @media 同一個寬度）
+const NARROW = matchMedia('(max-width: 1010px)');
+function narrow() { return NARROW.matches; }
 
 // ---------- 檔案（唯讀） ----------
 
@@ -1860,7 +1862,13 @@ $('#navClose').onclick = () => setNav(false);
 document.addEventListener('keydown', e => { if (e.ctrlKey && e.key === '\\') { e.preventDefault(); setNav(document.body.classList.contains('nav-closed')); } });
 $('#sideNav').addEventListener('click', e => { if (narrow() && e.target.closest('a.nav-a')) setNav(false); });
 $('#app').addEventListener('click', () => { if (narrow() && !document.body.classList.contains('nav-closed')) setNav(false); });
-try { if (narrow() || localStorage.getItem('nav-closed')) document.body.classList.add('nav-closed'); } catch (e) { if (narrow()) document.body.classList.add('nav-closed'); }
+const savedNavClosed = () => { try { return !!localStorage.getItem('nav-closed'); } catch (e) { return false; } };
+if (narrow() || savedNavClosed()) document.body.classList.add('nav-closed');
+// 視窗縮到窄螢幕就自動收起（不記成你的偏好）；放回寬螢幕就照你上次在寬螢幕的選擇
+NARROW.addEventListener('change', e => {
+  document.body.classList.toggle('nav-closed', e.matches || savedNavClosed());
+  syncNav(); syncDrawers();
+});
 syncNav();
 const PAGE_MIN = 720;   // 抽屜打開後主畫面至少要留的寬度，不夠就讓抽屜蓋在上面
 function syncDrawers() {
