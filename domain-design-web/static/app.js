@@ -1150,10 +1150,28 @@ async function renderAi() {
 }
 
 // AI 對話下方的「接下來」：AI 在問問題就放選項按鈕；不然依檔案算出現在輪到誰、給一個按鈕帶過去
+// AI 在跑時：輸入框上方顯示「正在處理」與最新一個步驟，輸入框暫時不能送（伺服器也一次只收一件）
+function liveText() {
+  if (!state.lastTool) return '準備中…';
+  const [name, ...rest] = state.lastTool.split(' ');
+  return `${TOOL_NAME[name] || name}：${rest.join(' ').slice(0, 120)}`;
+}
+function setAiBusy(busy) {
+  $('#aiInput').disabled = !!busy;
+  $('#aiSend').disabled = !!busy;
+  $('#aiInput').placeholder = busy ? 'AI 正在處理，做完才能再交代下一件' : '畫面上的按鈕涵蓋不到的事，才在這裡打字（Enter 送出，Shift+Enter 換行）';
+}
+
 async function renderAiNext(s) {
   const box = $('#aiNext');
   box.innerHTML = '';
-  if (!s || s.running || state.pending) return;
+  setAiBusy(s && s.running);
+  if (s && s.running) {
+    box.innerHTML = `<div class="ai-busy"><span class="spinner"></span><div><b>AI 正在處理</b>，做完會在這裡通知你，畫面也會自動更新。
+      <div class="small muted" id="aiLive">${esc(liveText())}</div></div></div>`;
+    return;
+  }
+  if (!s || state.pending) return;
   const ask = parseAsk(s.last_reply);
   if (ask) {
     box.innerHTML = `<div class="label">AI 在等你回答，點一個</div><div class="ai-opts">${ask.opts.map(o => `<button class="opt ${o.rec ? 'rec' : ''}" data-airep="${o.key}"><span class="row spread"><b>${o.key}</b>${o.rec ? '<span class="badge-rec">★ 建議</span>' : ''}</span><span>${inline(o.sum)}</span></button>`).join('')}</div>
@@ -1254,6 +1272,9 @@ function watch(sid, onEvent) {
     }
     const live = $('#liveTool');
     if (live && state.lastTool) live.textContent = state.lastTool;
+    const aiLive = $('#aiLive');
+    if (aiLive) aiLive.textContent = liveText();
+    else if (r.running && shown && !$('.ai-busy')) renderAiNext(sessionOf(state.aiScope) || curSession());
     if (r.running) { w.timer = setTimeout(tick, 1500); return; }
     w.timer = null; w.onEvent = null;
     await refreshSessions();
