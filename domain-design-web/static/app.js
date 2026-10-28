@@ -1860,12 +1860,18 @@ $$('.drawer').forEach(d => drawerWatch.observe(d, { attributes: true, attributeF
 syncDrawers();
 const fitTop = () => document.documentElement.style.setProperty('--top-h', $('.top').offsetHeight + 'px');
 window.addEventListener('resize', fitTop); fitTop();
+// 像 ChatGPT／Claude：Enter 送出、Shift+Enter 換行；中文輸入法選字時的 Enter 不算；輸入框跟著內容長高
+$('#aiInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); $('#aiForm').requestSubmit(); }
+});
+const growAi = () => { const t = $('#aiInput'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight + 4, 220) + 'px'; };
+$('#aiInput').addEventListener('input', growAi);
 $('#aiForm').onsubmit = e => {
   e.preventDefault();
   const v = $('#aiInput').value.trim();
   if (!v) return;
   if (!state.scope) { toast('先打開一條切片或規劃，再和 AI 對話'); return; }
-  $('#aiInput').value = '';
+  $('#aiInput').value = ''; growAi();
   const s = curSession();
   runAi(state.scope, s ? s.purpose : '對話', v, { keep: true });
 };
