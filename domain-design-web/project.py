@@ -173,6 +173,11 @@ def next_step(st):
     return None
 
 
+def in_progress():
+    """①～⑤ 還沒都凍結的切片。網頁一次只做一條：有這種切片時不能開新的。"""
+    return [sl for sl in kit.slices() if (next_step(steps(sl)) or {}).get('n', 6) <= 5]
+
+
 # ---- 寫入（只寫人做的事） ----
 
 def _today():
