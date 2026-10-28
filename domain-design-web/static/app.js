@@ -436,14 +436,22 @@ function groupOf(what) {
 
 function confirmRow(c) {
   const ans = (c.answer || '').trim();
-  return `<div class="crow ${ans ? 'done' : ''}">
+  return `<div class="crow ${!ans ? '' : ans === '✓' ? 'done' : 'noted'}">
     <div class="what">${inline(c.cells['要看的'] || '')}</div>
     ${c.cells['原文'] ? `<div class="orig">${inline(c.cells['原文'])}</div>` : ''}
     ${c.cells['在哪裡'] ? `<div class="where">${inline(c.cells['在哪裡'])}</div>` : ''}
-    <div class="acts">
-      ${ans ? `<span class="val">${ans === '✓' ? '✓ 沒問題' : '意見：' + esc(ans)}</span>` : ''}
-      <button class="btn ${ans ? '' : 'go'}" data-ok="${c.line}">✓ 合理</button>
-      <button class="btn" data-note="${c.line}">寫意見</button>
+    <div class="acts">${!ans ? `
+      <button class="btn go" data-ok="${c.line}">✓ 合理</button>
+      <button class="btn" data-note="${c.line}">寫意見</button>`
+    : ans === '✓' ? `
+      <span class="val">✓ 合理</span>
+      <button class="btn ghost" data-clear="${c.line}">撤回</button>
+      <button class="btn" data-note="${c.line}">改成寫意見</button>`
+    : `
+      <span class="val note">意見：${esc(ans)}</span>
+      <button class="btn" data-note="${c.line}" data-prev="${esc(ans)}">改意見</button>
+      <button class="btn" data-ok="${c.line}">改成合理</button>
+      <button class="btn ghost" data-clear="${c.line}">撤回</button>`}
     </div>
   </div>`;
 }
@@ -608,6 +616,7 @@ async function renderConfirm(path, sel) {
   };
   $$('[data-ok]').forEach(b => b.onclick = async () => { if (await okAll([+b.dataset.ok])) refresh(); });
   $$('[data-note]').forEach(b => b.onclick = () => openNote(b, +b.dataset.note, refresh));
+  $$('[data-clear]').forEach(b => b.onclick = async () => { if (await write('/api/review/cells', { line: +b.dataset.clear, cells: { '確認': '' } })) refresh(); });
   $$('[data-group]').forEach(b => b.onclick = async () => {
     const g = groups[+b.dataset.group];
     if (await okAll(g.rows.filter(c => !(c.answer || '').trim()).map(c => c.line))) refresh();
@@ -635,6 +644,7 @@ function openNote(btn, line, done) {
   if ($('.note-box', row)) return;
   row.insertAdjacentHTML('beforeend', `<div class="note-box row"><input type="text" style="flex:1" placeholder="哪裡不對？寫一句，按 Enter"><button class="btn primary">寫入</button></div>`);
   const inp = $('.note-box input', row);
+  if (btn.dataset.prev) inp.value = btn.dataset.prev;
   inp.focus();
   const save = async () => {
     const v = inp.value.trim();
