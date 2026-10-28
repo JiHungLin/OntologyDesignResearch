@@ -308,6 +308,10 @@ section > h2 + p.muted { margin: 0 0 20px; max-width: 46em; }
 .inv-item.guess { border-left-color: var(--hint); }
 .inv-item.need { border-left-color: var(--turn); }
 .inv-item.need .chip { background: var(--turn); border: 0; }
+.inv-group + .inv-group { margin-top: 28px; }
+.inv-group h3 { margin: 0 0 4px; font-size: 18px; }
+.inv-group > p { margin: 0 0 14px; max-width: 46em; }
+.inv-item .where { background: var(--bg); border-radius: 10px; padding: 8px 12px; margin-top: 4px; word-break: break-word; }
 .inv-item.none { border-left-color: var(--faint); color: var(--muted); }
 .map { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 20px; }
 .inv-rest { margin-top: 20px; padding: 18px 24px; }

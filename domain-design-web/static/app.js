@@ -1322,7 +1322,9 @@ async function renderHub() {
   else if (N.kind === 'plan') {
     const parts = [];
     if (pendingDrafts) parts.push(`<strong>${pendingDrafts} 份推想草稿</strong>要你看`);
-    if (toProvide) parts.push(`<strong>${toProvide} 份資料</strong>等你提供`);
+    const toFetch = plan.inventory.filter(needFetch).length;
+    if (toFetch) parts.push(`<strong>${toFetch} 份公開資料</strong> AI 抓不到、要你幫忙找`);
+    if (toProvide - toFetch) parts.push(`<strong>${toProvide - toFetch} 份資料</strong>等你提供`);
     if (pq) parts.push(`<strong>${pq} 個待釐清</strong>`);
     hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到你</span>
       <h1>看規劃：${plan.slices.length} 條切片、${P.sketch ? P.sketch.nouns.length : 0} 個名詞</h1>
@@ -1520,6 +1522,10 @@ function bindFb() {
 }
 
 const INV_CLASS = { '已有': 'ok', '已蒐集': 'ok', '推想草稿': 'guess', '待提供': 'need', '找不到': 'none' };
+// 盤點表「待提供」分兩種：AI 寫了「要找：去哪裡找什麼」的是公開資料、AI 抓不到要人去找；其他是只有使用者手上有的現場資料
+const needFetch = x => x['狀態'] === '待提供' && /要找/.test(x['位置'] || '');
+const whereToFind = x => (x['位置'] || '').replace(/^[—\-\s]*（?\s*要找[：:]\s*/, '').replace(/）\s*$/, '');
+const linkify = t => esc(t).replace(/https?:\/\/[^\s，、；）)]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
 
 async function renderPlan() {
   state.slice = null; state.scope = '_plan';
@@ -1575,7 +1581,23 @@ async function renderPlan() {
           return `<li class="fb-host"><span class="chip ${INV_CLASS[x['狀態']] === 'ok' ? 'new' : ''}">${esc(x['狀態'])}</span> <b>${esc(x['資料'])}</b> <span class="small muted">${inline(x['內容'] || '')}</span>
             ${d ? `<a class="small" href="#/draft/${enc(d.path)}">看草稿（${esc(d.status.replace(/（.*/, ''))}）</a>` : ''} ${fbButton(`資料「${x['資料']}」`)}</li>`;
         };
-        return `${todo.length ? `<div class="inv">${todo.map(card).join('')}</div>` : '<p class="small">資料都處理過了（沒有待提供、待接受的）。</p>'}
+        const fetchCard = x => {
+          const where = whereToFind(x);
+          return `<div class="inv-item need fetch fb-host">
+            <div class="what"><div><b>${esc(x['資料'])}</b><span class="chip">AI 抓不到</span></div>
+            <div class="small muted">${inline(x['內容'] || '')}</div>
+            ${where ? `<div class="where small"><span class="label" style="display:inline;margin:0 6px 0 0">去哪裡找</span>${linkify(where)}</div>` : ''}
+            <div class="small"><a href="https://www.google.com/search?q=${enc(x['資料'])}" target="_blank" rel="noopener">用 Google 搜尋「${esc(x['資料'])}」↗</a></div></div>
+            <div class="row">
+              <button class="btn small-btn go" data-give="${esc(x['資料'])}" data-fetch="1">找到了，放進來</button>${fbButton(`資料「${x['資料']}」`, '找不到／說明')}
+            </div></div>`;
+        };
+        const drafts1 = todo.filter(x => (draftOf(x) || {}).pending), fetch = todo.filter(needFetch), mine = todo.filter(x => !drafts1.includes(x) && !fetch.includes(x));
+        const group = (title, note, xs, f) => xs.length ? `<div class="inv-group"><h3>${title}（${xs.length}）</h3><p class="small muted">${note}</p><div class="inv">${xs.map(f).join('')}</div></div>` : '';
+        return `${todo.length ? group('推想草稿，要你看過', '網路上也找不到的一般做法，AI 先寫成草稿。看過、大致對就接受，才能當假設用。', drafts1, card)
+            + group('AI 抓不到的公開資料，要你幫忙找', 'AI 打不開或搜不到這些網頁（規範不准憑記憶寫）。你找到後下載或複製貼上放進來，AI 會照格式摘錄；真的找不到也說一聲，AI 會改用推想並標出來。', fetch, fetchCard)
+            + group('只有你們手上有的資料', '實際的表單、單據、做法。有就放進來；沒有也說一聲，AI 會照現有的資料繼續。', mine, card)
+          : '<p class="small">資料都處理過了（沒有待提供、待接受的）。</p>'}
           ${rest.length ? `<details class="card inv-rest" ${todo.length ? '' : 'open'}><summary><b>已有或已處理的資料（${rest.length}）</b></summary><ul>${rest.map(line).join('')}</ul></details>` : ''}`;
       })()}
       ${drafts.filter(d => !plan.inventory.some(x => (x['位置'] || '').includes(d.path.replace(/^inputs\//, '')))).map(d => `<a class="small" href="#/draft/${enc(d.path)}">${esc(d.title)}（${esc(d.status)}）</a>`).join('　')}
@@ -1633,8 +1655,12 @@ async function renderPlan() {
   const sa = $('#showAi'); if (sa) sa.onclick = () => openAi('_plan');
   $('#addInput').onclick = () => inputDialog({ folder: 'shared' });
   $$('[data-give]').forEach(b => b.onclick = () => {
-    state.onInput = (path) => addFeedback('_plan', `資料「${b.dataset.give}」已提供：${path}`);
-    inputDialog({ folder: 'shared', name: b.dataset.give, hint: `AI 列的「${b.dataset.give}」。存好後會放進回饋，交給 AI 時它會改盤點表的狀態與位置。` });
+    state.onInput = (path) => addFeedback('_plan', b.dataset.fetch
+      ? `公開資料「${b.dataset.give}」AI 抓不到，使用者找到原文放在 ${path}（第一行是網址）：請照 domain-plan 摘錄進 inputs/research/（引用時指向 research 條目，不把這份當現場資料），盤點表改為已蒐集`
+      : `資料「${b.dataset.give}」已提供：${path}`);
+    inputDialog(b.dataset.fetch
+      ? { folder: 'shared', name: '公開資料原文_' + b.dataset.give, hint: `AI 抓不到的「${b.dataset.give}」。上傳下載的檔案，或把網頁內容複製貼上；第一行請貼網址（AI 摘錄時要寫出處）。存好後會放進回饋，交給 AI 時它會照格式摘錄。` }
+      : { folder: 'shared', name: b.dataset.give, hint: `AI 列的「${b.dataset.give}」。存好後會放進回饋，交給 AI 時它會改盤點表的狀態與位置。` });
   });
   $$('[data-agree]').forEach(b => b.onclick = () => { addFeedback('_plan', `同意決定 ${b.dataset.agree}（${$('#who').value.trim() || '使用者'}，${today()}）`); b.disabled = true; });
   $('#agree').onclick = () => {
