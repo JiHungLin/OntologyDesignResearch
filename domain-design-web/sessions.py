@@ -119,6 +119,7 @@ def _open_eqs(path):
 
 # 網頁沒有選項介面也不能互動核准：檔案修改自動接受（只限切片 repo），常用指令先允許；
 # 其他會被擋下、顯示在網頁上，請人到 terminal 用 --resume 處理。可用環境變數 DOMAIN_WEB_ALLOWED（以逗號分隔）覆寫。
+FETCH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fetch_text.py')
 ALLOWED = os.environ.get('DOMAIN_WEB_ALLOWED', ','.join([
     'Read', 'Edit', 'Write', 'Glob', 'Grep', 'Agent', 'Skill', 'WebSearch', 'WebFetch',
     'Bash(python3 tools/*)', 'Bash(python3 -I tools/*)', 'Bash(git status*)', 'Bash(git diff*)', 'Bash(git log*)',
@@ -126,7 +127,9 @@ ALLOWED = os.environ.get('DOMAIN_WEB_ALLOWED', ','.join([
     'Bash(ls*)', 'Bash(cp *)', 'Bash(mkdir *)', 'Bash(curl *)', 'Bash(date*)',
     # 唯讀的小工具；cd 放行是為了「cd <repo> && …」這種串接（每一段都要在清單內才會過）
     'Bash(cd *)', 'Bash(cat *)', 'Bash(head *)', 'Bash(tail *)', 'Bash(wc *)', 'Bash(sed -n *)', 'Bash(echo *)',
-    'Bash(sort *)', 'Bash(diff *)'])).split(',')
+    'Bash(sort *)', 'Bash(diff *)', 'Bash(grep *)', 'Bash(pdftotext *)',
+    # 下載公開來源並轉文字（網頁附的小工具，見 fetch_text.py）
+    f'Bash(python3 {FETCH} *)'])).split(',')
 
 WEB_PROMPT = (
     '你在「Domain 設計流程網頁」裡執行（claude -p）。使用者看不到選項介面（AskUserQuestion 不能用），也不能在這裡核准權限。'
@@ -134,7 +137,8 @@ WEB_PROMPT = (
     '「問題：<一句話>」、「例子：<一個具體情況>」、「A（建議）：<做法> → <選了之後設計會怎樣>」、「B：<做法> → <結果>」、「其他：（寫一句）」，然後停下來。'
     '回報結束時，用一句話說明下一步要人做什麼。'
     'Bash 一次執行一個指令，不要用 for 迴圈；讀檔、列檔、找字用 Read、Glob、Grep。'
-    '下載公開來源原文用 curl 存到 .domain-web/tmp/（已被 .gitignore 排除，不進設計內容；例：curl -sSL --create-dirs -o .domain-web/tmp/<檔名> <網址>），再用 Read 讀、摘錄進 inputs/research/。'
+    f'下載公開來源原文一律用 python3 {FETCH} <網址> [檔名]：原文存到 .domain-web/tmp/（已被 .gitignore 排除），HTML、PDF 轉成同名 .txt（照原文、不摘要，連結寫成「文字 <網址>」），再用 Read 讀、照規範摘錄進 inputs/research/。'
+    '不要自己寫 python 腳本、不要用變數或管線處理下載內容，也不要在 repo 裡建暫存資料夾（這些在網頁上都會被擋）。'
     '指令被擋下或連線失敗時，在回覆裡寫出完整指令與錯誤訊息，不要說成「環境不能上網」。')
 
 

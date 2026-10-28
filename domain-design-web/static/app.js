@@ -1176,7 +1176,11 @@ function showEvent(ev) {
   else if (ev.kind === 'compacted') log.insertAdjacentHTML('beforeend', '<div class="deny">這個 session 剛經過摘要壓縮，建議做完這一段就開新的 session。</div>');
   else if (ev.kind === 'error') log.insertAdjacentHTML('beforeend', `<div class="err">${esc(ev.text)}</div>`);
   else if (ev.kind === 'result') {
-    for (const d of ev.denials || []) log.insertAdjacentHTML('beforeend', `<div class="deny">被擋下（要核准）：${esc(d.tool)} ${esc(JSON.stringify(d.input || '').slice(0, 160))}。請在 terminal 用 <code>claude --resume</code> 處理。</div>`);
+    // 被擋下的指令收成一塊：AI 多半會改用別的方法繼續，結果真的缺東西才要處理
+    const dn = ev.denials || [];
+    if (dn.length) log.insertAdjacentHTML('beforeend', `<details class="deny"><summary>這一輪有 ${dn.length} 個指令被網頁的權限擋下</summary>
+      <p class="small" style="margin:6px 0">AI 通常會改用別的方法繼續。只有它最後說缺了什麼、做不完時才需要處理：到 terminal 用 <code>claude --resume ${esc((curSession() || {}).id || '<session id>')}</code> 接著做並核准。</p>
+      <ul class="small">${dn.map(d => `<li><code>${esc(d.tool)}</code> ${esc(((d.input || {}).command || JSON.stringify(d.input || '')).slice(0, 200))}</li>`).join('')}</ul></details>`);
     if (!ev.ok) log.insertAdjacentHTML('beforeend', `<div class="err">${esc(ev.text)}</div>`);
     else if (ev.text && ev.text.trim() !== (state.lastText || '').trim()) log.insertAdjacentHTML('beforeend', `<div class="t">${inline(ev.text)}</div>`);
     log.insertAdjacentHTML('beforeend', '<div class="tool">— 這一輪結束 —</div>');
