@@ -186,26 +186,41 @@ def post_accept(a: Accept):
         raise HTTPException(400, str(e))
 
 
-def _spot_items(r, p):
-    """抽查可挑的條目：「`02_entities.md` 完成標準表由上往下第 1、2、3 條」→ 取出那幾條的文字。"""
-    m = re.search(r'`?([\w.-]+\.md)`?\s*完成標準表[^第]*第\s*([\d、，, ]+)\s*條', r['spot_hint'])
-    if not m:
-        return []
-    f = kit.resolve(m.group(1), os.path.dirname(os.path.dirname(p)))
-    if not f:
-        return []
+def _criteria(f):
+    """某個交付物的「完成標準（AI 自評）」表：[(行號, [完成標準, 類, AI 自評])]。"""
     mb = kit.md2build()
     rows = []
     for _, h3, header, trs in mb.Doc(f).tables():
         if header and header[0].strip() == '完成標準' and (h3 or '').startswith('完成標準'):
             rows = trs
     mb.problems.clear()
+    return rows
+
+
+def _spot_items(r, p):
+    """抽查可挑的條目，取出每一條的文字、類別與 AI 自評。兩種寫法：
+    docs/02 的「③ 第 1、4 條；④ 第 2、6 條」（步驟對到該步的交付物），以及舊的「`02_entities.md` 完成標準表…第 1、2 條」。"""
+    hint, sdir = r['spot_hint'], os.path.dirname(os.path.dirname(p))
+    groups = []
+    m = re.search(r'`?([\w.-]+\.md)`?\s*完成標準表[^第]*第\s*([\d、，, ]+)\s*條', hint)
+    if m:
+        groups.append(('', m.group(1), m.group(2)))
+    else:
+        files = {n: fn for n, _, fn in project.STEP_FILES}
+        for c, nums in re.findall(r'([①-⑥])\s*第\s*([\d、，, ]+)\s*條', hint):
+            n = '①②③④⑤⑥'.index(c) + 1
+            groups.append((c, files[n], nums))
     out = []
-    for k in re.findall(r'\d+', m.group(2)):
-        i = int(k)
-        if 0 < i <= len(rows):
-            out.append({'n': i, 'text': rows[i - 1][1][0], 'self': rows[i - 1][1][-1], 'line': rows[i - 1][0],
-                        'file': kit.rel(f)})
+    for step, fn, nums in groups:
+        f = kit.resolve(fn, sdir)
+        rows = _criteria(f) if f else []
+        for k in re.findall(r'\d+', nums):
+            i = int(k)
+            if 0 < i <= len(rows):
+                cells = rows[i - 1][1]
+                out.append({'id': f'{step}{i}', 'step': step, 'n': i, 'text': cells[0],
+                            'kind': cells[1] if len(cells) > 2 else '', 'self': cells[-1],
+                            'line': rows[i - 1][0], 'file': kit.rel(f)})
     return out
 
 
