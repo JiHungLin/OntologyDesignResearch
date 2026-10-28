@@ -976,7 +976,7 @@ function markNav() {
 
 async function refreshNav() { try { await loadProject(); renderNav(); } catch (e) { } }
 
-// 像 Notion：展開時側欄頂端有「«」收起；收起後頂列出現 ☰，滑過先浮出來看一眼（peek），點 ☰ 或「»」固定
+// 像 Notion：側欄是獨立的一欄（展開時頂列往右擠）；開關固定在左上角；收起時滑過開關先浮出來看一眼（peek），點了才固定
 function setNav(open) {
   document.body.classList.toggle('nav-closed', !open);
   document.body.classList.remove('nav-peek');
@@ -984,12 +984,11 @@ function setNav(open) {
   if (!narrow()) try { localStorage.setItem('nav-closed', open ? '' : '1'); } catch (e) { }
 }
 function syncNav() {
-  const peek = document.body.classList.contains('nav-peek');
-  const b = $('#navFold');
-  b.textContent = peek ? '»' : '«';
-  b.title = peek ? '固定側欄' : '收起側欄';
+  const closed = document.body.classList.contains('nav-closed');
+  const b = $('#navBtn');
+  b.title = !closed ? '收起側欄' : document.body.classList.contains('nav-peek') ? '固定側欄' : '展開側欄（滑過先看一眼）';
   b.setAttribute('aria-label', b.title);
-  $('#navBtn').setAttribute('aria-expanded', String(!document.body.classList.contains('nav-closed')));
+  b.setAttribute('aria-expanded', String(!closed));
 }
 let peekTimer = null;
 function peek(on) {
@@ -1802,12 +1801,11 @@ document.addEventListener('click', e => {
 }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('#fileDrawer').hidden = true; $('#aiDrawer').hidden = true; } });
 $('#aiBtn').onclick = () => { if ($('#aiDrawer').hidden) openAi(); else $('#aiDrawer').hidden = true; };
-$('#navBtn').onclick = () => setNav(true);
+$('#navBtn').onclick = () => setNav(document.body.classList.contains('nav-closed'));
 $('#navBtn').addEventListener('mouseenter', () => peek(true));
 $('#navBtn').addEventListener('mouseleave', () => peek(false));
 $('#sideNav').addEventListener('mouseenter', () => clearTimeout(peekTimer));
 $('#sideNav').addEventListener('mouseleave', () => { if (document.body.classList.contains('nav-peek')) peek(false); });
-$('#navFold').onclick = () => setNav(document.body.classList.contains('nav-peek'));
 $('#sideNav').addEventListener('click', e => { if (narrow() && e.target.closest('a.nav-a')) setNav(false); });
 $('#app').addEventListener('click', () => { if (narrow() && !document.body.classList.contains('nav-closed')) setNav(false); });
 try { if (narrow() || localStorage.getItem('nav-closed')) document.body.classList.add('nav-closed'); } catch (e) { if (narrow()) document.body.classList.add('nav-closed'); }

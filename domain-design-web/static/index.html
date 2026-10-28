@@ -9,20 +9,22 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header class="top">
-  <button class="nav-btn" id="navBtn" aria-label="展開導覽" title="展開導覽（滑過先看一眼）" aria-controls="sideNav">☰</button>
-  <a class="brand" href="#/">DOMAIN 設計</a>
-  <a class="back" id="back" hidden></a>
-  <div class="top-mid" id="topMid"></div>
-  <button class="ai-btn" id="aiBtn"><span class="dot" id="aiDot"></span><span id="aiLabel">AI</span></button>
-</header>
+<button class="nav-btn" id="navBtn" aria-controls="sideNav"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="8" y1="3.5" x2="8" y2="16.5" stroke="currentColor" stroke-width="1.8"/></svg></button>
 
 <div class="shell">
   <nav class="side-nav" id="sideNav" aria-label="導覽">
-    <div class="nav-top"><span>導覽</span><button class="nav-fold" id="navFold" aria-controls="sideNav"></button></div>
+    <div class="nav-top"><a class="brand" href="#/">DOMAIN 設計</a></div>
     <div id="navTree"></div>
   </nav>
-  <main id="app"></main>
+  <div class="page">
+    <header class="top">
+      <a class="brand" href="#/">DOMAIN 設計</a>
+      <a class="back" id="back" hidden></a>
+      <div class="top-mid" id="topMid"></div>
+      <button class="ai-btn" id="aiBtn"><span class="dot" id="aiDot"></span><span id="aiLabel">AI</span></button>
+    </header>
+    <main id="app"></main>
+  </div>
 </div>
 
 <aside class="drawer file" id="fileDrawer" hidden aria-label="檔案">
