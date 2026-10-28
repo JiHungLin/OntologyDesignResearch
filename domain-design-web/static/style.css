@@ -32,9 +32,10 @@ code { font-size: .9em; background: var(--bg); border-radius: 6px; padding: 0 4p
 .nav-toggle { flex: 0 0 auto; display: grid; place-items: center; width: 30px; height: 30px; margin-left: -6px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #fff; cursor: pointer; transition: background .15s; }
 .top .nav-toggle:hover { background: var(--dark2); }
 body:not(.nav-closed) .top .nav-toggle { display: none; }
-.page { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; transition: margin-right .2s ease; }
-/* 右側抽屜（AI 對話、檔案）打開時，螢幕夠寬就把主畫面往左縮，不蓋住內容；窄螢幕照舊蓋在上面 */
-@media (min-width: 1100px) { body.drawer-open .page { margin-right: var(--drawer-w); } }
+.page { flex: 1 1 auto; min-width: 320px; container: page / inline-size; display: flex; flex-direction: column; min-height: 100vh; transition: margin-right .2s ease; }
+/* 右側抽屜（AI 對話、檔案）打開時，主畫面縮完還有 720px 才往左縮（app.js syncDrawers），不然蓋在上面。
+   主畫面裡的版面看主畫面本身多寬（container query），不是看整個視窗 */
+body.drawer-push .page { margin-right: var(--drawer-w); }
 .back { color: #fff; font-weight: 700; font-size: 14px; text-decoration: none; }
 .top-mid { flex: 1 1 200px; display: flex; align-items: center; gap: 12px; min-width: 0; }
 .ai-btn { display: flex; align-items: center; gap: 8px; font: inherit; font-size: 14px; color: #fff; background: transparent; border: 2px solid #fff; border-radius: 999px; padding: 3px 14px; cursor: pointer; }
@@ -154,7 +155,7 @@ details.tech summary { cursor: pointer; }
 .bar { height: 12px; border: 2px solid var(--ink); border-radius: 999px; background: var(--bg); overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--turn); border-radius: 999px; transition: width .5s; }
 .bar i.full { background: var(--done); }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 16px; }
 .change { background: var(--card); border: 2px solid var(--line); border-radius: 18px; padding: 18px 20px; }
 .change:hover { border-color: var(--ink); }
 .change b { display: block; font-size: 17px; margin: 6px 0 2px; }
@@ -165,7 +166,7 @@ details.tech summary { cursor: pointer; }
 /* ---- 一次一個決定 ---- */
 .narrow { max-width: 880px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 32px; }
 .qtitle { margin: 14px 0 0; font-size: 28px; line-height: 1.4; }
-.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 16px; }
 .opt { text-align: left; background: var(--card); color: var(--ink); border: 3px solid var(--ink); border-radius: var(--r); padding: 22px 24px; box-shadow: 5px 5px 0 var(--ink); font: inherit; display: flex; flex-direction: column; gap: 8px; cursor: pointer; }
 .opt:hover { transform: translate(-1px, -1px); box-shadow: 6px 6px 0 var(--ink); }
 .opt .k { font-size: 28px; font-weight: 900; line-height: 1; }
@@ -218,7 +219,7 @@ details.tech summary { cursor: pointer; }
 .group > .row { margin-bottom: 18px; align-items: flex-start; }
 .group > .row .btn { flex: 0 0 auto; }
 .group h3 { margin: 6px 0 0; font-size: 17px; flex: 1 1 300px; }
-.group .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.group .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 14px; }
 
 /* ---- 黃金案例 ---- */
 .timeline { display: flex; flex-direction: column; gap: 22px; }
@@ -281,7 +282,7 @@ details.tech summary { cursor: pointer; }
 .journey b { font-size: 22px; font-weight: 900; }
 .journey .done { background: var(--done); border: 3px solid var(--ink); color: var(--ink); }
 .journey .now { background: var(--turn); border: 3px solid var(--ink); color: var(--ink); box-shadow: 4px 4px 0 var(--ink); transform: translateY(-3px); }
-.slices { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-top: 16px; }
+.slices { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 20px; margin-top: 16px; }
 .slice { display: flex; flex-direction: column; gap: 12px; background: var(--card); border: 2px solid var(--ink); border-radius: 18px; padding: 20px 22px; box-shadow: 3px 3px 0 var(--ink); color: var(--ink); text-decoration: none; }
 .slice.turn { background: #FFF1E6; }
 .scn { display: inline; }
@@ -315,7 +316,7 @@ section > h2 + p.muted { margin: 0 0 20px; max-width: 46em; }
 .inv-group > p { margin: 0 0 14px; max-width: 46em; }
 .inv-item .where { background: var(--bg); border-radius: 10px; padding: 8px 12px; margin-top: 4px; word-break: break-word; }
 .inv-item.none { border-left-color: var(--faint); color: var(--muted); }
-.map { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 20px; }
+.map { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr)); gap: 20px; }
 .inv-rest { margin-top: 20px; padding: 18px 24px; }
 .inv-rest summary { cursor: pointer; }
 .inv-rest ul { margin: 16px 0 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; }
@@ -324,7 +325,7 @@ section > h2 + p.muted { margin: 0 0 20px; max-width: 46em; }
 .map-item { background: var(--card); border: 2px solid var(--line); border-radius: 18px; padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
 .order { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 900; }
 .guess-chip { background: var(--hint); font-size: 11px; padding: 0 8px; }
-.layers { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+.layers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 24px; }
 .layer-col { display: flex; flex-direction: column; gap: 14px; }
 .noun > .btn, .inv-item > .btn { align-self: flex-start; }
 .noun { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 14px 18px; display: flex; flex-direction: column; gap: 6px; }
@@ -374,10 +375,14 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
   :root { --nav-w: min(300px, 86vw); }
   .side-nav { position: fixed; left: 0; top: 0; z-index: 30; box-shadow: 6px 0 0 rgba(22, 18, 58, .15); }
   body.nav-closed .side-nav { margin-left: 0; transform: translateX(-100%); }
-  .levels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-@media (max-width: 720px) {
+@container page (max-width: 860px) {
+  .levels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .journey { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container page (max-width: 680px) {
   main { gap: 28px; }
   .hero { padding: 26px 22px; }
   .card { padding: 20px; }
@@ -385,7 +390,6 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
   .slice-list .chip { order: 0; }
   .slice-list .scn-1 { grid-column: 2 / -1; white-space: normal; }
   .map { grid-template-columns: 1fr; }
-  .journey { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .top { padding: 10px 16px; }
   main { padding: 20px 16px 100px; }
   .hero h1, .celebrate h1 { font-size: 26px; }

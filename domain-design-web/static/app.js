@@ -997,6 +997,7 @@ async function refreshNav() { try { await loadProject(); renderNav(); } catch (e
 function setNav(open) {
   document.body.classList.toggle('nav-closed', !open);
   syncNav();
+  syncDrawers();
   if (!narrow()) try { localStorage.setItem('nav-closed', open ? '' : '1'); } catch (e) { }
 }
 function syncNav() {
@@ -1861,12 +1862,20 @@ $('#sideNav').addEventListener('click', e => { if (narrow() && e.target.closest(
 $('#app').addEventListener('click', () => { if (narrow() && !document.body.classList.contains('nav-closed')) setNav(false); });
 try { if (narrow() || localStorage.getItem('nav-closed')) document.body.classList.add('nav-closed'); } catch (e) { if (narrow()) document.body.classList.add('nav-closed'); }
 syncNav();
-const syncDrawers = () => document.body.classList.toggle('drawer-open', $$('.drawer').some(d => !d.hidden));
+const PAGE_MIN = 720;   // 抽屜打開後主畫面至少要留的寬度，不夠就讓抽屜蓋在上面
+function syncDrawers() {
+  const open = $$('.drawer').some(d => !d.hidden);
+  const navW = document.body.classList.contains('nav-closed') || narrow() ? 0 : $('#sideNav').offsetWidth;
+  const drawerW = open ? $('.drawer:not([hidden])').offsetWidth : 0;
+  document.body.classList.toggle('drawer-open', open);
+  document.body.classList.toggle('drawer-push', open && innerWidth - navW - drawerW >= PAGE_MIN);
+}
+window.addEventListener('resize', syncDrawers);
 const drawerWatch = new MutationObserver(syncDrawers);
 $$('.drawer').forEach(d => drawerWatch.observe(d, { attributes: true, attributeFilter: ['hidden'] }));
 syncDrawers();
 const fitTop = () => document.documentElement.style.setProperty('--top-h', $('.top').offsetHeight + 'px');
-window.addEventListener('resize', fitTop); fitTop();
+new ResizeObserver(fitTop).observe($('.top')); fitTop();   // 頂列換行變高時，側欄頂端跟著對齊
 // 像 ChatGPT／Claude：Enter 送出、Shift+Enter 換行；中文輸入法選字時的 Enter 不算；輸入框跟著內容長高
 $('#aiInput').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); $('#aiForm').requestSubmit(); }
