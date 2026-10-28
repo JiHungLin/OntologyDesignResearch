@@ -35,15 +35,46 @@ def _row_at(path, line):
     return None
 
 
-def find(text, file):
-    """text：AI 自評；file：這條完成標準所在的交付物（相對路徑）。回傳 [{ref, file, line, title, fields | text}]。"""
+TERM = re.compile(r'「([^」]{1,12})」')
+
+
+def _sections(path, criterion):
+    """完成標準裡用「」括起來的項目（「做」「不做」「切片情境」…）：在交付物裡找同名的清單項目（「- 做：」）或標題，
+    把那一段（含底下縮排的子項目）整段拿出來，最多 25 行。AI 自評沒寫出處時，人也看得到這條標準說的內容。"""
+    with open(path, encoding='utf-8') as f:
+        lines = f.read().split('\n')
+    out = []
+    for term in dict.fromkeys(TERM.findall(criterion)):
+        pat = re.compile(r'^(\s*)(?:[-*]\s+|#{2,4}\s+)' + re.escape(term) + r'(?:（[^）]*）)?\s*(?:[：:]|$)')
+        for i, l in enumerate(lines):
+            m = pat.match(l)
+            if not m:
+                continue
+            ind, heading = len(m.group(1)), l.lstrip().startswith('#')
+            block = [l]
+            for nxt in lines[i + 1:]:
+                if heading and re.match(r'^#{1,4}\s', nxt):
+                    break
+                if not heading and nxt.strip() and len(nxt) - len(nxt.lstrip()) <= ind:
+                    break
+                block.append(nxt)
+            block = [b for b in block if not b.strip().startswith('<!--')][:25]
+            out.append({'ref': f'「{term}」', 'file': kit.rel(path), 'line': i + 1, 'title': '交付物裡的這一段',
+                        'text': '\n'.join(b[ind:] if b.startswith(' ' * ind) else b for b in block).strip()})
+            break
+    return out
+
+
+def find(text, file, criterion=''):
+    """text：AI 自評；file：這條完成標準所在的交付物（相對路徑）；criterion：完成標準本身（找「」括起來的段落）。
+    回傳 [{ref, file, line, title, fields | text}]。"""
     own = kit.resolve(file)
     if not own:
         return []
     sdir = os.path.dirname(own)
     order = [own] + [p for p in (os.path.join(sdir, f) for f in SLICE_FILES) if p != own and os.path.isfile(p)]
     order += [p for p in (os.path.join(kit.repo(), 'slices', f) for f in ('PLAN.md', 'ENTITY_SKETCH.md')) if os.path.isfile(p)]
-    out, seen = [], set()
+    out, seen = (_sections(own, criterion) if criterion else []), set()
     for rid in ID.findall(text):
         if rid in seen:
             continue

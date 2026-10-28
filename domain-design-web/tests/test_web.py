@@ -292,3 +292,11 @@ def test_file_plan_short_name(client):
     # AI 常寫「PLAN.md:65」：從切片資料夾找不到時，也找 slices/ 底下
     f = client.get('/api/file', params={'path': 'PLAN.md', 'base': 'slices/demo'}).json()
     assert f['path'] == os.path.join('slices', 'PLAN.md')
+
+
+def test_evidence_sections(repo):
+    import evidence
+    (repo / 'slices' / 'demo' / 'x.md').write_text('# x\n\n## 範圍\n- 做：\n  - 甲\n  - 乙\n- 不做（這版）：\n  - 丙\n- 模式：完整\n', encoding='utf-8')
+    ev = evidence.find('✓：見 D-99', 'slices/demo/x.md', '範圍有寫「做」「不做」')
+    assert [e['ref'] for e in ev] == ['「做」', '「不做」']
+    assert ev[0]['text'] == '- 做：\n  - 甲\n  - 乙' and ev[1]['line'] == 7

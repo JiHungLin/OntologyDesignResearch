@@ -792,7 +792,7 @@ async function renderFinish(path, focus) {
     return `<div class="ev-card">
       <div class="row spread"><b>${esc(e.ref)}${e.title ? `<span class="muted small">　${esc(e.title)}</span>` : ''}</b>
         <a class="small ref-link" data-file="${esc(e.file)}" data-line="${e.line || 1}">${esc(e.file.split('/').pop())} 第 ${e.line} 行 ›</a></div>
-      ${fields.length ? `<dl>${fields.map(([h, v]) => `<dt>${esc(h)}</dt><dd>${inline(v)}</dd>`).join('')}</dl>` : e.text ? `<div class="orig">${inline(e.text)}</div>` : ''}
+      ${fields.length ? `<dl>${fields.map(([h, v]) => `<dt>${esc(h)}</dt><dd>${inline(v)}</dd>`).join('')}</dl>` : e.text ? `<div class="orig md">${e.text.includes('\n') ? md(e.text) : inline(e.text.replace(/^\s*[-*]\s+/, ''))}</div>` : ''}
     </div>`;
   };
 
