@@ -1249,6 +1249,8 @@ function parseAsk(text) {
 }
 
 // 「AI 在等你」：範圍內的 session 最後一則回覆；有選擇題就做成按鈕
+const TERMINAL_HINT = /新\s*session|session.*貼|貼上面|claude --resume|\/domain-[a-z-]+/i;
+
 function waitingCard(scope) {
   const s = sessionOf(scope);
   if (!s || s.running || !s.last_reply) return '';
@@ -1260,9 +1262,13 @@ function waitingCard(scope) {
        <div class="opts" style="margin-top:10px">${ask.opts.map(o => `<button class="opt ${o.rec ? 'rec' : ''}" data-reply="${o.key}"><span class="row spread"><span class="k">${o.key}</span>${o.rec ? '<span class="badge-rec">★ AI 建議</span>' : ''}</span><span class="sum">${inline(o.sum)}</span>${o.out ? `<span class="out">選了之後：${inline(o.out)}</span>` : ''}</button>`).join('')}</div>`
     : '';
   if (!ask) {
-    const first = s.last_reply.split('\n').map(x => x.trim()).filter(Boolean).pop() || '';
-    return `<details class="card waiting quiet" data-scope="${esc(scope)}"><summary><span class="chip">AI 上次說</span> ${esc(plain(first).slice(0, 120))}</summary>
-      <div class="ai-said">${md(s.last_reply.length > 1500 ? s.last_reply.slice(-1500) : s.last_reply)}</div>
+    // 摘要用回覆的第一句（通常是「做完了什麼」），不用最後一句：最後常是「開新 session、貼這段、執行 /domain-…」這種 terminal 的做法，在網頁上不用照做
+    const lines = s.last_reply.split('\n').map(x => x.trim()).filter(x => x && !/^(#|\||>|```)/.test(x));
+    const first = lines.find(x => !TERMINAL_HINT.test(x)) || '';
+    const said = s.last_reply.length > 1500 ? s.last_reply.slice(-1500) : s.last_reply;
+    return `<details class="card waiting quiet" data-scope="${esc(scope)}"><summary><span class="chip">AI 做完了</span> ${esc(plain(first).slice(0, 120))}</summary>
+      ${TERMINAL_HINT.test(said) ? '<div class="small" style="margin:8px 0">AI 回覆裡提到開新 session、貼交接文字或打 <code>/domain-…</code> 指令的地方，在網頁上都不用做：照畫面上的按鈕走，需要新的 session 網頁會自己開。</div>' : ''}
+      <div class="ai-said">${md(said)}</div>
       <div class="row" style="margin-top:10px"><input type="text" class="soft" data-replytext style="flex:1" placeholder="回覆 AI（例：好，繼續）"><button class="btn primary" data-replysend>送出</button><button class="btn ghost small-btn" data-seen="${esc(key)}">收起來</button></div></details>`;
   }
   return `<section class="card lift waiting" data-scope="${esc(scope)}">
