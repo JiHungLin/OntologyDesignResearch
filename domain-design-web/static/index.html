@@ -9,15 +9,17 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<button class="nav-btn" id="navBtn" aria-controls="sideNav"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="8" y1="3.5" x2="8" y2="16.5" stroke="currentColor" stroke-width="1.8"/></svg></button>
-
 <div class="shell">
   <nav class="side-nav" id="sideNav" aria-label="導覽">
-    <div class="nav-top"><a class="brand" href="#/">DOMAIN 設計</a></div>
+    <div class="nav-top">
+      <button class="nav-toggle" id="navClose" title="收起側欄（Ctrl+\）" aria-label="收起側欄" aria-controls="sideNav"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><line x1="8" y1="3.5" x2="8" y2="16.5" stroke="currentColor" stroke-width="1.7"/></svg></button>
+      <a class="brand" href="#/">DOMAIN 設計</a>
+    </div>
     <div id="navTree"></div>
   </nav>
   <div class="page">
     <header class="top">
+      <button class="nav-toggle" id="navBtn" aria-controls="sideNav"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
       <a class="brand" href="#/">DOMAIN 設計</a>
       <a class="back" id="back" hidden></a>
       <div class="top-mid" id="topMid"></div>

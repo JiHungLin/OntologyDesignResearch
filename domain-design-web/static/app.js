@@ -976,7 +976,7 @@ function markNav() {
 
 async function refreshNav() { try { await loadProject(); renderNav(); } catch (e) { } }
 
-// 像 Notion：側欄是獨立的一欄（展開時頂列往右擠）；開關固定在左上角；收起時滑過開關先浮出來看一眼（peek），點了才固定
+// 像 Notion：側欄是獨立的一欄（展開時頂列往右擠）。收起時頂列最左邊是 ☰，滑過先浮出來看一眼（peek），點了才固定；展開時側欄頂列最左邊是收起鈕；Ctrl+\ 切換
 function setNav(open) {
   document.body.classList.toggle('nav-closed', !open);
   document.body.classList.remove('nav-peek');
@@ -986,7 +986,7 @@ function setNav(open) {
 function syncNav() {
   const closed = document.body.classList.contains('nav-closed');
   const b = $('#navBtn');
-  b.title = !closed ? '收起側欄' : document.body.classList.contains('nav-peek') ? '固定側欄' : '展開側欄（滑過先看一眼）';
+  b.title = document.body.classList.contains('nav-peek') ? '固定側欄（Ctrl+\\）' : '展開側欄（Ctrl+\\）';
   b.setAttribute('aria-label', b.title);
   b.setAttribute('aria-expanded', String(!closed));
 }
@@ -1801,7 +1801,9 @@ document.addEventListener('click', e => {
 }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('#fileDrawer').hidden = true; $('#aiDrawer').hidden = true; } });
 $('#aiBtn').onclick = () => { if ($('#aiDrawer').hidden) openAi(); else $('#aiDrawer').hidden = true; };
-$('#navBtn').onclick = () => setNav(document.body.classList.contains('nav-closed'));
+$('#navBtn').onclick = () => setNav(true);
+$('#navClose').onclick = () => setNav(false);
+document.addEventListener('keydown', e => { if (e.ctrlKey && e.key === '\\') { e.preventDefault(); setNav(document.body.classList.contains('nav-closed')); } });
 $('#navBtn').addEventListener('mouseenter', () => peek(true));
 $('#navBtn').addEventListener('mouseleave', () => peek(false));
 $('#sideNav').addEventListener('mouseenter', () => clearTimeout(peekTimer));
