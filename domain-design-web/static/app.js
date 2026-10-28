@@ -316,7 +316,7 @@ async function renderHome(slice) {
       </section>
     </div>`;
   bindWaiting();
-  const sa = $('#showAi'); if (sa) sa.onclick = openAi;
+  const sa = $('#showAi'); if (sa) sa.onclick = () => openAi();
   const ds = $('#doStep');
   if (ds) ds.onclick = () => {
     const n = designDone ? 6 : h.next.n;
@@ -1034,7 +1034,16 @@ function renderAiHead() {
   $('#aiLabel').textContent = run ? `AI 處理中（${scopeName(run.slice)}）` : s ? 'AI 待命中' : 'AI';
 }
 
-function openAi(scope) { if (scope) state.aiScope = scope; else if (state.scope) state.aiScope = state.scope; $('#aiDrawer').hidden = false; renderAi(); }
+function openAi(scope) {
+  if (scope) state.aiScope = scope;
+  else if (state.scope) state.aiScope = state.scope;
+  else if (!state.aiScope) {
+    // 總覽頁（重新整理後）：先看正在跑的，其次是使用中的 session
+    const s = state.sessions.find(x => x.running) || state.sessions.find(x => x.status === '使用中');
+    if (s) state.aiScope = s.slice;
+  }
+  $('#aiDrawer').hidden = false; renderAi();
+}
 
 async function renderAi() {
   const box = $('#aiSession');
@@ -1518,7 +1527,7 @@ async function renderPlan() {
   setTop(['#/', '總覽'], '<strong>規劃</strong>');
   const P = await loadProject();
   const plan = P.plan;
-  if (!plan) { $('#app').innerHTML = runningCard('_plan', 'AI 正在規劃') || `<div class="card">還沒有切片地圖。<a href="#/">回總覽</a>請 AI 規劃。</div>`; const sa = $('#showAi'); if (sa) sa.onclick = openAi; return; }
+  if (!plan) { $('#app').innerHTML = runningCard('_plan', 'AI 正在規劃') || `<div class="card">還沒有切片地圖。<a href="#/">回總覽</a>請 AI 規劃。</div>`; const sa = $('#showAi'); if (sa) sa.onclick = () => openAi('_plan'); return; }
   const sk = P.sketch;
   const drafts = P.drafts;
   const pendingDrafts = drafts.filter(d => d.pending);
@@ -1621,7 +1630,7 @@ async function renderPlan() {
   bindFb();
   bindWaiting();
   $$('[data-jump]').forEach(b => b.onclick = () => document.getElementById(b.dataset.jump).scrollIntoView({ behavior: 'smooth' }));
-  const sa = $('#showAi'); if (sa) sa.onclick = openAi;
+  const sa = $('#showAi'); if (sa) sa.onclick = () => openAi('_plan');
   $('#addInput').onclick = () => inputDialog({ folder: 'shared' });
   $$('[data-give]').forEach(b => b.onclick = () => {
     state.onInput = (path) => addFeedback('_plan', `資料「${b.dataset.give}」已提供：${path}`);
@@ -1819,6 +1828,10 @@ $('#sideNav').addEventListener('click', e => { if (narrow() && e.target.closest(
 $('#app').addEventListener('click', () => { if (narrow() && !document.body.classList.contains('nav-closed')) setNav(false); });
 try { if (narrow() || localStorage.getItem('nav-closed')) document.body.classList.add('nav-closed'); } catch (e) { if (narrow()) document.body.classList.add('nav-closed'); }
 syncNav();
+const syncDrawers = () => document.body.classList.toggle('drawer-open', $$('.drawer').some(d => !d.hidden));
+const drawerWatch = new MutationObserver(syncDrawers);
+$$('.drawer').forEach(d => drawerWatch.observe(d, { attributes: true, attributeFilter: ['hidden'] }));
+syncDrawers();
 const fitTop = () => document.documentElement.style.setProperty('--top-h', $('.top').offsetHeight + 'px');
 window.addEventListener('resize', fitTop); fitTop();
 $('#aiForm').onsubmit = e => {
