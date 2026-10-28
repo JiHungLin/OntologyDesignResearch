@@ -976,27 +976,18 @@ function markNav() {
 
 async function refreshNav() { try { await loadProject(); renderNav(); } catch (e) { } }
 
-// 像 Notion：側欄是獨立的一欄（展開時頂列往右擠）。收起時頂列最左邊是 ☰，滑過先浮出來看一眼（peek），點了才固定；展開時側欄頂列最左邊是收起鈕；Ctrl+\ 切換
+// 像 Notion：側欄是獨立的一欄（展開時頂列往右擠）。收起時頂列最左邊是 ☰，點了才展開（滑過不彈出）；展開時側欄頂列最左邊是收起鈕；Ctrl+\ 切換
 function setNav(open) {
   document.body.classList.toggle('nav-closed', !open);
-  document.body.classList.remove('nav-peek');
   syncNav();
   if (!narrow()) try { localStorage.setItem('nav-closed', open ? '' : '1'); } catch (e) { }
 }
 function syncNav() {
   const closed = document.body.classList.contains('nav-closed');
   const b = $('#navBtn');
-  b.title = document.body.classList.contains('nav-peek') ? '固定側欄（Ctrl+\\）' : '展開側欄（Ctrl+\\）';
+  b.title = '展開側欄（Ctrl+\\）';
   b.setAttribute('aria-label', b.title);
   b.setAttribute('aria-expanded', String(!closed));
-}
-let peekTimer = null;
-function peek(on) {
-  clearTimeout(peekTimer);
-  if (on) {
-    if (!document.body.classList.contains('nav-closed') || narrow()) return;
-    document.body.classList.add('nav-peek'); syncNav();
-  } else peekTimer = setTimeout(() => { document.body.classList.remove('nav-peek'); syncNav(); }, 250);
 }
 function narrow() { return matchMedia('(max-width: 900px)').matches; }
 
@@ -1804,10 +1795,6 @@ $('#aiBtn').onclick = () => { if ($('#aiDrawer').hidden) openAi(); else $('#aiDr
 $('#navBtn').onclick = () => setNav(true);
 $('#navClose').onclick = () => setNav(false);
 document.addEventListener('keydown', e => { if (e.ctrlKey && e.key === '\\') { e.preventDefault(); setNav(document.body.classList.contains('nav-closed')); } });
-$('#navBtn').addEventListener('mouseenter', () => peek(true));
-$('#navBtn').addEventListener('mouseleave', () => peek(false));
-$('#sideNav').addEventListener('mouseenter', () => clearTimeout(peekTimer));
-$('#sideNav').addEventListener('mouseleave', () => { if (document.body.classList.contains('nav-peek')) peek(false); });
 $('#sideNav').addEventListener('click', e => { if (narrow() && e.target.closest('a.nav-a')) setNav(false); });
 $('#app').addEventListener('click', () => { if (narrow() && !document.body.classList.contains('nav-closed')) setNav(false); });
 try { if (narrow() || localStorage.getItem('nav-closed')) document.body.classList.add('nav-closed'); } catch (e) { if (narrow()) document.body.classList.add('nav-closed'); }
