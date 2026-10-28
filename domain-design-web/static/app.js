@@ -177,15 +177,17 @@ const STEP_INFO = {
 
 function levelStrip(levels) {
   return `<nav class="levels" aria-label="切片關卡">${levels.map(l => {
-    const label = { frozen: '過關', review: '挑戰中', wait: '等你凍結', draft: '進行中', locked: '' }[l.state];
-    return `<div class="level ${l.state}" title="${esc(l.status)} ${esc(l.tag)}"><b>${CIRCLED[l.n]}</b><span>${esc(l.name)}${label ? '　' + label : ''}</span></div>`;
+    const label = { frozen: '過關', review: '挑戰中', wait: '等你凍結', draft: '進行中', locked: '未開始' }[l.state];
+    const href = l.state !== 'locked' && state.slice ? `#/f/${enc(`slices/${state.slice}/${STEP_FILE[l.n]}`)}` : '';
+    return `<div class="level ${l.state}" title="${esc(l.status)} ${esc(l.tag)}${href ? '（點一下看檔案）' : ''}" ${href ? `data-href="${href}" role="link" tabindex="0"` : ''}>
+      <b>${CIRCLED[l.n]}</b><span>${esc(l.name)}<small>${label}</small></span></div>`;
   }).join('')}</nav>`;
 }
 
 async function renderHome(slice) {
   state.slice = slice;
   state.scope = slice;
-  syncSlicePick();
+  markNav();
   const h = state.home = await api('/api/home?slice=' + enc(slice));
   setTop(['#/', '總覽'], `<strong>${esc(slice)}</strong>`);
   const app = $('#app');
@@ -866,14 +868,138 @@ async function refreshSessions() {
 async function refreshSlices() {
   const st = await api('/api/status');
   state.slices = st.slices;
-  syncSlicePick();
+  markNav();
   await refreshSessions();
 }
 
-function syncSlicePick() {
-  const sel = $('#slicePick');
-  sel.innerHTML = `<option value="">總覽</option>` + state.slices.map(s => `<option value="${esc(s.slice)}" ${s.slice === state.slice ? 'selected' : ''}>${esc(s.slice)}</option>`).join('');
-  if (!state.slice) sel.value = '';
+// ---------- 左側導覽 ----------
+// 總覽、主題草案、規劃、各切片（狀態＋各步驟檔案）、core/、inputs/。展開狀態記在這個瀏覽器。
+
+const STEP_FILE = { 1: '01_scope.md', 2: '02_entities.md', 3: '03_flows.md', 4: '04_rules.md', 5: '05_mapping.md', 6: '06_evidence/signoff.md' };
+
+function navOpenSet() { try { return new Set(JSON.parse(localStorage.getItem('nav-open') || '[]')); } catch (e) { return new Set(); } }
+function navSaveOpen(set) { try { localStorage.setItem('nav-open', JSON.stringify([...set])); } catch (e) { } }
+
+function sliceState(f, row) {
+  if (!f) return { text: (row && row['狀態']) || '', cls: '' };
+  if (f.session && f.session.running) return { text: 'AI 進行中', cls: 'busy' };
+  if (f.review) return { text: '輪到你審查', cls: 'turn' };
+  if (!f.next) return { text: '完成', cls: 'ok' };
+  if (f.next.n === 6) return { text: '設計完成', cls: 'ok' };
+  return { text: `下一關 ${CIRCLED[f.next.n]}`, cls: '' };
+}
+
+function stepCls(status) { return status.startsWith('已凍結') ? 'frozen' : status === '待檢查' ? 'wait' : status === '未開始' ? '' : 'draft'; }
+
+function renderNav() {
+  const P = state.project;
+  const nav = $('#sideNav');
+  if (!P) return;
+  const open = navOpenSet();
+  const a = (href, label, extra = '', cls = '') => `<a class="nav-a ${cls}" href="${href}">${label}${extra ? `<span class="nav-x">${extra}</span>` : ''}</a>`;
+  const fileA = (path, label) => a(`#/f/${enc(path)}`, esc(label || path.split('/').pop()));
+  const node = (key, summary, body, dflt) => {
+    const isOpen = open.has(key) || (dflt && !open.has('!' + key));
+    return `<details class="nav-node" data-k="${esc(key)}" ${isOpen ? 'open' : ''}><summary>${summary}</summary><div class="nav-kids">${body}</div></details>`;
+  };
+  const folderTree = (groups, top, fileLink) => {
+    const dirs = Object.keys(groups).sort();
+    return dirs.map(d => {
+      const files = groups[d].map(fileLink).join('');
+      return d === top ? files : node('dir:' + d, `<span class="nav-dir">${esc(d.slice(top.length + 1))}/</span><span class="nav-x">${groups[d].length}</span>`, files);
+    }).join('');
+  };
+  const plan = P.plan;
+  const list = planSlices(P);
+  const started = list.filter(x => x.f), waiting = list.filter(x => !x.f);
+  const pendingDrafts = P.drafts.filter(d => d.pending).length;
+
+  const sliceNode = x => {
+    const f = x.f;
+    const st = sliceState(f, x.row);
+    const steps = f.steps.map(t => {
+      const label = `<i class="${stepCls(t.status)}">${CIRCLED[t.n]}</i>${esc(t.name)}`;
+      return t.status === '未開始' ? `<span class="nav-a off">${label}<span class="nav-x">未開始</span></span>`
+        : a(`#/f/${enc(`slices/${x.code}/${t.file}`)}`, label, esc(t.status.replace(/（.*/, '')));
+    }).join('');
+    const others = f.files.filter(p => !Object.values(STEP_FILE).some(sf => p.endsWith('/' + sf)));
+    const body = a(`#/s/${enc(x.code)}`, '切片首頁')
+      + (f.review ? a(`#/r/${enc(f.review.path)}`, '審查（輪到你）', `${f.review.counts.open} 件`, 'hot') : '')
+      + a(`#/eq/${enc(x.code)}`, '專家問題', f.eq_open ? `${f.eq_open} 題待答` : '')
+      + `<div class="nav-steps">${steps}</div>`
+      + (others.length ? node('files:' + x.code, '<span class="nav-dir">其他檔案</span>', others.map(p => fileA(p)).join('')) : '');
+    return node('s:' + x.code, `<span class="nav-name">${esc(x.code)}</span><span class="nav-st ${st.cls}">${esc(st.text)}</span>`, body, state.slice === x.code);
+  };
+
+  nav.innerHTML = `
+    ${a('#/', '總覽')}
+    ${a('#/start', '主題草案', P.topic ? '✓' : '還沒寫')}
+    ${node('plan', `<span class="nav-name">規劃</span><span class="nav-st ${plan && plan.agreed ? 'ok' : plan ? 'turn' : ''}">${plan ? (plan.agreed ? '已同意' : '討論中') : '還沒有'}</span>`,
+      a('#/plan', '規劃頁') + (plan ? fileA('slices/PLAN.md', '切片地圖 PLAN.md') : '')
+      + (P.sketch ? fileA('slices/ENTITY_SKETCH.md', '名詞草圖') : '')
+      + (P.drafts.length ? node('drafts', `<span class="nav-dir">推想草稿</span><span class="nav-x">${pendingDrafts ? pendingDrafts + ' 待接受' : P.drafts.length}</span>`,
+        P.drafts.map(d => a(`#/draft/${enc(d.path)}`, esc(d.title), d.pending ? '待接受' : '')).join('')) : ''), !plan || !plan.agreed)}
+    <div class="nav-h">切片</div>
+    ${started.map(sliceNode).join('') || '<div class="nav-empty">還沒有開始的切片</div>'}
+    ${waiting.length ? node('waiting', `<span class="nav-dir">還沒開始</span><span class="nav-x">${waiting.length}</span>`,
+      waiting.map(x => a(plan && plan.agreed && x.row['狀態'] === '候選' ? `#/new/${enc(x.code)}` : '#/plan', esc(x.code), esc(x.row['狀態'] || ''))).join('')) : ''}
+    <div class="nav-h">資料與成果</div>
+    ${node('core', `<span class="nav-name">core</span><span class="nav-x">共用核心</span>`,
+      Object.keys(P.core).length ? folderTree(P.core, 'core', p => fileA(p)) : '<div class="nav-empty">第一次凍結 ②③④ 後才有</div>')}
+    ${node('inputs', `<span class="nav-name">inputs</span><span class="nav-x">收集的資料</span>`,
+      (Object.keys(P.inputs).length ? folderTree(P.inputs, 'inputs', p => p.startsWith('inputs/drafts/') ? a(`#/draft/${enc(p)}`, esc(p.split('/').pop())) : fileA(p)) : '<div class="nav-empty">還沒有資料</div>')
+      + `<button class="nav-add" id="navAddInput">＋ 加資料</button>`)}
+    ${a('#/f/' + enc('slices/CHANGELOG.md'), '變更紀錄 CHANGELOG')}`;
+  nav.querySelectorAll('details.nav-node').forEach(d => d.addEventListener('toggle', () => {
+    const set = navOpenSet(), k = d.dataset.k;
+    set.delete(k); set.delete('!' + k);
+    set.add(d.open ? k : '!' + k);
+    navSaveOpen(set);
+  }));
+  $('#navAddInput').onclick = () => inputDialog({ folder: 'shared' });
+  markNav();
+}
+
+function markNav() {
+  const h = location.hash || '#/';
+  let best = null;
+  $$('#sideNav a.nav-a').forEach(x => {
+    x.classList.remove('on');
+    const href = x.getAttribute('href');
+    if (h === href || (href !== '#/' && h.startsWith(href + '/'))) if (!best || href.length > best.getAttribute('href').length) best = x;
+  });
+  if (best) {
+    best.classList.add('on');
+    for (let d = best.closest('details'); d; d = d.parentElement.closest('details')) d.open = true;
+  }
+}
+
+async function refreshNav() { try { await loadProject(); renderNav(); } catch (e) { } }
+
+function setNav(open) {
+  document.body.classList.toggle('nav-closed', !open);
+  if (!narrow()) try { localStorage.setItem('nav-closed', open ? '' : '1'); } catch (e) { }
+}
+function narrow() { return matchMedia('(max-width: 900px)').matches; }
+
+// ---------- 檔案（唯讀） ----------
+
+async function renderFile(path) {
+  state.slice = (path.match(/^slices\/([^/]+)\//) || [])[1] || null;
+  state.scope = state.slice || (path.startsWith('slices/') || path.startsWith('inputs/') ? '_plan' : null);
+  setTop(state.slice ? [`#/s/${enc(state.slice)}`, state.slice] : ['#/', '總覽'], `<strong>${esc(path.split('/').pop())}</strong>`);
+  const f = await api('/api/file?path=' + enc(path));
+  const ext = (path.match(/\.([^./]+)$/) || [])[1] || '';
+  $('#app').innerHTML = `
+    <div class="file-view">
+      <div class="row spread"><div><div class="label">唯讀</div><h1 style="margin:0;font-size:26px">${esc(f.path)}</h1></div>
+        ${f.binary ? '' : `<button class="btn small-btn" id="rawView">看行號</button>`}</div>
+      ${f.binary ? `<div class="card dashed">這是原始檔（${Math.round(f.size / 1024)} KB），網頁不顯示內容。AI 會直接讀它。</div>`
+        : ext === 'md' ? `<article class="card doc">${md(f.text)}</article>`
+        : `<pre class="card code-view">${esc(f.text)}</pre>`}
+      <p class="small muted">網頁不直接改這些檔案。要改，在切片首頁「發現問題」或規劃頁「寫意見」交給 AI。</p>
+    </div>`;
+  const rv = $('#rawView'); if (rv) rv.onclick = () => openFile(f.path, 1);
 }
 
 function anyRunning() { return state.sessions.some(s => s.running); }
@@ -1140,7 +1266,7 @@ function nextOfProject(P) {
 
 async function renderHub() {
   state.slice = null; state.scope = null; state.path = null;
-  syncSlicePick();
+  markNav();
   setTop(null, '');
   const P = await loadProject();
   const N = nextOfProject(P);
@@ -1190,22 +1316,31 @@ async function renderHub() {
       <p class="muted">有新的情境或需求，到「規劃」補進地圖。</p><a class="btn big" href="#/plan">看規劃</a></section>`;
 
   const eqTotal = P.slices.reduce((n, x) => n + x.eq_open, 0);
+  const started = list.filter(x => x.f), waiting = list.filter(x => !x.f);
   $('#app').innerHTML = `
     <nav class="journey">${journey.map((j, k) => `<div class="${k < stage ? 'done' : k === stage ? 'now' : ''}"><b>${k + 1}</b><span>${esc(j)}</span></div>`).join('')}</nav>
     ${waitingCard('_plan')}
     ${hero}
     ${list.length ? `<section><div class="row spread"><h2 style="margin:0">切片</h2>${plan ? `<a href="#/plan">切片地圖${plan.agreed ? '（已同意）' : '（討論中）'}</a>` : ''}</div>
-      <div class="slices">${list.map(x => {
+      ${started.length ? `<div class="slices">${started.map(x => {
         const r = x.row || {};
-        const st = x.f ? (x.f.review ? '輪到你審查' : x.f.session && x.f.session.running ? 'AI 進行中' : !x.f.next ? '完成' : x.f.next.n === 6 ? '設計完成（待驗證）' : `下一關 ${CIRCLED[x.f.next.n]}`) : r['狀態'] || '';
-        const href = x.f ? `#/s/${enc(x.code)}` : plan && plan.agreed && r['狀態'] === '候選' ? `#/new/${enc(x.code)}` : '#/plan';
-        return `<a class="slice ${x.f && x.f.review ? 'turn' : ''}" href="${href}">
-          <span class="row spread"><b>${esc(x.code)}</b><span class="chip ${x.f && x.f.review ? 'turn' : ''}">${esc(st)}</span></span>
-          <span class="small">${scenario(r['情境（起點 → 可驗證的結果）'] || '')}</span>
+        const st = x.f.review ? '輪到你審查' : x.f.session && x.f.session.running ? 'AI 進行中' : !x.f.next ? '完成' : x.f.next.n === 6 ? '設計完成（待驗證）' : `下一關 ${CIRCLED[x.f.next.n]}`;
+        const sc = r['情境（起點 → 可驗證的結果）'] || '';
+        return `<a class="slice ${x.f.review ? 'turn' : ''}" href="#/s/${enc(x.code)}" title="${esc(sc)}">
+          <span class="row spread"><b>${esc(x.code)}</b><span class="chip ${x.f.review ? 'turn' : ''}">${esc(st)}</span></span>
+          <span class="small clamp3">${scenario(sc)}</span>
           ${miniSteps(x.f)}
-          ${x.f && (x.f.eq_open || x.f.eq_answered) ? `<span class="small muted">專家問題：${x.f.eq_open} 題等答覆${x.f.eq_answered ? `、${x.f.eq_answered} 題答覆了待處理` : ''}</span>` : ''}
+          ${x.f.eq_open || x.f.eq_answered ? `<span class="small muted">專家問題：${x.f.eq_open} 題等答覆${x.f.eq_answered ? `、${x.f.eq_answered} 題答覆了待處理` : ''}</span>` : ''}
         </a>`;
-      }).join('')}</div></section>` : ''}
+      }).join('')}</div>` : ''}
+      ${waiting.length ? `<div class="sub-h"><h3>還沒開始（${waiting.length}）</h3><span class="small muted">照建議順序；點一條看地圖上的說明${plan && plan.agreed ? '或開始' : ''}</span></div>
+      <ol class="slice-list">${waiting.map((x, k) => {
+        const r = x.row || {};
+        const href = plan && plan.agreed && r['狀態'] === '候選' ? `#/new/${enc(x.code)}` : '#/plan';
+        const sc = r['情境（起點 → 可驗證的結果）'] || '';
+        return `<li><a href="${href}" title="${esc(sc)}"><span class="order">${esc(r['建議順序'] || '')}</span><b>${esc(x.code)}</b>
+          <span class="chip">${esc(r['狀態'] || '')}</span><span class="scn-1">${esc(sc)}</span></a></li>`;
+      }).join('')}</ol>` : ''}</section>` : ''}
     <div class="cols">
       <section class="wide">
         <div class="card"><div class="row spread"><div><div class="label">資料（inputs/）</div>
@@ -1237,7 +1372,7 @@ const TOPIC_Q = [
 
 async function renderStart() {
   state.slice = null; state.scope = '_plan';
-  syncSlicePick();
+  markNav();
   setTop(['#/', '總覽'], '<strong>主題草案</strong>');
   const P = state.project || await loadProject();
   $('#app').innerHTML = `
@@ -1353,7 +1488,7 @@ const INV_CLASS = { '已有': 'ok', '已蒐集': 'ok', '推想草稿': 'guess', 
 
 async function renderPlan() {
   state.slice = null; state.scope = '_plan';
-  syncSlicePick();
+  markNav();
   setTop(['#/', '總覽'], '<strong>規劃</strong>');
   const P = await loadProject();
   const plan = P.plan;
@@ -1374,7 +1509,7 @@ async function renderPlan() {
     ${runningCard('_plan', 'AI 正在改規劃')}
     ${waitingCard('_plan')}
     <div class="row spread"><div><span class="chip ${plan.agreed ? 'new' : ''}">${esc(plan.status || '討論中')}</span>
-      <h1 style="margin:8px 0 0">規劃</h1><p class="muted" style="margin:4px 0 0">${esc(plan.basis)}</p></div>
+      <h1 style="margin:8px 0 0">規劃</h1><p class="muted small clamp2" style="margin:6px 0 0;max-width:46em" title="${esc(plan.basis)}">${esc(plan.basis)}</p></div>
       <nav class="tabs"><button data-jump="p-data">資料</button><button data-jump="p-map">切片地圖</button><button data-jump="p-nouns">名詞</button><button data-jump="p-ask">待釐清與決定</button></nav></div>
 
     <section class="card fb-host"><div class="label">方向（整體目標）</div>
@@ -1392,9 +1527,9 @@ async function renderPlan() {
           const loc = x['位置'] && x['位置'] !== '—' ? x['位置'] : '';
           const d = draftOf(x);
           return `<div class="inv-item ${INV_CLASS[st] || ''} fb-host">
-            <div class="row spread"><b>${esc(x['資料'])}</b><span class="chip">${esc(st)}</span></div>
-            <div class="small">${inline(x['內容'] || '')}</div>
-            ${loc ? `<div class="small muted">${loc.includes('/') ? `<a class="ref-link" data-file="${esc(loc.replace(/[\s、，].*$/, ''))}" data-line="1">${esc(loc)}</a>` : esc(loc)}</div>` : ''}
+            <div class="what"><div><b>${esc(x['資料'])}</b><span class="chip">${esc(st)}</span></div>
+            <div class="small muted">${inline(x['內容'] || '')}</div>
+            ${loc ? `<div class="small muted">${loc.includes('/') ? `<a class="ref-link" data-file="${esc(loc.replace(/[\s、，].*$/, ''))}" data-line="1">${esc(loc)}</a>` : esc(loc)}</div>` : ''}</div>
             <div class="row">
               ${st === '待提供' ? `<button class="btn small-btn go" data-give="${esc(x['資料'])}">我有，放進來</button>${fbButton(`資料「${x['資料']}」`, '沒有／說明')}` : ''}
               ${d ? `<a class="btn small-btn yellow" href="#/draft/${enc(d.path)}">看草稿、決定接不接受</a>` : ''}
@@ -1419,10 +1554,10 @@ async function renderPlan() {
         const guess = /推想/.test(r['依據'] || '');
         return `<div class="map-item fb-host">
           <div class="row spread"><span><span class="order">${esc(r['建議順序'] || k + 1)}</span> <b>${esc(r['切片'])}</b></span>
-            <span class="row" style="gap:6px"><span class="chip ${r['大小估計'] === '太大' ? 'turn' : ''}">${esc(r['大小估計'] || '')}</span><span class="chip">${esc(r['狀態'])}</span></span></div>
+            <span class="row" style="gap:6px"><span class="chip ${/^太大/.test(r['大小估計'] || '') ? 'turn' : ''}" title="${esc(r['大小估計'] || '')}">${esc((r['大小估計'] || '').replace(/（.*$/, ''))}${/（/.test(r['大小估計'] || '') ? ' …' : ''}</span><span class="chip">${esc(r['狀態'])}</span></span></div>
           <div class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'])}</div>
           <div class="small muted">${esc(r['主要領域'] || '')}${r['會碰到的領域'] && r['會碰到的領域'] !== '—' ? '；也會碰到 ' + esc(r['會碰到的領域']) : ''}${r['依賴'] && r['依賴'] !== '—' ? '　依賴：' + esc(r['依賴']) : ''}</div>
-          <div class="small">依據：${guess ? '<span class="chip guess-chip">推想</span> ' : ''}${inline(r['依據'] || '')}</div>
+          <details class="small muted"><summary style="cursor:pointer">依據${guess ? ' <span class="chip guess-chip">推想</span>' : ''}</summary><div style="margin-top:6px">${inline(r['依據'] || '')}</div></details>
           <div class="row">${fbButton(`切片 ${r['切片']}`)}</div></div>`;
       }).join('')}</div>
     </section>
@@ -1554,7 +1689,7 @@ async function renderKickoff(code) {
 
 async function renderEq(slice) {
   state.slice = slice; state.scope = slice;
-  syncSlicePick();
+  markNav();
   setTop([`#/s/${enc(slice)}`, slice], '<strong>專家問題</strong>');
   const h = await api('/api/home?slice=' + enc(slice));
   const f = await api(`/api/file?path=${enc(`slices/${slice}/questions.md`)}`);
@@ -1619,7 +1754,7 @@ async function route() {
     if (parts[0] === 'r' && parts[1]) {
       const path = parts[1];
       const m = path.match(/^slices\/([^/]+)\//);
-      if (m) { state.slice = m[1]; state.scope = m[1]; syncSlicePick(); renderAiHead(); }
+      if (m) { state.slice = m[1]; state.scope = m[1]; markNav(); renderAiHead(); }
       if (state.path !== path) await loadReview(path);
       const view = parts[2] || 'decide';
       if (view === 'decide') return await renderDecide(path, +parts[3] || 0);
@@ -1633,8 +1768,9 @@ async function route() {
     if (parts[0] === 'draft' && parts[1]) return await renderDraft(parts.slice(1).join('/'));
     if (parts[0] === 'new' && parts[1]) return await renderKickoff(parts[1]);
     if (parts[0] === 'eq' && parts[1]) return await renderEq(parts[1]);
+    if (parts[0] === 'f' && parts[1]) return await renderFile(parts.slice(1).join('/'));
     return await renderHub();
-  } catch (e) { toast(e.message); }
+  } catch (e) { toast(e.message); } finally { refreshNav(); }
 }
 
 document.addEventListener('click', e => {
@@ -1647,7 +1783,11 @@ document.addEventListener('click', e => {
 }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('#fileDrawer').hidden = true; $('#aiDrawer').hidden = true; } });
 $('#aiBtn').onclick = () => { if ($('#aiDrawer').hidden) openAi(); else $('#aiDrawer').hidden = true; };
-$('#slicePick').onchange = e => go(e.target.value ? `#/s/${enc(e.target.value)}` : '#/');
+$('#navBtn').onclick = () => setNav(document.body.classList.contains('nav-closed'));
+$('#sideNav').addEventListener('click', e => { if (narrow() && e.target.closest('a.nav-a')) setNav(false); });
+try { if (narrow() || localStorage.getItem('nav-closed')) document.body.classList.add('nav-closed'); } catch (e) { if (narrow()) document.body.classList.add('nav-closed'); }
+const fitTop = () => document.documentElement.style.setProperty('--top-h', $('.top').offsetHeight + 'px');
+window.addEventListener('resize', fitTop); fitTop();
 $('#aiForm').onsubmit = e => {
   e.preventDefault();
   const v = $('#aiInput').value.trim();

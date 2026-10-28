@@ -10,14 +10,17 @@
 </head>
 <body>
 <header class="top">
+  <button class="nav-btn" id="navBtn" aria-label="展開或收起導覽" aria-controls="sideNav">☰</button>
   <a class="brand" href="#/">DOMAIN 設計</a>
-  <label class="slice-pick"><span class="sr">切片或總覽</span><select id="slicePick"></select></label>
   <a class="back" id="back" hidden></a>
   <div class="top-mid" id="topMid"></div>
   <button class="ai-btn" id="aiBtn"><span class="dot" id="aiDot"></span><span id="aiLabel">AI</span></button>
 </header>
 
-<main id="app"></main>
+<div class="shell">
+  <nav class="side-nav" id="sideNav" aria-label="導覽"></nav>
+  <main id="app"></main>
+</div>
 
 <aside class="drawer file" id="fileDrawer" hidden aria-label="檔案">
   <div class="drawer-head"><strong id="filePath"></strong><button class="x" data-close="fileDrawer" aria-label="關閉">✕</button></div>
