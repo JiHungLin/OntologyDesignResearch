@@ -893,7 +893,7 @@ function stepCls(status) { return status.startsWith('已凍結') ? 'frozen' : st
 
 function renderNav() {
   const P = state.project;
-  const nav = $('#sideNav');
+  const nav = $('#navTree');
   if (!P) return;
   const open = navOpenSet();
   const a = (href, label, extra = '', cls = '') => `<a class="nav-a ${cls}" href="${href}">${label}${extra ? `<span class="nav-x">${extra}</span>` : ''}</a>`;
@@ -976,18 +976,28 @@ function markNav() {
 
 async function refreshNav() { try { await loadProject(); renderNav(); } catch (e) { } }
 
+// 像 Notion：展開時側欄頂端有「«」收起；收起後頂列出現 ☰，滑過先浮出來看一眼（peek），點 ☰ 或「»」固定
 function setNav(open) {
   document.body.classList.toggle('nav-closed', !open);
-  syncNavEdge();
+  document.body.classList.remove('nav-peek');
+  syncNav();
   if (!narrow()) try { localStorage.setItem('nav-closed', open ? '' : '1'); } catch (e) { }
 }
-function syncNavEdge() {
-  const closed = document.body.classList.contains('nav-closed');
-  const b = $('#navEdge');
-  b.textContent = closed ? '›' : '‹';
-  b.title = closed ? '展開導覽' : '往左收起導覽';
+function syncNav() {
+  const peek = document.body.classList.contains('nav-peek');
+  const b = $('#navFold');
+  b.textContent = peek ? '»' : '«';
+  b.title = peek ? '固定側欄' : '收起側欄';
   b.setAttribute('aria-label', b.title);
-  b.setAttribute('aria-expanded', String(!closed));
+  $('#navBtn').setAttribute('aria-expanded', String(!document.body.classList.contains('nav-closed')));
+}
+let peekTimer = null;
+function peek(on) {
+  clearTimeout(peekTimer);
+  if (on) {
+    if (!document.body.classList.contains('nav-closed') || narrow()) return;
+    document.body.classList.add('nav-peek'); syncNav();
+  } else peekTimer = setTimeout(() => { document.body.classList.remove('nav-peek'); syncNav(); }, 250);
 }
 function narrow() { return matchMedia('(max-width: 900px)').matches; }
 
@@ -1792,11 +1802,16 @@ document.addEventListener('click', e => {
 }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('#fileDrawer').hidden = true; $('#aiDrawer').hidden = true; } });
 $('#aiBtn').onclick = () => { if ($('#aiDrawer').hidden) openAi(); else $('#aiDrawer').hidden = true; };
-$('#navBtn').onclick = () => setNav(document.body.classList.contains('nav-closed'));
+$('#navBtn').onclick = () => setNav(true);
+$('#navBtn').addEventListener('mouseenter', () => peek(true));
+$('#navBtn').addEventListener('mouseleave', () => peek(false));
+$('#sideNav').addEventListener('mouseenter', () => clearTimeout(peekTimer));
+$('#sideNav').addEventListener('mouseleave', () => { if (document.body.classList.contains('nav-peek')) peek(false); });
+$('#navFold').onclick = () => setNav(document.body.classList.contains('nav-peek'));
 $('#sideNav').addEventListener('click', e => { if (narrow() && e.target.closest('a.nav-a')) setNav(false); });
+$('#app').addEventListener('click', () => { if (narrow() && !document.body.classList.contains('nav-closed')) setNav(false); });
 try { if (narrow() || localStorage.getItem('nav-closed')) document.body.classList.add('nav-closed'); } catch (e) { if (narrow()) document.body.classList.add('nav-closed'); }
-$('#navEdge').onclick = () => setNav(document.body.classList.contains('nav-closed'));
-syncNavEdge();
+syncNav();
 const fitTop = () => document.documentElement.style.setProperty('--top-h', $('.top').offsetHeight + 'px');
 window.addEventListener('resize', fitTop); fitTop();
 $('#aiForm').onsubmit = e => {
