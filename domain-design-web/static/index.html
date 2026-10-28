@@ -29,12 +29,13 @@
 </div>
 
 <aside class="drawer file" id="fileDrawer" hidden aria-label="檔案">
-  <div class="drawer-head"><strong id="filePath"></strong><button class="x" data-close="fileDrawer" aria-label="關閉">✕</button></div>
+  <div class="drawer-head"><nav class="dtabs" role="tablist"><button data-tab="aiDrawer">AI 對話</button><button data-tab="fileDrawer" class="ftab" disabled>檔案</button></nav><button class="x" data-close="fileDrawer" aria-label="關閉">✕</button></div>
+  <div class="file-path" id="filePath"></div>
   <pre class="file-body" id="fileBody"></pre>
 </aside>
 
 <aside class="drawer ai" id="aiDrawer" hidden aria-label="AI 對話">
-  <div class="drawer-head"><strong>AI 對話</strong><button class="x" data-close="aiDrawer" aria-label="關閉">✕</button></div>
+  <div class="drawer-head"><nav class="dtabs" role="tablist"><button data-tab="aiDrawer">AI 對話</button><button data-tab="fileDrawer" class="ftab" disabled>檔案</button></nav><button class="x" data-close="aiDrawer" aria-label="關閉">✕</button></div>
   <div class="ai-session" id="aiSession"></div>
   <div class="ai-log" id="aiLog"></div>
   <div class="ai-next" id="aiNext"></div>
