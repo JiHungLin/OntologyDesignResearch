@@ -222,7 +222,7 @@ def _spot_items(r, p):
                 out.append({'id': f'{step}{i}', 'step': step, 'n': i, 'text': cells[0],
                             'kind': cells[1] if len(cells) > 2 else '', 'self': cells[-1],
                             'line': rows[i - 1][0], 'file': kit.rel(f),
-                            'evidence': evidence.find(cells[-1], kit.rel(f))})
+                            'evidence': evidence.find(cells[-1], kit.rel(f), cells[0])})
     return out
 
 
