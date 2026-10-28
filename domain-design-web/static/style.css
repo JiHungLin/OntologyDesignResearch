@@ -46,9 +46,13 @@ code { font-size: .9em; background: var(--bg); border-radius: 6px; padding: 0 4p
 .shell { display: flex; align-items: flex-start; }
 .side-nav { position: sticky; top: var(--top-h, 54px); flex: 0 0 var(--nav-w); width: var(--nav-w); transition: margin-left .25s ease, transform .25s ease, visibility .25s; height: calc(100vh - var(--top-h, 54px)); overflow-y: auto; background: var(--card); border-right: 2px solid var(--ink); padding: 18px 12px 40px; font-size: 15px; display: flex; flex-direction: column; gap: 2px; }
 body.nav-closed .side-nav { margin-left: calc(-1 * var(--nav-w)); visibility: hidden; }
-.nav-edge { position: fixed; z-index: 31; top: calc(var(--top-h, 54px) + 18px); left: calc(var(--nav-w) - 2px); width: 22px; height: 48px; padding: 0; border: 2px solid var(--ink); border-left: 0; border-radius: 0 10px 10px 0; background: var(--card); color: var(--ink); font: inherit; font-weight: 900; font-size: 14px; cursor: pointer; transition: left .25s ease, background .15s; }
-.nav-edge:hover { background: var(--hint); }
-body.nav-closed .nav-edge { left: 0; }
+body:not(.nav-closed) .nav-btn { display: none; }
+body.nav-closed.nav-peek .side-nav { position: fixed; z-index: 35; left: 0; top: calc(var(--top-h, 54px) + 8px); height: calc(100vh - var(--top-h, 54px) - 24px); margin-left: 0; visibility: visible; border: 2px solid var(--ink); border-left: 0; border-radius: 0 16px 16px 0; box-shadow: 6px 6px 0 rgba(22, 18, 58, .18); }
+.nav-top { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px 10px; margin-bottom: 6px; border-bottom: 2px solid var(--line); font-size: 12px; font-weight: 900; letter-spacing: .08em; color: var(--faint); }
+.nav-fold { font: inherit; font-size: 18px; line-height: 1; color: var(--muted); background: transparent; border: 0; border-radius: 8px; width: 30px; height: 28px; cursor: pointer; opacity: 0; transition: opacity .15s, background .15s; }
+.side-nav:hover .nav-fold, .nav-fold:focus-visible, body.nav-peek .nav-fold { opacity: 1; }
+.nav-fold:hover { background: var(--bg); color: var(--ink); }
+@media (hover: none) { .nav-fold { opacity: 1; } }
 .nav-a { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px; color: var(--ink); text-decoration: none; font-weight: 500; min-width: 0; }
 .nav-a:hover { background: var(--bg); }
 .nav-a.on { background: var(--primary); color: #fff; font-weight: 700; }
