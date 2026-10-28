@@ -936,7 +936,7 @@ function renderNav() {
 
   nav.innerHTML = `
     ${a('#/', '總覽')}
-    ${a('#/start', '主題草案', P.topic ? '✓' : '還沒寫')}
+    ${P.topic ? fileA(P.topic, '主題草案') : plan ? '' : a('#/start', '主題草案', '還沒寫')}
     ${node('plan', `<span class="nav-name">規劃</span><span class="nav-st ${plan && plan.agreed ? 'ok' : plan ? 'turn' : ''}">${plan ? (plan.agreed ? '已同意' : '討論中') : '還沒有'}</span>`,
       a('#/plan', '規劃頁') + (plan ? fileA('slices/PLAN.md', '切片地圖 PLAN.md') : '')
       + (P.sketch ? fileA('slices/ENTITY_SKETCH.md', '名詞草圖') : '')
