@@ -976,7 +976,7 @@ function markNav() {
 
 async function refreshNav() { try { await loadProject(); renderNav(); } catch (e) { } }
 
-// 側欄是獨立的一欄（展開時頂列往右擠）；頂列最左邊的 ☰ 展開或收起，Ctrl+\ 也可以
+// 像 Notion：側欄是獨立的一欄（展開時頂列往右擠）。收起時頂列最左邊是 ☰，點了才展開（滑過不彈出）；展開時側欄頂列最左邊是收起鈕；Ctrl+\ 切換
 function setNav(open) {
   document.body.classList.toggle('nav-closed', !open);
   syncNav();
@@ -985,7 +985,7 @@ function setNav(open) {
 function syncNav() {
   const closed = document.body.classList.contains('nav-closed');
   const b = $('#navBtn');
-  b.title = (closed ? '展開' : '收起') + '側欄（Ctrl+\\）';
+  b.title = '展開側欄（Ctrl+\\）';
   b.setAttribute('aria-label', b.title);
   b.setAttribute('aria-expanded', String(!closed));
 }
@@ -1792,7 +1792,8 @@ document.addEventListener('click', e => {
 }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('#fileDrawer').hidden = true; $('#aiDrawer').hidden = true; } });
 $('#aiBtn').onclick = () => { if ($('#aiDrawer').hidden) openAi(); else $('#aiDrawer').hidden = true; };
-$('#navBtn').onclick = () => setNav(document.body.classList.contains('nav-closed'));
+$('#navBtn').onclick = () => setNav(true);
+$('#navClose').onclick = () => setNav(false);
 document.addEventListener('keydown', e => { if (e.ctrlKey && e.key === '\\') { e.preventDefault(); setNav(document.body.classList.contains('nav-closed')); } });
 $('#sideNav').addEventListener('click', e => { if (narrow() && e.target.closest('a.nav-a')) setNav(false); });
 $('#app').addEventListener('click', () => { if (narrow() && !document.body.classList.contains('nav-closed')) setNav(false); });
