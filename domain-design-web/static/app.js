@@ -768,22 +768,44 @@ async function renderFinish(path) {
   if (c.confirms_open) left.push(`<a href="#/r/${enc(path)}/confirm">${c.confirms_open} 項確認</a>`);
   if (c.cases_open) left.push(`<a href="#/r/${enc(path)}/golden/0">${c.cases_open} 個案例</a>`);
   const spotRow = r.spot.find(s => s.items.trim()) || r.spot[0];
-  const picked = new Set((spotRow && spotRow.items.match(/\d+/g) || []).map(Number));
+  // 抽查：審查頁寫「① 第 1、4 條；③ 第 2 條」；畫面上一條的代號是「①1」這種（步驟＋第幾條）
+  const items = r.spot_items;
+  const pickedFrom = txt => {
+    const ids = new Set();
+    for (const m of String(txt || '').matchAll(/([①-⑥])?[^第①-⑥]*?第\s*([\d、，, ]+)\s*條/g))
+      for (const k of m[2].match(/\d+/g) || []) ids.add((m[1] || (items[0] || {}).step || '') + k);
+    return ids;
+  };
+  const picked = pickedFrom(spotRow && spotRow.items);
+  const pickedText = () => {
+    const by = new Map();
+    for (const it of items) if (picked.has(it.id)) by.set(it.step, (by.get(it.step) || []).concat(it.n));
+    return [...by].map(([st, ns]) => `${st || items[0].file.split('/').pop() + ' 完成標準'} 第 ${ns.join('、')} 條`).join('；');
+  };
   const name = remember('reviewer');
   const signed = c.conclusion_done;
   $('#app').innerHTML = `
     <div class="narrow">
       ${left.length ? `<div class="card hint">還有 ${left.join('、')} 沒完成，完成後才能簽名。</div>` : ''}
-      <section class="card lift" style="display:flex;flex-direction:column;gap:12px">
-        <div><span class="chip">抽查</span><h2 style="margin:8px 0 0">挑 1～2 條，看 AI 的自評是不是真的</h2>
-          <p class="muted small" style="margin:4px 0 0">這些是 AI 自評做到的完成標準。點一條會顯示 AI 怎麼說，再打開檔案看是不是這樣。發現不實，這一步改為逐條審查。</p></div>
-        ${r.spot_items.length ? `<div class="picks">${r.spot_items.map(s => `
-          <button class="pick ${picked.has(s.n) ? 'on' : ''}" data-pick="${s.n}">第 ${s.n} 條：${inline(s.text.replace(/\*\*/g, ''))}
-            ${picked.has(s.n) ? `<div class="self">AI 自評：${esc(plain(s.self)).slice(0, 400)}<br><a class="ref-link" data-file="${esc(s.file)}" data-line="${s.line}">打開檔案看</a></div>` : ''}</button>`).join('')}</div>`
-          : `<div class="small">${inline(r.spot_hint || '（審查頁沒有列出可挑的條目）')}</div><input type="text" id="spotItems" value="${esc(spotRow ? spotRow.items : '')}" placeholder="抽查了哪幾條，例：第 3、7 條">`}
+      <section class="card lift spot" style="display:flex;flex-direction:column;gap:16px">
+        <div><span class="chip">抽查</span><h2 style="margin:8px 0 0">AI 說它做到了：挑 1～2 條核對</h2>
+          <ol class="spot-how">
+            <li>下面是這一步的完成標準，AI 自評都做到了。<b>不用每條都看</b>，只挑 1～2 條。</li>
+            <li>挑你最在意、或最可能出錯的；建議挑「關鍵決定」類。</li>
+            <li>看「AI 說」它怎麼做到的，按「打開檔案對照」，看檔案裡是不是真的這樣。</li>
+            <li>是真的就按「核對過，屬實」；不是就寫一句哪裡不對。只要有一條不實，這一步改成逐條審查。</li>
+          </ol></div>
+        ${items.length ? `<div class="picks">${items.map(s => `
+          <div class="pick ${picked.has(s.id) ? 'on' : ''}" data-pick="${esc(s.id)}" role="button" tabindex="0">
+            <div class="row spread"><b>${esc(s.step)} 第 ${s.n} 條</b>${s.kind ? `<span class="chip ${/關鍵/.test(s.kind) ? 'turn' : ''}">${esc(s.kind)}</span>` : ''}</div>
+            <div class="crit">${inline(s.text.replace(/\*\*/g, ''))}</div>
+            <div class="self"><div class="${picked.has(s.id) ? '' : 'clamp2'}"><span class="label" style="display:inline;margin-right:6px">AI 說</span>${esc(plain(s.self))}</div></div>
+            ${picked.has(s.id) ? `<div><a class="btn small-btn ref-link" data-file="${esc(s.file)}" data-line="${s.line}">打開檔案對照 ›</a></div>` : ''}
+          </div>`).join('')}</div>`
+          : `<div class="small">${inline(r.spot_hint || '（審查頁沒有列出可挑的條目）')}</div><input type="text" id="spotItems" value="${esc(spotRow ? spotRow.items : '')}" placeholder="抽查了哪幾條，例：① 第 3、7 條">`}
         <div class="row">
-          <button class="btn go" id="spotOk" ${picked.size || !r.spot_items.length ? '' : 'disabled'}>自評屬實</button>
-          <input type="text" id="spotBad" style="flex:1;min-width:200px" class="soft" placeholder="或寫一句發現的問題，按 Enter" value="${spotRow && spotRow.result && !/^(屬實|符合|✓)/.test(spotRow.result) ? esc(spotRow.result) : ''}">
+          <button class="btn go" id="spotOk" ${picked.size || !items.length ? '' : 'disabled'}>核對過，屬實</button>
+          <input type="text" id="spotBad" style="flex:1;min-width:200px" class="soft" placeholder="或寫一句哪裡不對，按 Enter" value="${spotRow && spotRow.result && !/^(屬實|符合|✓|自評屬實)/.test(spotRow.result) ? esc(spotRow.result) : ''}">
         </div>
         ${spotRow && spotRow.result ? `<div class="small"><b>已記下：</b>${esc(spotRow.items)} → ${esc(spotRow.result)}</div>` : ''}
       </section>
@@ -814,20 +836,15 @@ async function renderFinish(path) {
     if (!spotLine) { toast('審查頁沒有抽查表'); return; }
     if (await write('/api/review/cells', { line: spotLine, cells: { '抽查了哪幾條': items, '結果': result } })) renderFinish(path);
   };
-  const itemsText = () => {
-    const inp = $('#spotItems');
-    if (inp) return inp.value.trim();
-    return picked.size ? `${r.spot_items[0] ? r.spot_items[0].file.split('/').pop() + ' ' : ''}完成標準第 ${[...picked].sort((a, b) => a - b).join('、')} 條` : '';
-  };
+  const itemsText = () => { const inp = $('#spotItems'); return inp ? inp.value.trim() : pickedText(); };
   $$('[data-pick]').forEach(b => b.onclick = async e => {
     if (e.target.closest('.ref-link')) return;
-    const n = +b.dataset.pick;
-    if (picked.has(n)) picked.delete(n); else picked.add(n);
-    if (picked.size > 2) { picked.delete(n); toast('挑 1～2 條就好'); return; }
-    const items = picked.size ? `${r.spot_items[0].file.split('/').pop()} 完成標準第 ${[...picked].sort((a, b) => a - b).join('、')} 條` : '';
-    await saveSpot(items, '');
+    const id = b.dataset.pick;
+    if (picked.has(id)) picked.delete(id); else picked.add(id);
+    if (picked.size > 2) { picked.delete(id); toast('挑 1～2 條就好'); return; }
+    await saveSpot(pickedText(), '');
   });
-  $('#spotOk').onclick = () => { const it = itemsText(); if (!it) { toast('先挑 1～2 條'); return; } saveSpot(it, '自評屬實'); };
+  $('#spotOk').onclick = () => { const it = itemsText(); if (!it) { toast('先挑 1～2 條'); return; } saveSpot(it, '屬實'); };
   $('#spotBad').onkeydown = e => {
     const v = e.target.value.trim();
     if (e.key === 'Enter' && v) { const it = itemsText(); if (!it) { toast('先挑 1～2 條'); return; } saveSpot(it, v); }
