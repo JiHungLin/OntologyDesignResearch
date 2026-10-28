@@ -909,14 +909,28 @@ async function renderFinish(path, focus) {
 // ---------- 檔案 ----------
 
 // 右側一次只放一個抽屜（AI 對話或檔案），最後打開的那個蓋掉另一個
-function showDrawer(id) { $$('.drawer').forEach(d => { d.hidden = d.id !== id; }); }
+// 兩個抽屜頂端都有「AI 對話｜檔案」分頁：切換時只換顯示，對話不重畫、捲動位置不變
+function showDrawer(id) {
+  $$('.drawer').forEach(d => { d.hidden = d.id !== id; });
+  $$('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === id));
+}
+function switchTab(id) {
+  if (id === 'fileDrawer') { if (state.lastFile) showDrawer('fileDrawer'); return; }
+  showDrawer('aiDrawer');
+  const s = curSession();
+  if (!s || $('#aiLog').dataset.sid !== s.id) renderAi();
+}
 
 async function openFile(file, line) {
-  const base = state.review && state.review.slice ? `slices/${state.review.slice}` : '';
+  // 「questions.md」「reviews/…」這種相對路徑是相對於切片資料夾：審查頁的切片、目前頁面的切片、AI 對話的切片，依序找
+  const sl = (state.review && state.path && state.review.slice) || state.slice || (aiScope() && aiScope() !== '_plan' ? aiScope() : '');
+  const base = sl ? `slices/${sl}` : '';
   try {
     const f = await api(`/api/file?path=${enc(file)}&base=${enc(base)}`);
     showDrawer('fileDrawer');
     $('#filePath').textContent = f.path + (line ? `:${line}` : '');
+    state.lastFile = f.path;
+    $$('.ftab').forEach(b => { b.disabled = false; b.textContent = '檔案：' + f.path.split('/').pop(); b.title = f.path; });
     const n = +line || 0;
     $('#fileBody').innerHTML = f.text.split('\n').map((l, k) => `<span class="ln ${k + 1 === n ? 'hit' : ''}" data-n="${k + 1}">${esc(l) || ' '}</span>`).join('');
     const hit = $('#fileBody .hit');
@@ -2002,6 +2016,8 @@ document.addEventListener('click', e => {
   if (a) { e.preventDefault(); e.stopPropagation(); openFile(a.dataset.file, a.dataset.line); return; }
   const seg = e.target.closest('[data-href]');
   if (seg) go(seg.dataset.href);
+  const tab = e.target.closest('[data-tab]');
+  if (tab) { switchTab(tab.dataset.tab); return; }
   const x = e.target.closest('[data-close]');
   if (x) $('#' + x.dataset.close).hidden = true;
 }, true);
