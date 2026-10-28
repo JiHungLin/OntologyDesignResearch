@@ -819,7 +819,8 @@ async function renderFinish(path, focus) {
       <h2 style="margin:0;font-size:20px;line-height:1.5">${inline(cur.text.replace(/\*\*/g, ''))}</h2>
       <div class="box"><div class="label">AI 說它做到了</div>${inline(plain(cur.self))}</div>
       <div><div class="label">證據（AI 提到的地方，已經幫你找出來）</div>
-        ${cur.evidence.length ? `<div class="evs">${cur.evidence.map(evHtml).join('')}</div>`
+        ${cur.evidence.length ? `<div class="evs">${cur.evidence.filter(e => !e.more).map(evHtml).join('')}
+          ${cur.evidence.some(e => e.more) ? `<details class="ev-more"><summary>相關段落全文（${cur.evidence.filter(e => e.more).length} 段，需要時再看）</summary><div class="evs">${cur.evidence.filter(e => e.more).map(evHtml).join('')}</div></details>` : ''}</div>`
           : `<div class="small muted">AI 沒有寫出處。<a class="ref-link" data-file="${esc(cur.file)}" data-line="${cur.line}">打開 ${esc(cur.file.split('/').pop())}</a>，自己找這條標準說的內容在哪一段。</div>`}</div>
       <div class="judge">
         <div class="label" style="color:var(--ink);font-size:15px">AI 說的，和證據對得上嗎？</div>

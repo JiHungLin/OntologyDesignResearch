@@ -300,3 +300,11 @@ def test_evidence_sections(repo):
     ev = evidence.find('✓：見 D-99', 'slices/demo/x.md', '範圍有寫「做」「不做」')
     assert [e['ref'] for e in ev] == ['「做」', '「不做」']
     assert ev[0]['text'] == '- 做：\n  - 甲\n  - 乙' and ev[1]['line'] == 7
+
+
+def test_evidence_headings_and_english(repo):
+    import evidence
+    (repo / 'slices' / 'demo' / 'y.md').write_text('# y\n\n## 範圍\n- 做：登錄電費單\n\n## 交給第 ② 步的觀察\n- 每張帳單記 bill_id 與 ElectricityBill\n\n## 決定與理由\n- 無\n', encoding='utf-8')
+    ev = evidence.find('✓：AI 檢查全文', 'slices/demo/y.md', '範圍與觀察都用業務語言寫，沒有英文識別名稱、表名或欄位名')
+    assert [e['ref'] for e in ev] == ['網頁掃過這幾段的英文字', '範圍', '交給第 ② 步的觀察']
+    assert 'bill_id' in ev[0]['text'] and 'ElectricityBill' in ev[0]['text'] and ev[1]['more']
