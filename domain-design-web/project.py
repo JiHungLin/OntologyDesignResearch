@@ -144,12 +144,21 @@ def topic():
 
 # ---- 切片 ----
 
+def _untouched(path, slice_, fn):
+    """開切片時從 templates/slice/ 複製過來、還沒動過的檔案（只把 {{切片}} 換成代號）：算「未開始」，不算草稿。"""
+    tpl = _read(_p('templates', 'slice', fn))
+    return tpl is not None and _read(path) == tpl.replace('{{切片}}', slice_)
+
+
 def steps(slice_):
     """各步驟的狀態（草稿／待檢查／已凍結；檔案不存在＝未開始）與版本。"""
     out = []
     for n, name, fn in STEP_FILES:
         path = _p('slices', slice_, fn)
         if not os.path.exists(path):
+            out.append({'n': n, 'name': name, 'file': fn, 'status': '未開始', 'version': ''})
+            continue
+        if _untouched(path, slice_, fn):
             out.append({'n': n, 'name': name, 'file': fn, 'status': '未開始', 'version': ''})
             continue
         h = head(path)

@@ -228,7 +228,7 @@ async function renderHome(slice) {
           <p>${esc(plain(why.split('，依據')[0]))}</p>
           <p>過關條件：${parts.join('＋')}，還要大約 ${mins} 分鐘。</p>
         </div>
-        <a class="btn big yellow" href="${nextTask(r)}">${c.open === (c.questions + c.confirms + c.cases + 2) ? '開始' : '繼續'} ›</a>
+        <a class="btn big yellow" href="${nextTask(r)}">${c.open === (c.questions + c.confirms + c.cases + 2) ? '開始審查' : '繼續審查'} ›</a>
       </section>`;
     const t = tasksOf(r);
     const p = enc(r.path);
@@ -1095,13 +1095,15 @@ async function renderAiNext(s) {
     start: ['寫主題草案', '#/start'],
     'plan-ai': ['請 AI 規劃', '#/'],
     plan: ['看規劃：補資料、看草稿、同意地圖', '#/plan'],
-    review: it && ['審查 ' + it.code, `#/s/${enc(it.code)}`],
+    review: it && it.f.review && [`開始審查 ${it.code} ${stepName(it.f.review.step)}`, `#/r/${enc(it.f.review.path)}`],
     slice: it && [`到 ${it.code} 首頁，交給 AI 做 ${step}`, `#/s/${enc(it.code)}`],
     pick: it && ['開始下一條切片：' + it.code, `#/new/${enc(it.code)}`],
   }[N.kind];
   if (!act) return;
-  box.innerHTML = `<div class="label">接下來</div><a class="btn primary" href="${act[1]}">${esc(act[0])} ›</a>
+  box.innerHTML = `<div class="label">接下來</div><a class="btn primary" href="${act[1]}" id="aiNextGo">${esc(act[0])} ›</a>
     <div class="small muted" style="margin-top:6px">在網頁上按就好，不用貼 AI 寫的指令；需要新的 session 時網頁會自己開。</div>`;
+  // 抽屜蓋在主畫面上時，按了先收起抽屜，才看得到帶過去的頁面
+  $('#aiNextGo').onclick = e => { e.preventDefault(); if (!document.body.classList.contains('drawer-push')) $('#aiDrawer').hidden = true; go(act[1]); };
 }
 
 // 交給 AI 的唯一入口：scope 範圍、purpose 用途、message 要說的話
