@@ -551,7 +551,7 @@ function entityPanel(r, id) {
     <div>${e.changed ? '<span class="chip new">這輪新增或改動</span>' : e.kind === 'own' ? '<span class="chip">本切片</span>' : '<span class="chip">引用</span>'}
       <h2>${esc(e.label)}</h2><div class="small muted">${esc(e.id)}</div></div>
     ${e.definition ? `<div style="font-size:17px">${esc(e.definition)}</div>` : ''}
-    ${e.attrs && e.attrs.length ? `<div class="box"><div class="label">記下什麼</div><div class="attrs">${e.attrs.map(a => `<span title="${esc(a.name)}">${esc(short(a.label.split(/[，：；]/)[0] || a.name, 14))}</span>`).join('')}</div></div>` : ''}
+    ${e.attrs && e.attrs.length ? `<div class="box"><div class="label">記下什麼</div><div class="attrs">${e.attrs.map(a => `<span title="${esc(a.name)}">${esc(short(a.label.split(/[，：；]/)[0] || a.name, 24))}</span>`).join('')}</div></div>` : ''}
     ${e.separate ? `<div class="box"><div class="label">為什麼要單獨記</div>${esc(e.separate)}</div>` : ''}
     ${e.not ? `<div class="box"><div class="label">它不是</div>${esc(e.not)}</div>` : ''}
     ${rows.length ? `<div class="label" style="margin-top:4px">要你確認（${rows.length - open.length} / ${rows.length}）</div>${rows.map(confirmRow).join('')}` : ''}
@@ -584,7 +584,7 @@ async function renderConfirm(path, sel) {
         <span><i style="background:#fff;border:2px solid var(--faint)"></i>引用其他地方的</span>
         <label class="small" style="font-weight:400"><input type="checkbox" id="showAll" ${state.showAll ? 'checked' : ''}> 顯示全部名詞</label>
       </div>
-      <div class="cols">
+      <div class="model-split">
         <section class="diagram">${renderDiagram(r)}</section>
         <aside class="panel" id="panel">${entityPanel(r, sel)}</aside>
       </div>`;
@@ -621,7 +621,13 @@ async function renderConfirm(path, sel) {
     const g = groups[+b.dataset.group];
     if (await okAll(g.rows.filter(c => !(c.answer || '').trim()).map(c => c.line))) refresh();
   });
-  $$('[data-node]').forEach(n => n.onclick = () => history.replaceState(null, '', `#/r/${p}/confirm/${n.dataset.node}`) || refresh(n.dataset.node));
+  // 主畫面窄、圖和說明上下排時，點了方塊就捲到說明欄
+  $$('[data-node]').forEach(n => n.onclick = async () => {
+    history.replaceState(null, '', `#/r/${p}/confirm/${n.dataset.node}`);
+    await refresh(n.dataset.node);
+    const panel = $('#panel'), split = $('.model-split');
+    if (panel && split && getComputedStyle(split).gridTemplateColumns.split(' ').length === 1) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   const sa = $('#showAll');
   if (sa) sa.onchange = () => { state.showAll = sa.checked; refresh(); };
   const allOk = $('#allOk');

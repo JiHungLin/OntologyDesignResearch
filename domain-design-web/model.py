@@ -60,11 +60,11 @@ def load(slice_name):
         if m:
             k, v = m.groups()
             if k == '定義':
-                cur['definition'] = _plain(v, 90)
+                cur['definition'] = _plain(v, 400)
             elif k == '不是什麼':
-                cur['not'] = _plain(v, 90)
+                cur['not'] = _plain(v, 400)
             elif k == '不能跟誰合併':
-                cur['separate'] = _plain(v, 110)
+                cur['separate'] = _plain(v, 400)
             continue
         m = ATTR.match(line)
         if m:
