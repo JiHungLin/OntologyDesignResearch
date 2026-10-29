@@ -4,6 +4,7 @@
 import asyncio
 import datetime
 import json
+import sys
 import os
 import re
 import uuid
@@ -140,8 +141,14 @@ def web_prompt():
         return f.read().replace('{FETCH}', FETCH)
 
 
+HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'readonly_hook.py')
+# 只讀的串接指令（cd …; for …; cat …、grep … | head）由 hook 放行，見 readonly_hook.py
+SETTINGS = json.dumps({'hooks': {'PreToolUse': [{'matcher': 'Bash', 'hooks': [
+    {'type': 'command', 'command': f'{sys.executable} {HOOK}'}]}]}})
+
+
 def _command(s, message):
-    cmd = [CLAUDE, '-p', message, '--output-format', 'stream-json', '--verbose',
+    cmd = [CLAUDE, '-p', message, '--output-format', 'stream-json', '--verbose', '--settings', SETTINGS,
            '--permission-mode', 'acceptEdits', '--append-system-prompt', web_prompt(), '--allowedTools', *ALLOWED]
     if s['turns'] == 0:
         cmd += ['--session-id', s['id'], '-n', s['name']]

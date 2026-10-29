@@ -320,3 +320,15 @@ def test_evidence_every_card_and_column(repo):
     assert ev[0]['ref'] == '「不是什麼」' and '1 張沒有' in ev[0]['text'] and 'Customer' in ev[0]['text']
     ev = evidence.find('✓', 'slices/demo/z.md', '每個草稿 User Story 都填了「來源」欄')
     assert [e['title'] for e in ev] == ['草稿 User Story'] and '1 列空白' in ev[0]['text']
+
+
+def test_readonly_hook():
+    import readonly_hook as h
+    root = ['/repo']
+    assert h.read_only('cd /repo; for f in inputs/shared/*.md; do echo "=== $f"; cat -n "$f"; done', root)
+    assert h.read_only("grep -n '^#' docs/01.md | awk -F: '$1<200'", root)
+    assert h.read_only("sed -n '120,140p' docs/03.md | cat -n", root)
+    for bad in ('rm -rf slices', 'cat a.md > b.md', 'sed -i s/a/b/ x.md', "sed -n '1w out' a.md", 'cat /etc/passwd',
+                'cat ../../x', 'echo $(rm x)', 'find . -delete', 'python3 -c 1', 'for f in *.md; do rm "$f"; done',
+                "awk '{system(\"rm x\")}' a"):
+        assert not h.read_only(bad, root), bad
