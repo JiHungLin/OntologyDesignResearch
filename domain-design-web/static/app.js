@@ -572,15 +572,27 @@ async function renderConfirm(path, sel) {
     // 只算圖上點得到的：畫出來的方塊自己的確認列，加上碰到它、這輪改到的關係（說明欄就是顯示這些）。
     // 圖上沒畫出來的（例：兩端都不是這輪改到的名詞）放到下面「其他要確認的」，不然會有確認列沒地方點
     const drawn = new Set(layout(r.model, state.showAll).nodes.keys());
-    for (const e of [...r.model.entities, ...(r.model.refs || [])]) if (drawn.has(e.id)) (e.confirm_lines || []).forEach(l => inModel.add(l));
-    for (const x of r.model.relations) if (x.changed && (drawn.has(x.from) || drawn.has(x.to))) (x.confirm_lines || []).forEach(l => inModel.add(l));
-    const changed = r.model.entities.filter(e => e.changed);
-    if (!sel) {
-      const firstOpen = changed.find(e => e.confirm_lines.some(l => !(r.confirms.find(c => c.line === l) || {}).answer));
-      sel = (firstOpen || changed[0] || {}).id || null;
-    }
+    const all = [...r.model.entities, ...(r.model.refs || [])];
+    const owner = new Map();   // 方塊 → 它負責的確認列（關係算在起點；起點沒畫出來才算終點），用來列「要確認的清單」
+    const own = (id, ls) => { if (ls && ls.length) owner.set(id, [...new Set([...(owner.get(id) || []), ...ls])]); };
+    for (const e of all) if (drawn.has(e.id)) own(e.id, e.confirm_lines);
+    for (const x of r.model.relations) if (x.changed) own(drawn.has(x.from) ? x.from : drawn.has(x.to) ? x.to : null, x.confirm_lines);
+    owner.delete(null);
+    for (const ls of owner.values()) ls.forEach(l => inModel.add(l));
+    const answered = l => ((r.confirms.find(c => c.line === l) || {}).answer || '').trim();
+    if (!sel) sel = ([...owner].find(([, ls]) => ls.some(l => !answered(l))) || [...owner][0] || [null])[0];
     state.sel = sel;
-    modelHtml = `
+    const restN = r.confirms.filter(c => !inModel.has(c.line));
+    const nameOf = id => { const e = all.find(x => x.id === id); return e ? e.label : id; };
+    const todo = `<div class="todo">
+        <div class="small"><b>要確認 ${r.confirms.length} 項</b>：圖上 ${inModel.size} 項（點名稱或方塊），下面清單 ${restN.length} 項</div>
+        <div class="todo-chips">${[...owner].map(([id, ls]) => {
+          const done = ls.filter(answered).length;
+          return `<button class="todo-chip ${done === ls.length ? 'ok' : ''} ${id === sel ? 'on' : ''}" data-node="${esc(id)}">${esc(nameOf(id))} <b>${done}/${ls.length}</b></button>`;
+        }).join('')}
+        ${restN.length ? `<a class="todo-chip ${restN.every(c => answered(c.line)) ? 'ok' : ''}" href="#others" id="toOthers">其他（清單）<b>${restN.filter(c => answered(c.line)).length}/${restN.length}</b> ↓</a>` : ''}</div>
+      </div>`;
+    modelHtml = todo + `
       <div class="legend">
         <span><i style="background:var(--done);border:3px solid var(--ink)"></i>這輪新增或改動</span>
         <span><i style="background:#fff;border:2px solid var(--ink)"></i>本切片原本就有</span>
@@ -608,8 +620,8 @@ async function renderConfirm(path, sel) {
   }).join('');
 
   $('#app').innerHTML = `
-    ${r.model ? `<div><h1 style="margin:0">看圖確認：這輪改了哪些東西</h1><p class="muted" style="margin:4px 0 0">點綠色方塊看說明；合理就按「合理，下一個」。</p></div>${modelHtml}` : ''}
-    ${groups.length ? `<div><h2 style="margin:0">${r.model ? '其他要確認的' : '確認這輪的改動'}</h2><p class="muted small" style="margin:4px 0 0">每一項打 ✓ 或寫一句意見。原文和行號可以點開看。</p></div><div class="groups">${groupsHtml}</div>` : ''}
+    ${r.model ? `<div><h1 style="margin:0">看圖確認：這輪改了哪些東西</h1><p class="muted" style="margin:4px 0 0">點上面的名稱或圖上的方塊看說明；橘色的還沒確認完。合理就按「合理，下一個」。</p></div>${modelHtml}` : ''}
+    ${groups.length ? `<div id="others"><h2 style="margin:0">${r.model ? '其他要確認的' : '確認這輪的改動'}</h2><p class="muted small" style="margin:4px 0 0">每一項打 ✓ 或寫一句意見。原文和行號可以點開看。</p></div><div class="groups">${groupsHtml}</div>` : ''}
     ${!open ? `<div class="row"><a class="btn big primary" href="${nextTask(r)}">確認完成，下一個任務 ›</a></div>` : ''}`;
 
   const refresh = s => renderConfirm(path, s === undefined ? state.sel : s);
@@ -624,6 +636,8 @@ async function renderConfirm(path, sel) {
     const g = groups[+b.dataset.group];
     if (await okAll(g.rows.filter(c => !(c.answer || '').trim()).map(c => c.line))) refresh();
   });
+  const to = $('#toOthers'); if (to) to.onclick = e => { e.preventDefault(); $('#others').scrollIntoView({ behavior: 'smooth' }); };
+  $('#app').classList.add('wide');   // 這一頁要並排圖與說明，主畫面放寬
   // 主畫面窄、圖和說明上下排時，點了方塊就捲到說明欄
   $$('[data-node]').forEach(n => n.onclick = async () => {
     history.replaceState(null, '', `#/r/${p}/confirm/${n.dataset.node}`);
@@ -2027,6 +2041,7 @@ async function renderEq(slice) {
 
 async function route() {
   $('#fileDrawer').hidden = true;
+  $('#app').classList.remove('wide');
   const parts = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   try {
     if (parts[0] === 's' && parts[1]) return await renderHome(parts[1]);
