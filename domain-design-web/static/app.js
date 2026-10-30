@@ -569,8 +569,11 @@ async function renderConfirm(path, sel) {
   const inModel = new Set();
   let modelHtml = '';
   if (r.model) {
-    for (const e of r.model.entities) (e.confirm_lines || []).forEach(l => inModel.add(l));
-    for (const x of r.model.relations) (x.confirm_lines || []).forEach(l => inModel.add(l));
+    // 只算圖上點得到的：畫出來的方塊自己的確認列，加上碰到它、這輪改到的關係（說明欄就是顯示這些）。
+    // 圖上沒畫出來的（例：兩端都不是這輪改到的名詞）放到下面「其他要確認的」，不然會有確認列沒地方點
+    const drawn = new Set(layout(r.model, state.showAll).nodes.keys());
+    for (const e of [...r.model.entities, ...(r.model.refs || [])]) if (drawn.has(e.id)) (e.confirm_lines || []).forEach(l => inModel.add(l));
+    for (const x of r.model.relations) if (x.changed && (drawn.has(x.from) || drawn.has(x.to))) (x.confirm_lines || []).forEach(l => inModel.add(l));
     const changed = r.model.entities.filter(e => e.changed);
     if (!sel) {
       const firstOpen = changed.find(e => e.confirm_lines.some(l => !(r.confirms.find(c => c.line === l) || {}).answer));
