@@ -437,9 +437,47 @@ function groupOf(what) {
   return m ? m[1] : g;
 }
 
+// 每一類確認要人判斷什麼（類別是流程定的：精簡版 0.2「審查頁中各步〔關鍵決定〕要看的東西」，
+// 加上 AI 提出的決定、自評「部分」）；AI 寫的「要看的」只是名稱，人常看不出要做什麼
+const ASK = [
+  [/只需現況/, '這些資料只記目前的值，改了之後舊的值就不留。想一下：以後會不會有人要查「當時是什麼」（例：報表要印當時的名稱、對帳要看改之前的數字）？不會就按 ✓；會的話寫一句，這筆就要留歷史。'],
+  [/有依據的決定/, 'AI 自己做的決定（有依據，所以沒寫成選擇題）。照你對業務的了解看每一條：這樣做可以嗎？可以就按 ✓，不同意就寫一句。'],
+  [/^自評/, 'AI 自評這條完成標準只做到一部分（或沒做到）。看它說缺了什麼：可以先這樣就按 ✓，要補就寫一句。'],
+  [/幾對幾/, '兩個東西之間是一對一、一對多還是多對多。錯了之後要改資料表、搬資料，很貴；照實際業務想一個反例看看。'],
+  [/Entity/, '哪些要當成一個「東西」單獨記（有自己的身分、會被指到），哪些不用。'],
+  [/推導值/, '這些不另外存，要用的時候從其他資料算出來。想一下：算得出來嗎？資料後來改了，當時的值還算得回來嗎？'],
+  [/草圖/, '和一開始的全局名詞草圖不一樣的地方，看改得合不合理。'],
+  [/守恆式/, '數量或金額要對得起來的算式（例：期初＋增加－減少＝期末），看有沒有漏掉會讓數字對不起來的情況。'],
+  [/保存方式/, '這些資料改了就直接蓋掉、不留舊值；和 ③「只需現況」一起看，以後不會有人要查舊的值才按 ✓。'],
+  [/範圍|做／不做/, '這條切片做什麼、不做什麼。看有沒有該做卻沒列的、或不該現在做的。'],
+];
+const askOf = g => (ASK.find(([re]) => re.test(g)) || [null, ''])[1];
+
+// 「AI 提出、有依據的決定 D-01（哪些有狀態）」在組裡只顯示「D-01」和「哪些有狀態」
+function rowTitle(what, group) {
+  let t = group && what.startsWith(group) && what.length > group.length ? what.slice(group.length).trim() : what;
+  t = t.replace(/^[：:]\s*/, '');
+  const m = t.match(/^((?:[A-Z]+-\d+|[A-Z]\d+)(?:[、,，]\s*(?:[A-Z]+-\d+|[A-Z]\d+))*)\s*(?:（(.+)）)?$/);
+  return m ? `<span class="rid">${esc(m[1])}</span>${m[2] ? ` ${inline(m[2])}` : ''}` : inline(t);
+}
+
+// 長的一句拆成幾點：只在括號、引號外的「。」「；」斷開
+function clauses(s) {
+  const out = [];
+  let depth = 0, cur = '';
+  for (const ch of s) {
+    cur += ch;
+    if ('（(「『['.includes(ch)) depth++;
+    else if ('）)」』]'.includes(ch)) depth = Math.max(0, depth - 1);
+    else if (!depth && '。；'.includes(ch)) { out.push(cur.slice(0, -1).trim()); cur = ''; }
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out.filter(Boolean);
+}
+
 // 「在哪裡」指到的那一列或那一段（伺服器從交付物拿出來）：短欄位直接列，最主要的一欄放大，
 // 其他長的（理由、依據、替代做法…）收在「為什麼」；原文摘的字句用螢光標出來
-const CTX_MAIN = ['決定', '內容', '說明', '定義', '前提條件', '問題'];
+const CTX_MAIN = ['決定', 'AI 自評', '內容', '說明', '定義', '前提條件', '問題'];
 const CTX_LONG = 60;
 
 function ctxHtml(c, frags) {
@@ -450,13 +488,16 @@ function ctxHtml(c, frags) {
     if (!x.fields) return `<div class="ctx">${head}<div class="md">${mark(x.text.includes('\n') ? md(x.text) : inline(x.text.replace(/^\s*[-*]\s+/, '')))}</div></div>`;
     const fs = x.fields.filter(([h, v], k) => v && v !== '—' && !(k === 0 && /^[A-Z]+-?\d+$/.test(v)));
     const id = /^[A-Z]+-?\d+$/.test((x.fields[0] || [])[1] || '') ? x.fields[0][1] : '';
-    const main = fs.find(([h]) => CTX_MAIN.includes(h)) || fs.find(([, v]) => v.length > CTX_LONG);
+    const main = CTX_MAIN.map(n => fs.find(([h]) => h === n)).find(Boolean) || fs.find(([, v]) => v.length > CTX_LONG);
     const rest = fs.filter(f => f !== main);
     const dl = list => `<dl>${list.map(([h, v]) => `<dt>${esc(h)}</dt><dd>${mark(inline(v))}</dd>`).join('')}</dl>`;
     // 欄位都短（例：狀態機的一列）就直接列；有決定這種主要的一欄時，其他欄收起來，要看再點
     if (!main) return `<div class="ctx">${head}${dl(rest)}</div>`;
     return `<div class="ctx">${head}
-      <div class="main">${id ? `<b>${esc(id)}</b>　` : ''}${mark(inline(main[1]))}</div>
+      ${(() => {
+        const cs = main[1].length > CTX_LONG ? clauses(main[1]) : [main[1]];
+        return cs.length > 1 ? `<ul class="main">${cs.map(x => `<li>${mark(inline(x))}</li>`).join('')}</ul>` : `<div class="main">${mark(inline(main[1]))}</div>`;
+      })()}
       ${rest.length ? `<details><summary>${rest.map(f => esc(f[0])).join('、')}</summary>${dl(rest)}</details>` : ''}</div>`;
   }).join('');
 }
@@ -465,12 +506,16 @@ function confirmRow(c, group = '') {
   const ans = (c.answer || '').trim();
   const what = c.cells['要看的'] || '';
   // 原文的「…」拆成片段（「…」中間的省略號也拆開），在上下文裡找得到就標出來，全部找得到就不再另外列原文
-  const frags = [...(c.cells['原文'] || '').matchAll(/「([^」]+)」/g)].flatMap(m => m[1].split('…')).map(s => s.replace(/^#+\s*/, '').trim()).filter(s => s.length >= 2);
+  const raw = [...(c.cells['原文'] || '').matchAll(/「([^」]+)」/g)].flatMap(m => m[1].split('…')).map(s => s.trim()).filter(s => s.length >= 2);
+  const frags = raw.map(s => s.replace(/^#+\s*/, ''));
   const ctxText = JSON.stringify(c.context || []);
   const covered = frags.length && (c.context || []).length && frags.every(f => ctxText.includes(f));
+  // 「要確認」只放句子：標題（### …）不算；指到決定這種有主要欄位的表格列時，主要欄位本身就是要確認的，不重複
+  const hasMain = (c.context || []).some(x => x.fields && x.fields.some(([h]) => CTX_MAIN.includes(h)));
+  const claim = hasMain ? [] : raw.filter(s => !s.startsWith('#'));
   return `<div class="crow ${!ans ? '' : ans === '✓' ? 'done' : 'noted'}${(c.context || []).length ? ' has-ctx' : ''}">
-    <div class="what">${inline(group && what.startsWith(group) && what.length > group.length ? what.slice(group.length).trim() : what)}</div>
-    ${frags.length ? `<div class="claim"><span class="muted small">要確認</span>${frags.length > 1 ? `<ul>${frags.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : `<div>${esc(frags[0])}</div>`}</div>` : ''}
+    <div class="what">${rowTitle(what, group)}</div>
+    ${claim.length ? `<div class="claim"><span class="muted small">要確認</span>${claim.length > 1 ? `<ul>${claim.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : `<div>${esc(claim[0])}</div>`}</div>` : ''}
     ${(c.context || []).length ? ctxHtml(c, frags) : ''}
     ${c.cells['原文'] && !covered && !frags.length ? `<div class="orig">${inline(c.cells['原文'])}</div>` : ''}
     ${c.cells['在哪裡'] && !(c.context || []).length ? `<div class="where">${inline(c.cells['在哪裡'])}</div>` : ''}
@@ -674,7 +719,10 @@ function flowDiagram(sm, tsel) {
 function flowPanel(r, sm, tsel) {
   const F = r.flows;
   const rows = r.confirms.filter(c => c.machine === sm.id);
-  const confirmsHtml = rows.length ? `<div class="list">${rows.map(c => confirmRow(c)).join('')}</div>` : '';
+  const confirmsHtml = rows.length ? `<div class="list">${rows.map(c => {
+    const g = groupOf(c.cells['要看的'] || '');
+    return `<div><div class="small"><b>要你確認：${esc(g)}</b></div>${askOf(g) ? `<p class="ask small">${esc(askOf(g))}</p>` : ''}${confirmRow({ ...c, context: (c.context || []).filter(x => x.line !== sm.line) }, g)}</div>`;
+  }).join('')}</div>` : '';
   const link = (line, text) => `<a class="small ref-link" data-file="${esc(F.path)}" data-line="${line}">${text || `${esc(F.path.split('/').pop())} 第 ${line} 行`} ›</a>`;
   const nameOf = id => { const s = sm.states.find(x => x.id === id); return s && s.label ? s.label : id || '（新建立）'; };
   const t = tsel !== null && tsel !== undefined ? sm.transitions[tsel] : null;
@@ -691,11 +739,11 @@ function flowPanel(r, sm, tsel) {
   const stateless = !sm.transitions.length;
   return `<div><span class="chip">歷史需求：${esc(sm.history || '—')}</span><h2>${esc(sm.label)}<span class="muted small">　${esc(sm.id)}</span></h2></div>
     ${confirmsHtml}
-    ${stateless ? `<p>${inline(sm.stateless || '沒有狀態')}</p>` : `
+    ${stateless ? '' : `
       <div class="small muted">點一列（或圖上的字）看誰可以做、前提條件</div>
       <div class="tlist">${sm.transitions.map((x, i) => `<button class="trow ${i === tsel ? 'on' : ''}" data-t="${i}">
         <span class="muted">${esc(nameOf(x.from))} → ${esc(nameOf(x.to))}</span><b>${esc(x.label || x.on)}${/^系統/.test(x.who) ? ' ⚙' : ''}</b></button>`).join('')}</div>`}
-    ${sm.notes.length ? `<div class="md small">${md(sm.notes.map(n => '- ' + n.replace(/\n/g, '\n  ')).join('\n'))}</div>` : ''}
+    ${sm.notes.length && !stateless ? `<div class="md small">${md(sm.notes.map(n => '- ' + n.replace(/\n/g, '\n  ')).join('\n'))}</div>` : ''}
     ${link(sm.line)}`;
 }
 
@@ -718,7 +766,9 @@ function flowsHtml(r, sel, tsel, inModel) {
       ${without.length ? `<div class="small" style="margin-top:8px"><b>沒有狀態、變化用日期記的（${without.length}）</b></div><div class="todo-chips">${without.map(chip).join('')}</div>` : ''}
     </div>
     <div class="model-split flow-split">
-      <section class="diagram">${sm.transitions.length ? flowDiagram(sm, tsel) : `<div class="card" style="box-shadow:none"><h3 style="margin-top:0">${esc(sm.label)}沒有狀態</h3><p>${inline(sm.stateless || '')}</p></div>`}</section>
+      <section class="diagram">${sm.transitions.length ? flowDiagram(sm, tsel) : `<div class="card" style="box-shadow:none"><h3 style="margin-top:0">${esc(sm.label)}：${esc(sm.stateless || '沒有狀態')}</h3>
+        <p class="muted small">不會從一個狀態走到另一個狀態；要記的變化寫在下面。</p>
+        ${sm.notes.length ? `<div class="md">${md(sm.notes.map(n => '- ' + n.replace(/\n/g, '\n  ')).join('\n'))}</div>` : ''}</div>`}</section>
       <aside class="panel" id="panel">${flowPanel(r, sm, tsel)}</aside>
     </div>`,
   };
@@ -787,6 +837,7 @@ async function renderConfirm(path, sel) {
     const open = g.rows.filter(c => !(c.answer || '').trim());
     return `<section class="group card">
       <div class="row spread"><h3>${esc(g.name)}</h3>${open.length > 1 ? `<button class="btn small-btn go" data-group="${k}">這 ${open.length} 項都沒問題</button>` : ''}</div>
+      ${askOf(g.name) ? `<p class="ask">${esc(askOf(g.name))}</p>` : ''}
       <div class="list">${g.rows.map(c => confirmRow(c, g.name)).join('')}</div></section>`;
   }).join('');
 
