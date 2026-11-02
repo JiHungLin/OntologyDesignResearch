@@ -24,7 +24,10 @@ GIT_BAD = re.compile(r'^(-c|-C|--output.*|--ext-diff|-O.*|--open-files-in-pager.
 INLINE_PY = re.compile(r'\bpython3?(\s+-[A-Za-z]+)*\s+(-c\b|-(\s|$))|\bpython3?\b[^\n;|&]*<<')
 PY_REASON = ('網頁裡不能跑自己寫的 python（python3 - <<EOF、python3 -c），一定會被擋。改用：讀某幾行用 Read 的 offset／limit；'
              '找字、找編號用 Grep；表格欄數、格式、引用、編號用 python3 -I tools/lint.py <切片>；看改了什麼用 git diff --stat、git diff <檔案>。'
+             '要驗算取位、比例分攤這類數字時，在檔案裡寫出算式與步驟，標 [未執行] 交給人核對（黃金案例的預期結果本來就由人算）。'
              '能跑的 python 只有 python3 tools/*。')
+TOOL_PY = re.compile(r'tools/[\w.-]+\.py')   # 允許清單本來就放行 python3 tools/*；串在其他只讀指令裡也放行
+REDIRECT_OK = re.compile(r'\d?>&\d|&>\s*/dev/null')   # 2>&1、&>/dev/null：只改輸出去向，不寫檔
 SED_WRITE = re.compile(r'(^|[;\d$/,\s])\s*[weW](\s|$)')   # sed 的 w（寫檔）、e（執行）指令，前面可以有位址
 
 
@@ -38,6 +41,8 @@ def _ok_path(tok, roots):
 def read_only(cmd, roots):
     if re.search(r'\$\(|`|<<|>\s*[^&/]|>>|>\s*/(?!dev/null)', cmd):   # 指令替換、heredoc、寫檔（2>/dev/null 可以）
         return False
+    cmd = REDIRECT_OK.sub(' ', cmd)
+    cmd = re.sub(r"'[|;&()]'|\"[|;&()]\"", 'SEP', cmd)   # tr '|' '\n' 的 '|' 是參數，不是管線（shlex 拆完分不出有沒有引號）
     try:
         lex = shlex.shlex(cmd, posix=True, punctuation_chars=';&|()')
         lex.whitespace_split = True
@@ -51,6 +56,8 @@ def read_only(cmd, roots):
         if t in SEPARATORS or t == '\n':
             head, cur = True, None
             continue
+        if re.fullmatch(r'\d?>/dev/null', t):   # 2>/dev/null（例：done 2>/dev/null | head）
+            continue
         if head:
             if t == 'for':   # for 變數 in 清單; do …：清單只檢查路徑，do 之後才是指令
                 cur, head = 'for', False
@@ -62,6 +69,9 @@ def read_only(cmd, roots):
             if t == 'git':
                 cur, head = 'git', False
                 continue
+            if t in ('python3', 'python'):   # 只放行 python3 [-I] tools/<工具>.py
+                cur, head = 'py', False
+                continue
             if t not in READ_ONLY:
                 return False
             cur, head = t, False
@@ -71,6 +81,13 @@ def read_only(cmd, roots):
             head, cur = True, None
             continue
         if t in LOOP_WORDS:
+            continue
+        if cur == 'py':
+            if t in ('-I', '-B', '-u'):
+                continue
+            if not TOOL_PY.fullmatch(t):
+                return False
+            cur = 'py-args'
             continue
         if cur == 'git':   # 第一個參數是子指令
             if GIT_BAD.match(t) or t not in GIT_READ:

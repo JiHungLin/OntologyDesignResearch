@@ -373,11 +373,16 @@ def test_readonly_hook():
     assert h.read_only("grep -n '^#' docs/01.md | awk -F: '$1<200'", root)
     assert h.read_only("sed -n '120,140p' docs/03.md | cat -n", root)
     assert h.read_only("grep -no 'EQ-0[0-9]' 03_flows.md | sort -t: -k3 | awk -F: '{print $3\" \"$1}'; git diff --stat; git log --oneline -- a.md", root)
+    # domain-trial ④ 被擋的兩種：迴圈後的 2>/dev/null、串在後面的 python3 tools/lint.py
+    assert h.read_only('ls inputs/shared; for f in inputs/shared/範圍釐清_*.md; do echo "== $f"; cat "$f"; done 2>/dev/null | head -80', root)
+    assert h.read_only("grep -n -o 'EQ-[0-9]*' slices/x/04_rules.md | awk -F: '{print $1\": \"$NF}' | paste -sd' ' | tr '|' '\\n' | grep EQ; echo; python3 tools/lint.py x", root)
+    assert h.read_only('python3 -I tools/lint.py x 2>&1 | tail -20', root)
     for py in ("python3 -I - <<'EOF'\nprint(1)\nEOF", 'python3 -c "print(1)"', 'cd x && python3 - <<E'):
         assert h.INLINE_PY.search(py), py
     assert not h.INLINE_PY.search('python3 -I tools/lint.py electricity-emission')
     for bad in ('rm -rf slices', 'cat a.md > b.md', 'sed -i s/a/b/ x.md', "sed -n '1w out' a.md", 'cat /etc/passwd',
                 'cat ../../x', 'echo $(rm x)', 'find . -delete', 'python3 -c 1', 'for f in *.md; do rm "$f"; done',
                 "awk '{system(\"rm x\")}' a", 'git checkout .', 'git -c core.pager=sh log', 'git diff --output=x',
-                'git grep -Ovim x', 'git push'):
+                'git grep -Ovim x', 'git push', 'python3 x.py', 'python3 /tmp/tools/a.py', 'ls; python3 ../tools/a.py',
+                'cat a 2>/tmp/x'):
         assert not h.read_only(bad, root), bad
