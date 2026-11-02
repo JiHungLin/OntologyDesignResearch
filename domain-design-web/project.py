@@ -3,6 +3,7 @@
 import datetime
 import os
 import re
+import subprocess
 
 import kit
 import review
@@ -150,9 +151,20 @@ def _untouched(path, slice_, fn):
     return tpl is not None and _read(path) == tpl.replace('{{切片}}', slice_)
 
 
+def tags(slice_):
+    """這條切片的 git tag；不是 git repo 或 git 跑不起來時回 None（不能用 tag 判斷）。"""
+    try:
+        r = subprocess.run(['git', '-C', kit.repo(), 'tag', '-l', f'{slice_}/*'], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return set(r.stdout.split()) if r.returncode == 0 else None
+
+
 def steps(slice_):
-    """各步驟的狀態（草稿／待檢查／已凍結；檔案不存在＝未開始）與版本。"""
+    """各步驟的狀態（草稿／待檢查／已凍結；檔案不存在＝未開始）與版本。
+    檔頭寫「已凍結」但版本的 tag 還不存在＝凍結做到一半（AI 先改了檔頭，還在等人回答或沒 commit），算「凍結中」。"""
     out = []
+    tg = tags(slice_)
     for n, name, fn in STEP_FILES:
         path = _p('slices', slice_, fn)
         if not os.path.exists(path):
@@ -162,8 +174,11 @@ def steps(slice_):
             out.append({'n': n, 'name': name, 'file': fn, 'status': '未開始', 'version': ''})
             continue
         h = head(path)
-        out.append({'n': n, 'name': name, 'file': fn, 'status': h.get('狀態', {}).get('value', '草稿') or '草稿',
-                    'version': h.get('版本', {}).get('value', '')})
+        status = h.get('狀態', {}).get('value', '草稿') or '草稿'
+        version = h.get('版本', {}).get('value', '').strip('` ')
+        if status.startswith('已凍結') and tg is not None and version not in tg:
+            status = '凍結中'
+        out.append({'n': n, 'name': name, 'file': fn, 'status': status, 'version': version})
     return out
 
 

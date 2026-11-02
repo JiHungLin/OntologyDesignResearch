@@ -288,6 +288,19 @@ def test_untouched_template_is_not_started(repo):
     assert {s['n']: s['status'] for s in project.steps('demo')}[3] == '草稿'
 
 
+def test_frozen_needs_tag(repo, client):
+    # 檔頭寫「已凍結」但 tag 還沒打（凍結做到一半、AI 在等人回答）：算「凍結中」，首頁不能叫人開始下一關
+    git = lambda *a: subprocess.run(['git', *a], cwd=repo, capture_output=True, text=True, check=True)
+    git('init', '-q')
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x')
+    assert project.steps('demo')[0]['status'] == '凍結中'
+    h = client.get('/api/home', params={'slice': 'demo'}).json()
+    assert h['next']['n'] == 1 and h['levels'][0]['state'] == 'freezing'
+    git('tag', 'demo/01-v1')
+    assert project.steps('demo')[0]['status'] == '已凍結'
+    assert client.get('/api/home', params={'slice': 'demo'}).json()['levels'][0]['state'] == 'frozen'
+
+
 def test_file_plan_short_name(client):
     # AI 常寫「PLAN.md:65」：從切片資料夾找不到時，也找 slices/ 底下
     f = client.get('/api/file', params={'path': 'PLAN.md', 'base': 'slices/demo'}).json()

@@ -97,9 +97,10 @@ export async function renderAiNext(s) {
   if (!s || state.pending) return;
   const ask = parseAsk(s.last_reply);
   if (ask) {
-    box.innerHTML = `<div class="label">AI 在等你回答，點一個</div><div class="ai-opts">${ask.opts.map(o => `<button class="opt ${o.rec ? 'rec' : ''}" data-airep="${o.key}"><span class="row spread"><b>${o.key}</b>${o.rec ? '<span class="badge-rec">★ 建議</span>' : ''}</span><span>${inline(o.sum)}</span></button>`).join('')}</div>
+    box.innerHTML = `<div class="label">AI 在等你回答${ask.length > 1 ? `（${ask.length} 題，每題選一個再送出）` : '，點一個'}</div>${askHtml(ask, false)}
+      ${ask.length > 1 ? '<button class="btn primary" data-asksend disabled style="margin-top:8px">送出答案</button>' : ''}
       <div class="small muted">都不是的話，直接在下面打字回覆。</div>`;
-    $$('[data-airep]', box).forEach(b => b.onclick = () => runAi(s.slice, s.purpose, b.dataset.airep, { keep: true }));
+    bindAsk(box, ask, v => runAi(s.slice, s.purpose, v, { keep: true }));
     return;
   }
   const P = await loadProject();
@@ -136,6 +137,21 @@ export async function runAi(scope, purpose, message, opts = {}) {
   const same = s && s.purpose === purpose && !s.compacted && !long;
   if (same || (s && opts.keep)) return send(s, message, opts);
   if (!s) return startNew(scope, purpose, message, opts);
+  // 舊的 session 停下來問了選擇題、人還沒回：開新的會讓那些問題沒人接，建議先回答
+  const p = pendingAsk(scope);
+  if (p) {
+    const qs = p.ask.map(a => a.q).filter(Boolean);
+    state.pending = {
+      html: `<div class="card hint" style="padding:12px 14px"><b>「${esc(s.purpose)}」的 AI 還在等你回答${qs.length ? `：${qs.map(q => `「${esc(plain(q).slice(0, 40))}」`).join('、')}` : ''}。</b>
+        現在交代「${esc(purpose)}」會換一個新的 session，舊的問題就沒人接了。
+        <div class="row" style="margin-top:8px"><button class="btn primary" id="answerFirst">A（建議）：先回答 AI 的問題</button><button class="btn" id="skipAsk">B：不回答，照樣做這件事</button></div></div>`,
+      bind() {
+        $('#answerFirst').onclick = () => { state.pending = null; renderAi(); };
+        $('#skipAsk').onclick = () => { remember(p.key, '1'); state.pending = null; runAi(scope, purpose, message, opts); };
+      },
+    };
+    return openAi(scope);
+  }
   // 用途不同、壓縮過或已經很長：用選擇題問人（建議開新的，新的 session 由檔案產生交接提示，不用人貼）
   const why = s.compacted ? '現在的 session 經過摘要壓縮，容易憑記憶回答'
     : s.purpose !== purpose ? `現在的 session 是「${esc(s.purpose)}」，這件事是「${esc(purpose)}」`
@@ -286,21 +302,75 @@ export function showEvent(ev) {
   log.scrollTop = log.scrollHeight;
 }
 
-// AI 最後一則回覆裡的選擇題（WEB_PROMPT 要它照「問題／例子／A（建議）／B／其他」寫）
+// AI 最後一則回覆裡的選擇題（WEB_PROMPT 要它照「問題／例子／A（建議）／B／其他」寫）；
+// 一則回覆可能問好幾題，每個「問題：」開始新的一題。回傳 [{q, ex, opts}]，沒有選擇題回 null
 export function parseAsk(text) {
   const lines = String(text || '').split('\n').map(l => l.replace(/^\s*[-*]\s*/, '').replace(/\*\*/g, '').trim());
-  const opts = [];
-  let q = '', ex = '';
+  const qs = [];
+  let cur = null;
+  const open = () => (cur = cur || (qs.push({ q: '', ex: '', opts: [] }), qs[qs.length - 1]));
   for (const l of lines) {
     let m;
-    if ((m = l.match(/^問題[：:]\s*(.+)$/))) q = m[1];
-    else if ((m = l.match(/^例子[：:]\s*(.+)$/))) ex = m[1];
+    if ((m = l.match(/^問題[：:]\s*(.+)$/))) { qs.push(cur = { q: m[1], ex: '', opts: [] }); }
+    else if ((m = l.match(/^例子[：:]\s*(.+)$/))) open().ex = m[1];
     else if ((m = l.match(/^([A-H])(（建議）)?[：:]\s*(.+)$/))) {
       const [sum, out] = m[3].split(/\s*→\s*/);
-      opts.push({ key: m[1], rec: !!m[2], sum, out: out || '' });
+      open().opts.push({ key: m[1], rec: !!m[2], sum, out: out || '' });
     }
   }
-  return opts.length >= 2 ? { q, ex, opts } : null;
+  const ok = qs.filter(x => x.opts.length >= 2);
+  return ok.length ? ok : null;
+}
+
+// 範圍內的 session 停下來問了選擇題、人還沒回（也沒按「不用回了」）
+export function pendingAsk(scope) {
+  const s = sessionOf(scope);
+  if (!s || s.running || !s.last_reply) return null;
+  const key = 'seen:' + s.id + ':' + s.last_at;
+  const ask = parseAsk(s.last_reply);
+  return ask && !remember(key) ? { s, ask, key } : null;
+}
+
+// 選擇題的按鈕：一題時點了就送；好幾題時每題各選一個，再按「送出」一起回
+export function askHtml(ask, big) {
+  const many = ask.length > 1;
+  return ask.map((a, i) => `<div class="ask-q" data-qi="${i}">
+    ${a.q ? (big ? `<h2 style="margin:6px 0">${many ? `${i + 1}. ` : ''}${inline(a.q)}</h2>` : `<div class="label">${many ? `${i + 1}. ` : ''}${inline(a.q)}</div>`) : ''}
+    ${a.ex && big ? `<div class="box"><div class="label">舉個例子</div>${inline(a.ex)}</div>` : ''}
+    <div class="${big ? 'opts' : 'ai-opts'}" ${big ? 'style="margin-top:10px"' : ''}>${a.opts.map(o => big
+      ? `<button class="opt ${o.rec ? 'rec' : ''}" data-reply="${o.key}"><span class="row spread"><span class="k">${o.key}</span>${o.rec ? '<span class="badge-rec">★ AI 建議</span>' : ''}</span><span class="sum">${inline(o.sum)}</span>${o.out ? `<span class="out">選了之後：${inline(o.out)}</span>` : ''}</button>`
+      : `<button class="opt ${o.rec ? 'rec' : ''}" data-reply="${o.key}"><span class="row spread"><b>${o.key}</b>${o.rec ? '<span class="badge-rec">★ 建議</span>' : ''}</span><span>${inline(o.sum)}</span></button>`).join('')}</div></div>`).join('');
+}
+
+// 綁定 askHtml 的按鈕；text 是「都不是？寫一句」的輸入框（可省略），send(回覆文字)
+export function bindAsk(box, ask, send, text) {
+  const pick = ask.map(() => '');
+  const compose = extra => {
+    const ans = ask.map((a, i) => pick[i] ? `第 ${i + 1} 題（${plain(a.q).slice(0, 30)}）：${pick[i]}` : '').filter(Boolean);
+    return [ans.join('\n'), extra ? (ans.length ? '補充：' : '') + extra : ''].filter(Boolean).join('\n');
+  };
+  $$('.ask-q', box).forEach(qb => {
+    const i = +qb.dataset.qi;
+    $$('[data-reply]', qb).forEach(b => b.onclick = () => {
+      if (ask.length === 1) return send(b.dataset.reply);
+      pick[i] = b.dataset.reply;
+      $$('[data-reply]', qb).forEach(x => x.classList.toggle('picked', x === b));
+      const go = $('[data-asksend]', box);
+      if (go) go.disabled = pick.some(x => !x) && !(text && text.value.trim());
+    });
+  });
+  const go = $('[data-asksend]', box);
+  const fire = () => {
+    const extra = text ? text.value.trim() : '';
+    if (ask.length > 1 && pick.some(x => !x) && !extra) return toast('每一題都選一個，或在下面寫一句');
+    const v = ask.length > 1 ? compose(extra) : extra;
+    if (v) send(v);
+  };
+  if (go) go.onclick = fire;
+  if (text) {
+    text.onkeydown = e => { if (e.key === 'Enter') fire(); };
+    if (go) text.oninput = () => { go.disabled = ask.length > 1 && pick.some(x => !x) && !text.value.trim(); };
+  }
 }
 
 // 「AI 在等你」：範圍內的 session 最後一則回覆；有選擇題就做成按鈕
@@ -312,10 +382,6 @@ export function waitingCard(scope) {
   const key = 'seen:' + s.id + ':' + s.last_at;
   if (remember(key)) return '';
   const ask = parseAsk(s.last_reply);
-  const body = ask
-    ? `${ask.q ? `<h2 style="margin:6px 0">${esc(ask.q)}</h2>` : ''}${ask.ex ? `<div class="box"><div class="label">舉個例子</div>${inline(ask.ex)}</div>` : ''}
-       <div class="opts" style="margin-top:10px">${ask.opts.map(o => `<button class="opt ${o.rec ? 'rec' : ''}" data-reply="${o.key}"><span class="row spread"><span class="k">${o.key}</span>${o.rec ? '<span class="badge-rec">★ AI 建議</span>' : ''}</span><span class="sum">${inline(o.sum)}</span>${o.out ? `<span class="out">選了之後：${inline(o.out)}</span>` : ''}</button>`).join('')}</div>`
-    : '';
   if (!ask) {
     // 摘要用回覆的第一句（通常是「做完了什麼」），不用最後一句：最後常是「開新 session、貼這段、執行 /domain-…」這種 terminal 的做法，在網頁上不用照做
     const lines = s.last_reply.split('\n').map(x => x.trim()).filter(x => x && !/^(#|\||>|```)/.test(x));
@@ -326,10 +392,12 @@ export function waitingCard(scope) {
       <div class="ai-said">${md(said)}</div>
       <div class="row" style="margin-top:10px"><input type="text" class="soft" data-replytext style="flex:1" placeholder="回覆 AI（例：好，繼續）"><button class="btn primary" data-replysend>送出</button><button class="btn ghost small-btn" data-seen="${esc(key)}">收起來</button></div></details>`;
   }
-  return `<section class="card lift waiting" data-scope="${esc(scope)}">
-    <div class="row spread"><span class="chip turn">${ask ? 'AI 在等你回答' : 'AI 上次說'}</span><button class="btn ghost small-btn" data-seen="${esc(key)}">不用回了</button></div>
-    ${body}
-    <div class="row" style="margin-top:10px"><input type="text" class="soft" data-replytext style="flex:1" placeholder="都不是？寫一句"><button class="btn primary" data-replysend>送出</button></div>
+  const many = ask.length > 1;
+  return `<section class="card lift waiting asking" data-scope="${esc(scope)}">
+    <div class="row spread"><span class="chip turn">AI 在等你回答${many ? `：${ask.length} 題，每題選一個再送出` : ''}</span><button class="btn ghost small-btn" data-seen="${esc(key)}">不用回了</button></div>
+    <p class="small muted" style="margin:6px 0 0">AI 停在這裡等你（${esc(s.purpose)}）。先回答，它才會接著做完；這時去按別的事，會開新的 session，這些問題就沒人接。</p>
+    ${askHtml(ask, true)}
+    <div class="row" style="margin-top:10px"><input type="text" class="soft" data-replytext style="flex:1" placeholder="${many ? '補充或都不是？寫一句（可省略）' : '都不是？寫一句'}"><button class="btn primary" data-asksend ${many ? 'disabled' : ''}>送出</button></div>
   </section>`;
 }
 
@@ -338,12 +406,16 @@ export function bindWaiting() {
     const scope = card.dataset.scope;
     const s = sessionOf(scope);
     const reply = v => runAi(scope, s.purpose, v, { keep: true });
-    $$('[data-reply]', card).forEach(b => b.onclick = () => reply(b.dataset.reply));
     const inp = $('[data-replytext]', card);
-    const go1 = () => { const v = inp.value.trim(); if (v) reply(v); };
-    $('[data-replysend]', card).onclick = go1;
-    inp.onkeydown = e => { if (e.key === 'Enter') go1(); };
-    $('[data-seen]', card).onclick = () => { remember($('[data-seen]', card).dataset.seen, '1'); card.remove(); };
+    const ask = parseAsk(s.last_reply);
+    if (ask) bindAsk(card, ask, reply, inp);
+    else {
+      const go1 = () => { const v = inp.value.trim(); if (v) reply(v); };
+      $('[data-replysend]', card).onclick = go1;
+      inp.onkeydown = e => { if (e.key === 'Enter') go1(); };
+    }
+    // 「不用回了」之後首頁要換回原本的關卡按鈕，所以重畫整頁
+    $('[data-seen]', card).onclick = () => { remember($('[data-seen]', card).dataset.seen, '1'); card.classList.contains('asking') ? route() : card.remove(); };
   });
 }
 

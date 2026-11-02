@@ -1,6 +1,6 @@
 // 切片首頁：輪到你、關卡
 import { $, api, CIRCLED, enc, esc, firstOpenQ, LEVEL_NAME, loadReview, nextTask, plain, setTop, state, stepName, tasksOf } from './core.js';
-import { bindWaiting, openAi, runAi, runningCard, sessionOf, waitingCard } from './ai.js';
+import { bindWaiting, openAi, pendingAsk, runAi, runningCard, sessionOf, waitingCard } from './ai.js';
 import { markNav, STEP_FILE } from './nav.js';
 
 // ---------- 切片首頁：輪到你 ----------
@@ -17,7 +17,7 @@ export const STEP_INFO = {
 
 export function levelStrip(levels) {
   return `<nav class="levels" aria-label="切片關卡">${levels.map(l => {
-    const label = { frozen: '過關', review: '挑戰中', wait: '等你凍結', draft: '進行中', locked: '未開始' }[l.state];
+    const label = { frozen: '過關', review: '挑戰中', wait: '等你凍結', freezing: '凍結中', draft: '進行中', locked: '未開始' }[l.state];
     const href = l.state !== 'locked' && state.slice ? `#/f/${enc(`slices/${state.slice}/${STEP_FILE[l.n]}`)}` : '';
     return `<div class="level ${l.state}" title="${esc(l.status)} ${esc(l.tag)}${href ? '（點一下看檔案）' : ''}" ${href ? `data-href="${href}" role="link" tabindex="0"` : ''}>
       <b>${CIRCLED[l.n]}</b><span>${esc(l.name)}<small>${label}</small></span></div>`;
@@ -35,8 +35,12 @@ export async function renderHome(slice) {
   let hero = '', tasks = '', changes = '';
   const cur = h.current;
   const wait = h.levels.filter(l => l.state === 'wait');
+  // AI 停下來問了選擇題：問題卡就是這一頁的主角，關卡按鈕先不放（按了會開新的 session，問題就沒人接）
+  const asking = !(s && s.running) && pendingAsk(slice);
   if (s && s.running) {
     hero = runningCard(slice);
+  } else if (asking) {
+    hero = waitingCard(slice);
   } else if (cur) {
     const r = await loadReview(cur.path);
     const c = r.counts;
@@ -100,7 +104,15 @@ export async function renderHome(slice) {
     const n = h.next.n;
     const info = STEP_INFO[n];
     const going = h.next.status !== '未開始';
-    hero = `
+    hero = h.next.status === '凍結中' ? `
+      <section class="hero idle">
+        <div style="flex:999 1 480px;min-width:0">
+          <span class="chip">輪到 AI</span>
+          <h1>第 ${CIRCLED[n]} 步的凍結還沒做完</h1>
+          <p>檔頭已經寫「已凍結」，但還沒有 tag <code>${esc(h.next.version || `${slice}/0${n}-v?`)}</code>：CHANGELOG、合併進 core/、commit、打 tag 至少有一件還沒做。做完才能開始下一關。</p>
+        </div>
+        <button class="btn big primary" id="finishFreeze">請 AI 把凍結做完 ›</button>
+      </section>` : `
       <section class="hero idle">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到 AI</span>
@@ -116,7 +128,7 @@ export async function renderHome(slice) {
   }
 
   const designDone = h.levels.slice(0, 5).every(l => l.state === 'frozen') && h.levels[5].state !== 'frozen';
-  if (designDone && !(s && s.running)) {
+  if (designDone && !(s && s.running) && !asking) {
     hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>設計完成（待驗證）</h1>
       <p class="muted">①～⑤ 都凍結了，這是一個設計版本。第 ⑥ 步等系統實作好再做；現在可以開始下一條切片。</p>
       <div class="row" style="justify-content:center"><a class="btn big primary" href="#/">挑下一條切片 ›</a><button class="btn big" id="doStep">系統好了，開始 ⑥</button></div></section>`;
@@ -127,7 +139,7 @@ export async function renderHome(slice) {
   const past = h.reviews.filter(x => !cur || x.path !== cur.path);
   app.innerHTML = `
     ${levelStrip(h.levels)}
-    ${waitingCard(slice)}
+    ${asking ? '' : waitingCard(slice)}
     ${hero}
     <div class="cols">
       ${tasks}
@@ -151,6 +163,8 @@ export async function renderHome(slice) {
     const n = designDone ? 6 : h.next.n;
     runAi(slice, `第 ${n} 步`, `/domain-step ${n} ${slice}`);
   };
+  const ff = $('#finishFreeze');
+  if (ff) ff.onclick = () => { const n = h.next.n; runAi(slice, `凍結 0${n}`, `/domain-freeze ${n} ${slice}`); };
   const ho = $('#handover');
   if (ho) ho.onclick = () => { const r0 = h.reviews[0]; runAi(slice, `審查 ${r0.step}`, `審查好了。審查頁：${r0.path}`, { review: r0.path }); };
   const fz = $('#freeze');
