@@ -3,6 +3,9 @@
 claude -p 不能核准權限，允許清單又只能一個指令一個指令比對，AI 常把讀檔串成
 「cd …; for f in …; do cat …; done」「grep … | head」被擋，再改用別的方法（白跑一趟，也讓人以為出錯）。
 這裡把指令拆開，每一段都是只讀的指令、讀的路徑都在設計 repo（或網頁資料夾）裡，就回答 allow；
+git 只放行讀的子指令（status、diff、log、show…）。
+自己寫的 python（python3 - <<EOF、python3 -c）一定被擋，這裡直接拒絕並附上改用什麼——
+挑錯、核對的子代理拿不到網頁附加的系統提示，只能從被擋的理由學到。
 其他一律不表示意見，照原本的權限規則（允許清單、被擋就擋）。
 """
 import json
@@ -16,6 +19,12 @@ READ_ONLY = {'cd', 'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'egrep', 'fgrep', 
              '[', 'stat', 'file', 'realpath', 'readlink', 'tree', 'comm', 'paste', 'fold', 'expand', 'date'}
 LOOP_WORDS = {'for', 'in', 'do', 'done', 'while', 'if', 'then', 'else', 'elif', 'fi', '!', '{', '}'}
 SEPARATORS = {';', '&&', '||', '|', '\n', '(', ')', '&'}
+GIT_READ = {'status', 'diff', 'log', 'show', 'rev-parse', 'ls-files', 'blame', 'grep', 'shortlog', 'cat-file'}
+GIT_BAD = re.compile(r'^(-c|-C|--output.*|--ext-diff|-O.*|--open-files-in-pager.*|--exec-path.*)$')   # 改設定、寫檔、開外部程式
+INLINE_PY = re.compile(r'\bpython3?(\s+-[A-Za-z]+)*\s+(-c\b|-(\s|$))|\bpython3?\b[^\n;|&]*<<')
+PY_REASON = ('網頁裡不能跑自己寫的 python（python3 - <<EOF、python3 -c），一定會被擋。改用：讀某幾行用 Read 的 offset／limit；'
+             '找字、找編號用 Grep；表格欄數、格式、引用、編號用 python3 -I tools/lint.py <切片>；看改了什麼用 git diff --stat、git diff <檔案>。'
+             '能跑的 python 只有 python3 tools/*。')
 SED_WRITE = re.compile(r'(^|[;\d$/,\s])\s*[weW](\s|$)')   # sed 的 w（寫檔）、e（執行）指令，前面可以有位址
 
 
@@ -50,6 +59,9 @@ def read_only(cmd, roots):
                 continue
             if re.fullmatch(r'[A-Za-z_]\w*=.*', t):   # 變數設定（UA=…）
                 continue
+            if t == 'git':
+                cur, head = 'git', False
+                continue
             if t not in READ_ONLY:
                 return False
             cur, head = t, False
@@ -60,6 +72,13 @@ def read_only(cmd, roots):
             continue
         if t in LOOP_WORDS:
             continue
+        if cur == 'git':   # 第一個參數是子指令
+            if GIT_BAD.match(t) or t not in GIT_READ:
+                return False
+            cur = 'git-read'
+            continue
+        if cur == 'git-read' and GIT_BAD.match(t):
+            return False
         if cur == 'sed' and (t.startswith('-i') or t == '--in-place' or SED_WRITE.search(t)):
             return False
         if cur == 'awk' and re.search(r'system|getline|print\s*>|printf\s*>|\|', t):
@@ -81,6 +100,10 @@ def main():
     if data.get('tool_name') != 'Bash':
         return
     cmd = (data.get('tool_input') or {}).get('command', '')
+    if INLINE_PY.search(cmd):
+        json.dump({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'deny',
+                                          'permissionDecisionReason': PY_REASON}}, sys.stdout)
+        return
     roots = [os.path.realpath(data.get('cwd') or os.getcwd()), os.path.dirname(os.path.realpath(__file__))]
     if read_only(cmd, roots):
         json.dump({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'allow',
