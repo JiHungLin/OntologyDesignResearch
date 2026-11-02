@@ -2049,8 +2049,12 @@ async function route() {
       const path = parts[1];
       const m = path.match(/^slices\/([^/]+)\//);
       if (m) { state.slice = m[1]; state.scope = m[1]; markNav(); renderAiHead(); }
+      if (!parts[2]) {   // 只點「審查」：帶到還沒做完的那一項（決定都答了就不再回到決定）
+        location.replace(nextTask(await loadReview(path)));
+        return;
+      }
       if (state.path !== path) await loadReview(path);
-      const view = parts[2] || 'decide';
+      const view = parts[2];
       if (view === 'decide') return await renderDecide(path, +parts[3] || 0);
       if (view === 'confirm') return await renderConfirm(path, parts[3] || null);
       if (view === 'golden') return await renderGolden(path, +parts[3] || 0);
