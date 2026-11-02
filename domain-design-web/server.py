@@ -27,6 +27,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 app = FastAPI(title='Domain 設計流程網頁')
 app.mount('/static', StaticFiles(directory=os.path.join(HERE, 'static')), name='static')
 
+
+@app.middleware('http')
+async def revalidate(request, call_next):
+    # 頁面與 static/js 的模組改了要馬上生效：瀏覽器每次先問（沒改回 304，不重抓）
+    resp = await call_next(request)
+    if request.url.path == '/' or request.url.path.startswith('/static/'):
+        resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
 TEXT_EXT = {'.md', '.txt', '.yaml', '.yml', '.json', '.js', '.csv', '.py', ''}
 REVIEW_NAME = re.compile(r'^(\d{4}-\d{2}-\d{2})_(.+)\.md$')
 
