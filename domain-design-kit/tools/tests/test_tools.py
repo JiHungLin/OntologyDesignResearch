@@ -129,6 +129,19 @@ class TestLint(Base):
         self.assertEqual(code, 0, out)
         self.assertIn('引用檢查：紅燈 0 項', out)
 
+    def test_frozen_without_tag(self):
+        # 檔頭改了「已凍結」但 tag 還沒打：凍結做到一半，亮紅燈；打了 tag 就沒有
+        git = lambda *a: subprocess.run(['git', *a], cwd=self.dir, capture_output=True, text=True, check=True)
+        git('init', '-q')
+        git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x')
+        self.edit(self.slice_file('03_flows.md'), '# leave-backfill ③ 流程與狀態\n',
+                  '# leave-backfill ③ 流程與狀態\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 已凍結 |\n| 版本 | leave-backfill/03-v1 |\n')
+        code, out = self.lint()
+        self.assertIn('03_flows.md 檔頭是「已凍結」，但沒有 tag leave-backfill/03-v1', out)
+        git('tag', 'leave-backfill/03-v1')
+        code, out = self.lint()
+        self.assertNotIn('檔頭是「已凍結」', out)
+
     def test_cancelled_rule_still_referenced(self):
         self.edit(self.slice_file('03_flows.md'), '| 額度足夠 | R01 |', '| 額度足夠 | R01、R03 |')
         code, out = self.lint()
