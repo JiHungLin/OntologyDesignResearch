@@ -364,19 +364,27 @@ class Lint:
         self.done('路徑', n, '個路徑')
 
     def check_versions(self):
-        print("\n[版本] 未凍結交付物的「讀取的輸入」是上游最新的 tag；每個 tag 在 CHANGELOG 都有一筆")
+        print("\n[版本] 未凍結交付物的「讀取的輸入」是上游最新的 tag；每個 tag 在 CHANGELOG 都有一筆；檔頭「已凍結」的版本有 tag")
         tags = self.tags()
         if tags is None:
             return self.done('版本', 0, '', skipped='不是 git repo')
         n = 0
         for f, d in self.docs.items():
             status = inputs = None
+            version = ''
             for h2, h3, header, rows in d.tables():
                 if header[:2] == ['項目', '內容']:
                     for no, c in rows:
                         if c[0] == '狀態': status = c[1]
                         if c[0] == '讀取的輸入': inputs = (no, c[1])
+                        if c[0] == '版本': version = c[1].strip('` ')
                     break
+            # 凍結＝打 tag（docs/01 0.2）：檔頭先改了、tag 沒打，是凍結做到一半
+            if status and status.startswith('已凍結'):
+                n += 1
+                if version not in tags:
+                    self.red('版本', f"{f} 檔頭是「已凍結」，但沒有 tag {version or '（版本沒填）'}：凍結沒做完"
+                                     "（正在凍結時，commit 並打 tag 後就會消失）")
             if not inputs or status == '已凍結': continue
             for step, ver in re.findall(rf'{re.escape(self.slice)}/0(\d)-v(\d+)', inputs[1]):
                 n += 1
