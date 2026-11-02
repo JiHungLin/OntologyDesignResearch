@@ -18,6 +18,7 @@ export function sliceState(f, row) {
   if (f.review) return { text: '輪到你審查', cls: 'turn' };
   if (!f.next) return { text: '完成', cls: 'ok' };
   if (f.next.n === 6) return { text: '設計完成', cls: 'ok' };
+  if (f.next.status === '凍結中') return { text: `${CIRCLED[f.next.n]} 凍結中`, cls: '' };
   return { text: `下一關 ${CIRCLED[f.next.n]}`, cls: '' };
 }
 

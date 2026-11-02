@@ -111,7 +111,7 @@ def home(slice: str):
     levels = []
     for x in steps:
         state = ('review' if x['n'] in on else 'frozen' if x['status'].startswith('已凍結')
-                 else 'wait' if x['status'] == '待檢查' else 'draft' if x['status'] != '未開始' else 'locked')
+                 else 'freezing' if x['status'] == '凍結中' else 'wait' if x['status'] == '待檢查' else 'draft' if x['status'] != '未開始' else 'locked')
         levels.append({'n': x['n'], 'name': x['name'], 'state': state, 'status': x['status'], 'tag': x['version']})
     nxt = project.next_step(steps)
     eqs = project.eqs(slice)
