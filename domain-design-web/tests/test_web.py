@@ -322,6 +322,18 @@ def test_evidence_every_card_and_column(repo):
     assert [e['title'] for e in ev] == ['草稿 User Story'] and '1 列空白' in ev[0]['text']
 
 
+def test_confirm_context(repo):
+    import evidence
+    d = repo / 'slices' / 'demo'
+    (d / 'f.md').write_text('# f\n\n## 狀態機\n\n### Order（訂單）\n狀態：沒有狀態\n- 只記目前的值\n\n## 決定與理由\n\n'
+                            '| # | 決定 | 理由 |\n|---|---|---|\n| D-01 | 不設狀態 | 由日期推出 |\n', encoding='utf-8')
+    rv = str(d / 'reviews' / 'r.md')
+    ctx = evidence.context('`f.md:5`、`f.md:7`、`f.md:13`', rv)
+    assert [c['line'] for c in ctx] == [5, 13]   # 第 7 行在第 5 行那一段裡，不重複
+    assert ctx[0]['title'] == 'Order（訂單）' and '只記目前的值' in ctx[0]['text']
+    assert ctx[1]['fields'] == [['#', 'D-01'], ['決定', '不設狀態'], ['理由', '由日期推出']]
+
+
 def test_readonly_hook():
     import readonly_hook as h
     root = ['/repo']

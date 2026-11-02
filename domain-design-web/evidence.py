@@ -317,3 +317,39 @@ def find(text, file, criterion=''):
             if shown > SHOW:
                 o['more'] = True
     return out
+
+
+def context(where, review_path):
+    """確認列「在哪裡」指到的內容：表格列附欄名，標題附那一段，清單項目附它底下的子項目。
+    人不用打開檔案、在一長列 Markdown 表格裡找那一格。"""
+    sdir = os.path.dirname(os.path.dirname(review_path))   # reviews/ 的上一層是切片資料夾
+    out, seen = [], set()
+    for name, ln in FILE_LINE.findall(where or ''):
+        p = kit.resolve(name, sdir)
+        if not p:
+            continue
+        n = int(ln)
+        hit = _row_at(p, n)
+        if hit:
+            key = (p, tuple(map(tuple, hit['fields'])))
+        else:
+            lines = _read_lines(p)
+            if not 0 < n <= len(lines):
+                continue
+            i, line = n - 1, lines[n - 1]
+            m = re.match(r'^(#{1,6})\s+(.+?)\s*$', line)
+            par = _parent(lines, i - 1) if not m else None
+            if m:
+                text, title = _section(p, i, lines, level=len(m.group(1))), m.group(2)
+            elif re.match(r'^\s*[-*]\s', line):
+                text, title = _section(p, i, lines, indent=len(line) - len(line.lstrip())), par[2] if par else ''
+            else:
+                text, title = line.strip(), par[2] if par else ''
+            body = text.split('\n')
+            hit = {'title': title, 'text': '\n'.join(body[:MAX_LINES]) + ('\n…（還有 %d 行，打開檔案看）' % (len(body) - MAX_LINES) if len(body) > MAX_LINES else '')}
+            key = (p, n)
+        if key in seen or ('text' in hit and any(o['file'] == kit.rel(p) and hit['text'] in o.get('text', '') for o in out)):
+            continue   # 同一列，或已經在前面那一段裡
+        seen.add(key)
+        out.append({'file': kit.rel(p), 'line': n, **hit})
+    return out

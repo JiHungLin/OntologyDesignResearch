@@ -229,6 +229,19 @@ main.wide { max-width: 1640px; }
 .crow .where { font-size: 12px; color: var(--muted); }
 /* 同一排的卡一樣高，按鈕一律貼在卡片底部，不會忽高忽低 */
 .crow .acts { margin-top: auto; padding-top: 4px; }
+.crow .ctx { background: var(--bg); border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; line-height: 1.7; }
+.crow .ctx .main { font-size: 15px; }
+.crow .ctx dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; }
+.crow .ctx dt { color: var(--muted); font-weight: 700; }
+.crow .ctx dd { margin: 0; }
+.crow .ctx details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.crow .ctx details > summary::before { content: '為什麼：'; }
+.crow .ctx details[open] > summary { margin-bottom: 6px; }
+.crow .ctx .md ul { margin: 2px 0; padding-left: 20px; }
+.crow .ctx .md p { margin: 2px 0; }
+.crow mark { background: #FFE58A; color: inherit; border-radius: 3px; padding: 0 2px; }
+.group .list:has(.has-ctx) { grid-template-columns: repeat(auto-fill, minmax(min(520px, 100%), 1fr)); }
+@container page (max-width: 560px) { .crow .ctx dl { grid-template-columns: 1fr; } }
 .crow.done { border-color: var(--done); background: #E3F7EC; }
 .crow.noted { border-color: var(--turn); background: #FFF1E6; }
 .crow .acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
