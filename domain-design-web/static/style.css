@@ -257,6 +257,11 @@ main.wide { max-width: 1640px; }
 .crow .ctx details[open] > summary { margin-bottom: 6px; }
 .crow .ctx .md ul { margin: 2px 0; padding-left: 20px; }
 .crow .ctx .md p { margin: 2px 0; }
+.crow .rid { display: inline-block; font-size: 12px; font-weight: 900; background: var(--ink); color: #fff; border-radius: 6px; padding: 0 6px; margin-right: 4px; }
+.crow .ctx ul.main { margin: 0; padding-left: 20px; }
+.crow .ctx ul.main li + li { margin-top: 4px; }
+.panel .ask { margin: 2px 0 8px; color: var(--muted); }
+.group .ask { margin: -8px 0 16px; font-size: 14px; color: var(--muted); }
 .crow .claim { font-size: 16px; font-weight: 700; line-height: 1.6; }
 .crow .claim ul { margin: 2px 0 0; padding-left: 20px; }
 .crow .claim .muted { display: block; font-weight: 400; }
