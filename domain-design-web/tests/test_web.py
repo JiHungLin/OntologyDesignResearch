@@ -334,6 +334,25 @@ def test_confirm_context(repo):
     assert ctx[1]['fields'] == [['#', 'D-01'], ['決定', '不設狀態'], ['理由', '由日期推出']]
 
 
+def test_flows_state_machines(repo):
+    import flows
+    (repo / 'slices' / 'demo' / '03_flows.md').write_text(
+        '# f\n\n## 狀態機\n\n### Order（訂單）（歷史需求：需要軌跡，依 Q01）\n狀態：Open（處理中）→ Closed（已結案）\n終態：Closed\n\n'
+        '| 從 | 到 | 觸發事件 | 誰可以做 | 前提條件 | 規則 |\n|---|---|---|---|---|---|\n'
+        '| （無） | Open | PlaceOrder | 客戶 | — | |\n| Open | Closed | CloseOrder | 系統 | 已出貨 | |\n\n- 結案後不能改\n\n'
+        '### Store（門市）（歷史需求：只需現況，依 Q02）\n狀態：沒有狀態，用開始營業日記\n\n'
+        '## 事件\n\n| 事件 | 觸發來源 | 層 | 改變什麼 |\n|---|---|---|---|\n| PlaceOrder（下單） | 人的動作 | 發生 | 新增訂單 |\n', encoding='utf-8')
+    f = flows.load('demo')
+    order, store = f['machines']
+    assert [s['label'] for s in order['states']] == ['處理中', '已結案'] and order['terminal'] == ['Closed']
+    assert [(t['from'], t['to'], t['label']) for t in order['transitions']] == [('', 'Open', '下單'), ('Open', 'Closed', '')]
+    assert order['notes'] == ['結案後不能改'] and order['history'] == '需要軌跡'
+    assert not store['transitions'] and store['stateless'] == '沒有狀態，用開始營業日記'
+    r = {'confirms': [{'line': 9, 'cells': {'在哪裡': '`03_flows.md:12`'}}]}
+    flows.mark(f, r)
+    assert r['confirms'][0]['machine'] == 'Order' and order['confirms'] == [9]
+
+
 def test_readonly_hook():
     import readonly_hook as h
     root = ['/repo']

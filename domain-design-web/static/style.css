@@ -197,6 +197,25 @@ details.tech summary { cursor: pointer; }
 .node.okd rect { fill: #BFEBD3; }
 .node.sel rect { fill: var(--turn); stroke-width: 4; }
 .node .sub { font-size: 11px; }
+.model-split.flow-split { grid-template-columns: minmax(0, 1.5fr) minmax(380px, 1fr); }
+.snode rect { fill: #fff; stroke: var(--ink); stroke-width: 2.5; }
+.snode.term rect.inner { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+.snode .zh { font-size: 15px; font-weight: 900; fill: var(--ink); }
+.snode .en { font-size: 11px; fill: var(--muted); }
+.start { fill: var(--ink); }
+.fedge { stroke: var(--line); stroke-width: 2; fill: none; }
+.fedge.hot { stroke: var(--primary); stroke-width: 3.5; }
+marker#arr path { fill: var(--muted); }
+.tlabel { font-size: 13px; fill: var(--ink); cursor: pointer; paint-order: stroke; stroke: var(--card); stroke-width: 5px; stroke-linejoin: round; }
+.tlabel:hover { fill: var(--primary); text-decoration: underline; }
+.tlabel.on { fill: var(--primary); font-weight: 900; }
+.tlist { display: flex; flex-direction: column; gap: 6px; }
+.trow { display: flex; justify-content: space-between; gap: 12px; text-align: left; border: 2px solid var(--line); background: var(--card); border-radius: 10px; padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+.trow:hover, .trow.on { border-color: var(--primary); }
+.panel dl.kv { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; font-size: 14px; }
+.panel dl.kv dt { color: var(--muted); font-weight: 700; }
+.panel dl.kv dd { margin: 0; }
+.todo-chip.plain { background: var(--card); border-color: var(--line); }
 .edge { stroke: var(--line); stroke-width: 2; fill: none; }
 .edge.changed { stroke: var(--ink); stroke-width: 3; }
 .edge.hot { stroke: var(--primary); stroke-width: 4; }
@@ -214,7 +233,7 @@ main.wide { max-width: 1640px; }
 .todo-chip.ok { border-color: var(--done); background: #E3F7EC; }
 .todo-chip.on { box-shadow: 0 0 0 3px var(--primary); }
 @container page (max-width: 940px) {
-  .model-split { grid-template-columns: minmax(0, 1fr); }
+  .model-split, .model-split.flow-split { grid-template-columns: minmax(0, 1fr); }
   .model-split .panel { position: static; max-height: none; }
 }
 .panel { font-size: 15px; line-height: 1.75; }
@@ -235,10 +254,13 @@ main.wide { max-width: 1640px; }
 .crow .ctx dt { color: var(--muted); font-weight: 700; }
 .crow .ctx dd { margin: 0; }
 .crow .ctx details > summary { cursor: pointer; color: var(--muted); font-size: 13px; }
-.crow .ctx details > summary::before { content: '為什麼：'; }
 .crow .ctx details[open] > summary { margin-bottom: 6px; }
 .crow .ctx .md ul { margin: 2px 0; padding-left: 20px; }
 .crow .ctx .md p { margin: 2px 0; }
+.crow .claim { font-size: 16px; font-weight: 700; line-height: 1.6; }
+.crow .claim ul { margin: 2px 0 0; padding-left: 20px; }
+.crow .claim .muted { display: block; font-weight: 400; }
+.crow .ctx { font-size: 13.5px; }
 .crow mark { background: #FFE58A; color: inherit; border-radius: 3px; padding: 0 2px; }
 .group .list:has(.has-ctx) { grid-template-columns: repeat(auto-fill, minmax(min(520px, 100%), 1fr)); }
 @container page (max-width: 560px) { .crow .ctx dl { grid-template-columns: 1fr; } }

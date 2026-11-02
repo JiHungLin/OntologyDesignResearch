@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 import evidence
 import kit
+import flows
 import model
 import project
 import review
@@ -235,11 +236,16 @@ def get_review(path: str):
     r['spot_items'] = _spot_items(r, p)
     for c in r['confirms']:
         c['context'] = evidence.context(c['cells'].get('在哪裡', ''), p)
-    r['model'] = None
-    if r['slice'] and 2 in _review_steps((REVIEW_NAME.match(os.path.basename(p)) or [None, None, ''])[2]):
+    r['model'] = r['flows'] = None
+    steps = _review_steps((REVIEW_NAME.match(os.path.basename(p)) or [None, None, ''])[2])
+    if r['slice'] and 2 in steps:
         m = model.load(r['slice'])
         if m:
             r['model'] = model.mark_changed(m, r)
+    if r['slice'] and 3 in steps:
+        f = flows.load(r['slice'])
+        if f and f['machines']:
+            r['flows'] = flows.mark(f, r)
     return r
 
 
