@@ -274,7 +274,7 @@ main.wide { max-width: 1640px; }
 .group > .row { margin-bottom: 18px; align-items: center; }
 .group > .row .btn { flex: 0 0 auto; }
 .group h3 { margin: 0; font-size: 17px; flex: 1 1 300px; }
-.group .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 14px; }
+.group .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(460px, 100%), 1fr)); gap: 14px; }
 
 /* ---- 黃金案例 ---- */
 .timeline { display: flex; flex-direction: column; gap: 22px; }
