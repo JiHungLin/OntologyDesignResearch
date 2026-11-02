@@ -431,15 +431,48 @@ function renderDone(what, msg, nextHref) {
 // ---------- 看圖確認 ----------
 
 function groupOf(what) {
-  return what.split('：')[0].replace(/（[^）]*\d+\/\d+[^）]*）/, '').trim();
+  const g = what.split('：')[0].replace(/（[^）]*\d+\/\d+[^）]*）/, '').trim();
+  // 「AI 提出、有依據的決定 D-01（哪些有狀態）」這種一個編號一列的，同一類放一組
+  const m = g.match(/^(.+?)\s*(?:[A-Z]+-\d+|[A-Z]\d+)(?:（[^）]*）)?$/);
+  return m ? m[1] : g;
 }
 
-function confirmRow(c) {
+// 「在哪裡」指到的那一列或那一段（伺服器從交付物拿出來）：短欄位直接列，最主要的一欄放大，
+// 其他長的（理由、依據、替代做法…）收在「為什麼」；原文摘的字句用螢光標出來
+const CTX_MAIN = ['決定', '內容', '說明', '定義', '前提條件', '問題'];
+const CTX_LONG = 60;
+
+function ctxHtml(c, frags) {
+  const mark = h => frags.reduce((s, f) => s.split(esc(f)).join(`<mark>${esc(f)}</mark>`), h);
+  return (c.context || []).map(x => {
+    const link = `<a class="small ref-link" data-file="${esc(x.file)}" data-line="${x.line}">${esc(x.file.split('/').pop())} 第 ${x.line} 行 ›</a>`;
+    const head = `<div class="row spread"><span class="muted small">${esc(x.title || '')}</span>${link}</div>`;
+    if (!x.fields) return `<div class="ctx">${head}<div class="md">${mark(x.text.includes('\n') ? md(x.text) : inline(x.text.replace(/^\s*[-*]\s+/, '')))}</div></div>`;
+    const fs = x.fields.filter(([h, v], k) => v && v !== '—' && !(k === 0 && /^[A-Z]+-?\d+$/.test(v)));
+    const id = /^[A-Z]+-?\d+$/.test((x.fields[0] || [])[1] || '') ? x.fields[0][1] : '';
+    const main = fs.find(([h]) => CTX_MAIN.includes(h)) || fs.find(([, v]) => v.length > CTX_LONG);
+    const short = fs.filter(f => f !== main && f[1].length <= CTX_LONG);
+    const long = fs.filter(f => f !== main && f[1].length > CTX_LONG);
+    const dl = list => `<dl>${list.map(([h, v]) => `<dt>${esc(h)}</dt><dd>${mark(inline(v))}</dd>`).join('')}</dl>`;
+    return `<div class="ctx">${head}
+      ${main ? `<div class="main">${id ? `<b>${esc(id)}</b>　` : ''}${mark(inline(main[1]))}</div>` : ''}
+      ${short.length ? dl(short) : ''}
+      ${long.length ? `<details><summary>${long.map(f => esc(f[0])).join('、')}</summary>${dl(long)}</details>` : ''}</div>`;
+  }).join('');
+}
+
+function confirmRow(c, group = '') {
   const ans = (c.answer || '').trim();
-  return `<div class="crow ${!ans ? '' : ans === '✓' ? 'done' : 'noted'}">
-    <div class="what">${inline(c.cells['要看的'] || '')}</div>
-    ${c.cells['原文'] ? `<div class="orig">${inline(c.cells['原文'])}</div>` : ''}
-    ${c.cells['在哪裡'] ? `<div class="where">${inline(c.cells['在哪裡'])}</div>` : ''}
+  const what = c.cells['要看的'] || '';
+  // 原文的「…」拆成片段（「…」中間的省略號也拆開），在上下文裡找得到就標出來，全部找得到就不再另外列原文
+  const frags = [...(c.cells['原文'] || '').matchAll(/「([^」]+)」/g)].flatMap(m => m[1].split('…')).map(s => s.replace(/^#+\s*/, '').trim()).filter(s => s.length >= 2);
+  const ctxText = JSON.stringify(c.context || []);
+  const covered = frags.length && (c.context || []).length && frags.every(f => ctxText.includes(f));
+  return `<div class="crow ${!ans ? '' : ans === '✓' ? 'done' : 'noted'}${(c.context || []).length ? ' has-ctx' : ''}">
+    <div class="what">${inline(group && what.startsWith(group) && what.length > group.length ? what.slice(group.length).trim() : what)}</div>
+    ${(c.context || []).length ? ctxHtml(c, frags) : ''}
+    ${c.cells['原文'] && !covered ? `<div class="orig">${inline(c.cells['原文'])}</div>` : ''}
+    ${c.cells['在哪裡'] && !(c.context || []).length ? `<div class="where">${inline(c.cells['在哪裡'])}</div>` : ''}
     <div class="acts">${!ans ? `
       <button class="btn go" data-ok="${c.line}">✓ 合理</button>
       <button class="btn" data-note="${c.line}">寫意見</button>`
@@ -616,7 +649,7 @@ async function renderConfirm(path, sel) {
     const open = g.rows.filter(c => !(c.answer || '').trim());
     return `<section class="group card">
       <div class="row spread"><h3>${esc(g.name)}</h3>${open.length > 1 ? `<button class="btn small-btn go" data-group="${k}">這 ${open.length} 項都沒問題</button>` : ''}</div>
-      <div class="list">${g.rows.map(confirmRow).join('')}</div></section>`;
+      <div class="list">${g.rows.map(c => confirmRow(c, g.name)).join('')}</div></section>`;
   }).join('');
 
   $('#app').innerHTML = `

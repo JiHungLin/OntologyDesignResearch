@@ -233,6 +233,8 @@ def get_review(path: str):
     r['path'] = kit.rel(p)
     r['slice'] = _slice_of(p)
     r['spot_items'] = _spot_items(r, p)
+    for c in r['confirms']:
+        c['context'] = evidence.context(c['cells'].get('在哪裡', ''), p)
     r['model'] = None
     if r['slice'] and 2 in _review_steps((REVIEW_NAME.match(os.path.basename(p)) or [None, None, ''])[2]):
         m = model.load(r['slice'])
