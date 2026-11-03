@@ -134,7 +134,9 @@ export async function runAi(scope, purpose, message, opts = {}) {
   const other = state.sessions.find(x => x.running && x.slice !== scope);
   if (other) { openAi(other.slice); toast(`AI 正在做「${scopeName(other.slice)}・${other.purpose}」，做完再交下一件（同一個 repo 一次只跑一件）`); return; }
   const long = s && s.turns >= LONG_TURNS;
-  const same = s && s.purpose === purpose && !s.compacted && !long;
+  // AI 自己在上一次回覆建議「下一件事開新的 session」：照它的建議問人，不默默接著用
+  const advised = s && advisesNew(s.last_reply);
+  const same = s && s.purpose === purpose && !s.compacted && !long && !advised;
   if (same || (s && opts.keep)) return send(s, message, opts);
   if (!s) return startNew(scope, purpose, message, opts);
   // 舊的 session 停下來問了選擇題、人還沒回：開新的會讓那些問題沒人接，建議先回答
@@ -154,6 +156,7 @@ export async function runAi(scope, purpose, message, opts = {}) {
   }
   // 用途不同、壓縮過或已經很長：用選擇題問人（建議開新的，新的 session 由檔案產生交接提示，不用人貼）
   const why = s.compacted ? '現在的 session 經過摘要壓縮，容易憑記憶回答'
+    : advised ? `AI 上一次回覆建議下一件事開新的 session（現在的 session 是「${esc(s.purpose)}」，來回 ${s.turns} 次）`
     : s.purpose !== purpose ? `現在的 session 是「${esc(s.purpose)}」，這件事是「${esc(purpose)}」`
     : `現在的 session 已經來回 ${s.turns} 次，內容很長`;
   const h = await api(`/api/handoff?slice=${enc(scope)}&purpose=${enc(purpose)}&review=${enc(opts.review || '')}`);
@@ -168,6 +171,8 @@ export async function runAi(scope, purpose, message, opts = {}) {
   };
   openAi(scope);
 }
+
+export function advisesNew(reply) { return /開新的?\s*session|新的\s*session\s*(做|比較)/i.test(reply || ''); }
 
 export async function startNew(scope, purpose, message, opts, handoffText) {
   try {
