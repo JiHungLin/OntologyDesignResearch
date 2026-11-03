@@ -1,6 +1,6 @@
 // 共用核心（core/）的閱讀頁：名詞與關係（關係圖＋卡片）、狀態與事件（狀態圖）、規則、詞彙、變更紀錄
 import { $, $$, api, enc, esc, go, inline, md, plain, setTop, state } from './core.js';
-import { edgePath, short } from './confirm.js';
+import { edgeLabels, edgePath, short } from './confirm.js';
 import { flowsHtml } from './flows.js';
 import { markNav } from './nav.js';
 
@@ -54,7 +54,7 @@ export function coreLayout(ents, rels) {
   ents.forEach(e => rk(e.id));
   const rows = [];
   ents.forEach(e => (rows[rank.get(e.id)] = rows[rank.get(e.id)] || []).push(e.id));
-  const W = 136, H = 56, GX = 18, GY = 74, PER = 5;
+  const W = 136, H = 56, GX = 64, GY = 120, PER = 5;   // 間隔放寬，關係的字放得下（圖可以縮放）
   const pos = new Map();
   const bands = [];
   rows.filter(Boolean).forEach(row => {
@@ -88,11 +88,12 @@ function entityMatch(e, C) {
 function entityDiagram(C, sel) {
   const L = coreLayout(C.entities, C.relations);
   const byId = new Map(C.entities.map(e => [e.id, e]));
+  const labels = [];
   const edges = C.relations.filter(r => L.nodes.has(r.from) && L.nodes.has(r.to)).map(r => {
     const g = edgePath(L.nodes.get(r.from), L.nodes.get(r.to));
     const hot = sel && (r.from === sel || r.to === sel);
-    const label = hot ? `<g class="elabel" transform="translate(${g.mx},${g.my})"><rect x="-46" y="-10" width="92" height="20" rx="10"></rect><text text-anchor="middle" y="4">${esc(short(r.label || r.name, 6))} ${esc(r.card)}</text></g>` : '';
-    return { hot, svg: `<path class="edge ${hot ? 'hot' : ''}" marker-end="url(#carr)" d="${g.d}"><title>${esc(r.from)} ${esc(r.name)}（${esc(r.label)}）→ ${esc(r.to)}　${esc(r.card)}</title></path>${label}` };
+    if (hot) labels.push({ x: g.mx, y: g.my, text: `${r.label || r.name} ${r.card}` });
+    return { hot, svg: `<path class="edge ${hot ? 'hot' : ''}" marker-end="url(#carr)" d="${g.d}"><title>${esc(r.from)} ${esc(r.name)}（${esc(r.label)}）→ ${esc(r.to)}　${esc(r.card)}</title></path>` };
   });
   const nodes = [...L.nodes.values()].map(n => {
     const e = byId.get(n.id);
@@ -107,7 +108,7 @@ function entityDiagram(C, sel) {
   const es = [...edges.filter(x => !x.hot), ...edges.filter(x => x.hot)].map(x => x.svg).join('');
   const f = sel && L.nodes.get(sel);
   return `<svg width="${L.width}" height="${L.height}" viewBox="0 0 ${L.width} ${L.height}" role="img" aria-label="共用核心的名詞關係圖"${f ? ` data-focus="${f.x + f.w / 2},${f.y + f.h / 2}"` : ''}>
-    <defs><marker id="carr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"></path></marker></defs>${es}${nodes.join('')}</svg>`;
+    <defs><marker id="carr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"></path></marker></defs>${es}${nodes.join('')}${edgeLabels(labels, [...L.nodes.values()])}</svg>`;
 }
 
 const MAIN_FIELDS = ['定義', '不是什麼', '不能跟誰合併'];
