@@ -453,6 +453,30 @@ class TestLint(Base):
         self.assertNotIn('沒有「例子」', out)
         self.assertNotIn('沒有用「→」', out)
 
+    def test_golden_case_ask(self):
+        # 2026-11-04 起的審查頁：黃金案例要有逐項的「要得出」（編號、最後括號寫格式），情境與要得出不寫 Rnn、D-nn
+        self.setup_review()
+        old = os.path.join(self.dir, self.slice_file('reviews/2026-10-27_03.md'))
+        text = open(old, encoding='utf-8').read()
+        os.remove(old)
+        self.edit(self.slice_file('03_flows.md'), '- 審查頁：reviews/2026-10-27_03.md', '- 審查頁：reviews/2026-11-04_03.md')
+        gc = ('## 三、要你得出結果的黃金案例\n\n### GC01 正常流程\n- 驗證：Q01；R01\n- 情境：小王 3/1 請假，依 R01 核准\n'
+              '- 要得出：\n  - 2026-03-01 核准後：剩餘天數\n- 輸入：…\n- 預期結果：\n- 計算過程：\n- 計算者：\n\n')
+        head, tail = text.split('## 結論', 1)
+        self.write(self.slice_file('reviews/2026-11-04_03.md'), head + gc + '## 結論' + tail)
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('每一項要用 ①② 編號', out.replace('…', ''))
+        self.assertIn('沒有在最後的括號寫格式', out)
+        self.assertIn('的「情境」寫了 R01', out)
+        good = gc.replace('依 R01 ', '').replace('  - 2026-03-01 核准後：剩餘天數', '  - ① 2026-03-01 核准後：剩餘特休天數（日）\n  - ② 同一時點：會不會被擋下（擋下或允許）')
+        self.write(self.slice_file('reviews/2026-11-04_03.md'), head + good + '## 結論' + tail)
+        code, out = self.lint()
+        self.assertNotIn('要得出', out)
+        self.write(self.slice_file('reviews/2026-11-04_03.md'), head + good.replace('- 要得出：\n', '- 要算：\n') + '## 結論' + tail)
+        code, out = self.lint()
+        self.assertIn('沒有「要得出」', out)
+
     def test_review_lists_partial_self_check(self):
         self.setup_review(look='更正方式')
         code, out = self.lint()

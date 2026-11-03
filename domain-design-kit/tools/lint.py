@@ -15,6 +15,8 @@ import md2build as mb
 
 STEP_FILES = {2: '02_entities.md', 3: '03_flows.md', 4: '04_rules.md'}
 EXAMPLE_SINCE = '2026-10-28'   # 審查頁問題要有「例子」、選項要有「→」的起始日（之前的審查頁不回頭補）
+GOLDEN_ASK_SINCE = '2026-11-04'   # 黃金案例要有逐項的「要得出」的起始日（docs/02 ⑥，先試用）
+CODE_REF = re.compile(r'(?<![A-Za-z])(R\d{2,}|D-\d+|X-\d+)(?!\d)')
 ALL_FILES = ['01_scope.md', '02_entities.md', '03_flows.md', '03_use_cases.md', '04_rules.md', '05_mapping.md']
 HISTORY_H2 = {'決定與理由', '檢查紀錄', '回填紀錄'}
 HISTORY_H3 = {'反例處理', '六問判斷紀錄'}
@@ -877,7 +879,12 @@ class Lint:
                 if h3.startswith('問題'):
                     r['questions'].append({'no': i, 'title': h3, 'fields': {}, 'options': 0})
                 elif re.match(r'GC\d+', h3) and h2 and h2.startswith('三'):
-                    r['cases'].append({'no': i, 'id': h3.split()[0], 'fields': {}})
+                    r['cases'].append({'no': i, 'id': h3.split()[0], 'fields': {}, 'items': {}, 'last': None})
+                continue
+            sub = re.match(r'^\s+- (.*)$', l)   # 欄位底下縮排的條列（例：「要得出」的 ①②…）
+            if sub and h3 and r['cases'] and h3.split()[0] == r['cases'][-1]['id'] and r['cases'][-1]['last']:
+                gc = r['cases'][-1]
+                gc['items'].setdefault(gc['last'], []).append((i, sub.group(1).strip()))
                 continue
             m = re.match(r'^- ([^：:]+)[：:]\s*(.*)$', l)
             if m and h3:
@@ -888,6 +895,7 @@ class Lint:
                     if re.match(r'^[A-Z]（建議）$', k) or re.match(r'^[A-Z]$', k): q['options'] += 1
                 elif r['cases'] and h3.split()[0] == r['cases'][-1]['id']:
                     r['cases'][-1]['fields'][k] = (i, v)
+                    r['cases'][-1]['last'] = k
         for h2_, h3_, header, rows in mb.Doc(path).tables():
             if header[:2] == ['項目', '內容']:
                 for no, c in rows:
@@ -966,6 +974,9 @@ class Lint:
                     self.red('審查頁', f"{rel}:{no} {c['步驟']} 的結論是「{c.get('結論')}」，不是「通過」")
             if not r['verdicts']:
                 self.red('審查頁', f"{rel} 沒有「結論」表")
+            if os.path.basename(rel)[:10] >= GOLDEN_ASK_SINCE:     # 逐項的「要得出」：2026-11-04 起的審查頁（先試用）
+                for gc in r['cases']:
+                    self.check_golden_ask(rel, gc)
             for gc in r['cases']:
                 for k in ('預期結果', '計算過程', '計算者'):
                     if not gc['fields'].get(k, (0, ''))[1]:
@@ -1003,6 +1014,25 @@ class Lint:
         missing = [x for x in frags if re.sub(r'\s+', '', x) not in window]
         if missing:
             self.red('審查頁', f"{rel}:{no} 的原文「{missing[0][:30]}」在 {m.group(1)}:{line} 前後 2 行找不到（設計改了，或行號過期）")
+
+    def check_golden_ask(self, rel, gc):
+        """黃金案例的「要得出」：①②… 一項一行，每項有格式（括號裡的單位與位數或可能的答案）；情境與要得出不寫 Rnn、D-nn、X-nn（docs/02 ⑥）。"""
+        items = gc['items'].get('要得出', [])
+        if '要得出' not in gc['fields'] or not (items or gc['fields']['要得出'][1]):
+            self.red('審查頁', f"{rel}:{gc['no']} {gc['id']} 沒有「要得出」（逐項寫出時點、對象、單位與位數，docs/02 ⑥）")
+            return
+        for ln, t in items:
+            if not re.match(r'^[①-⑳]', t):
+                self.red('審查頁', f"{rel}:{ln} {gc['id']} 的「要得出」每一項要用 ①②… 編號")
+            if not re.search(r'（[^（）]+）\s*$', t):
+                self.red('審查頁', f"{rel}:{ln} {gc['id']} 的「要得出」這一項沒有在最後的括號寫格式（數字的單位與位數，或判斷可能的答案）")
+        for k in ('情境', '要得出'):
+            texts = [gc['fields'].get(k, (0, ''))] + (items if k == '要得出' else [])
+            for ln, t in texts:
+                m = CODE_REF.search(t or '')
+                if m:
+                    self.red('審查頁', f"{rel}:{ln} {gc['id']} 的「{k}」寫了 {m.group(1)}：情境與要得出用白話，編號放在「驗證」")
+                    break
 
     def check_case_copies(self, rel, r):
         path = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
