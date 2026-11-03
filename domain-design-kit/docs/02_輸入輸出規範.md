@@ -958,11 +958,11 @@ repo/
 |---|---|
 | 判斷 | S2 |
 | 狀態 | 採用 |
-| 背景與訊號 | hire-employee/04_rules.md R04、R06（跨 Entity 的擋下規則）；hire-employee/02_entities.md 關係表（帶期間）；理由：偏好 |
+| 背景與訊號 | hire-employee/04_rules.md R01、R06（跨 Entity 的擋下規則）；annual-leave-grant/04_rules.md R97、R98；理由：偏好（inputs/shared/範圍釐清_平台約定_第五步.md） |
 | 決定 | MongoDB（文件型），多文件交易 |
 | 沒採用的做法 | PostgreSQL：訊號偏向關聯式，使用者偏好文件型 |
-| 代價 | 引用存在與否由 service 檢查；快照隔離下要另加鎖防寫入偏斜；多文件交易要 replica set |
-| 重新評估的觸發 | 跨集合的擋下規則持續增加；出現多跳查詢 |
+| 代價 | 引用存在與否由 service 檢查；快照隔離下要另加鎖防寫入偏斜；多文件交易要 replica set，有時間與大小上限（影響很多筆的動作要分批） |
+| 重新評估的觸發 | 跨集合的擋下規則或另外的鎖持續增加；交易超過上限、要分批的動作變多 |
 | 資安影響 | 租戶檢查在 service 層，每個查詢都要帶 tenant_id |
 | 提出／同意 | 使用者／使用者（2026-10-14） |
 | 生效 | hire-employee/05-v1 |
