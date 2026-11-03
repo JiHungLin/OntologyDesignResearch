@@ -91,7 +91,7 @@ export async function renderGolden(path, i) {
     <div>
       <span class="chip">${esc(rest.length ? kind : c.id)}</span>
       <h1 style="margin:10px 0 4px;font-size:30px">${esc(rest.length ? rest.join('：') : c.title)}</h1>
-      <p class="muted" style="margin:0">需要的資料都在這頁，不用翻檔案。你獨立算完並送出後，才會顯示設計推出的答案，兩邊對不上的地方就是要討論的地方。</p>
+      <p class="muted" style="margin:0">需要的資料都在這頁，不用翻檔案。你自己得出結果並送出後，才會顯示設計推出的答案，兩邊對不上的地方就是要討論的地方。</p>
     </div>
     ${tl}
     <div class="cols">
