@@ -578,3 +578,4 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
 .case-tabs a.off.on { background: var(--turn); border-color: var(--turn); }
 .case-tabs a.ok:not(.on) .st { color: var(--done); }
 .case-pager .btn { text-decoration: none; }
+.hand-back { margin-top: 14px; border-color: var(--turn); }
