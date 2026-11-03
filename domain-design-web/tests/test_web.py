@@ -391,6 +391,18 @@ def test_core_view(repo, client):
     assert sm['notes'] == [] and sm['transitions'][0]['to'] == 'Open'
 
 
+def test_golden_paper(repo):
+    # 對答案：設計推出的答案在 06_evidence/golden_cases.md（AI 人填完後才推），[未執行] 或空的不算
+    import server
+    ev = repo / 'slices' / 'demo' / '06_evidence'
+    ev.mkdir(parents=True, exist_ok=True)
+    (ev / 'golden_cases.md').write_text(
+        '## GC01 甲\n- 預期結果：（由人填）\n- 紙上推演：R01 算出 3 日\n  續行\n- 紙上判定：一致\n\n'
+        '## GC02 乙\n- 紙上推演：\n- 紙上判定：[未執行]\n', encoding='utf-8')
+    p = server._paper('demo')
+    assert p == {'GC01': {'紙上推演': 'R01 算出 3 日\n續行', '紙上判定': '一致'}}
+
+
 def test_readonly_hook():
     import readonly_hook as h
     root = ['/repo']
