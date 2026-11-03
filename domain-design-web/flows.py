@@ -7,14 +7,19 @@ import re
 import kit
 from model import _plain
 
-H3 = re.compile(r'^([A-Za-z][A-Za-z0-9]*)（([^）]+)）(?:（歷史需求：([^，,）]+)[^）]*）)?')
+H3 = re.compile(r'^([A-Za-z][A-Za-z0-9]*)（([^）]+)）\s*(\[[^\]]+\])?\s*(?:（歷史需求：([^，,）]+)[^）]*）)?')   # core/ 的標題多一個 [候選]
+META = re.compile(r'^- (出處|層|被引用)：\s*(.*)$')   # core/flows.md 每個名詞的出處、層、被引用
 LABELED = re.compile(r'([A-Za-z][A-Za-z0-9_]*)（([^）]+)）')
 NAME = re.compile(r'^([A-Za-z][A-Za-z0-9]*)')
 EMPTY = {'', '（無）', '(無)', '無', '—', '-'}
 
 
 def load(slice_name):
-    path = os.path.join(kit.repo(), 'slices', slice_name, '03_flows.md')
+    return load_path(os.path.join(kit.repo(), 'slices', slice_name, '03_flows.md'))
+
+
+def load_path(path):
+    """切片的 03_flows.md 或 core/flows.md（格式相同，core 多了狀態標記與出處、層、被引用）。"""
     if not os.path.isfile(path):
         return None
     mb = kit.md2build()
@@ -31,8 +36,8 @@ def load(slice_name):
             m = H3.match(h3)
             if not m:
                 continue
-            sm = {'id': m.group(1), 'label': m.group(2), 'history': (m.group(3) or '').strip(), 'line': no, 'end': no,
-                  'states': [], 'terminal': [], 'transitions': [], 'notes': []}
+            sm = {'id': m.group(1), 'label': m.group(2), 'history': (m.group(4) or '').strip(), 'line': no, 'end': no,
+                  'status': (m.group(3) or '')[1:-1], 'meta': {}, 'states': [], 'terminal': [], 'transitions': [], 'notes': []}
             by_h3[(h2, h3)] = sm
             machines.append(sm)
             continue
@@ -47,6 +52,8 @@ def load(slice_name):
                 sm['stateless'] = s[3:]
         elif s.startswith('終態：'):
             sm['terminal'] = re.findall(r'[A-Za-z][A-Za-z0-9_]*', s[3:])
+        elif mm := META.match(s):
+            sm['meta'][mm.group(1)] = mm.group(2)
         elif re.match(r'^- ', line):
             sm['notes'].append(s[2:])
         elif re.match(r'^\s+- ', line) and sm['notes']:

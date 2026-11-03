@@ -80,7 +80,7 @@ export function renderNav() {
       + waiting.map(x => a(plan && plan.agreed && x.row['狀態'] === '候選' && !doing ? `#/new/${enc(x.code)}` : '#/plan', esc(x.code), esc(x.row['狀態'] || ''))).join('')) : ''}
     <div class="nav-h">資料與成果</div>
     ${node('core', `<span class="nav-name">core</span><span class="nav-x">共用核心</span>`,
-      Object.keys(P.core).length ? folderTree(P.core, 'core', p => fileA(p)) : '<div class="nav-empty">第一次凍結 ②③④ 後才有</div>')}
+      Object.keys(P.core).length ? a('#/core', '共用核心（整理過的）') + folderTree(P.core, 'core', p => fileA(p)) : '<div class="nav-empty">第一次凍結 ②③④ 後才有</div>')}
     ${node('inputs', `<span class="nav-name">inputs</span><span class="nav-x">收集的資料</span>`,
       (Object.keys(P.inputs).length ? folderTree(P.inputs, 'inputs', p => p.startsWith('inputs/drafts/') ? a(`#/draft/${enc(p)}`, esc(p.split('/').pop())) : fileA(p)) : '<div class="nav-empty">還沒有資料</div>')
       + `<button class="nav-add" id="navAddInput">＋ 加資料</button>`)}

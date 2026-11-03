@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import core_view
 import evidence
 import kit
 import flows
@@ -306,6 +307,12 @@ def post_spot_row(a: Answer):
         return {'digest': review.add_spot_row(p, expect_digest=a.digest)}
     except review.Conflict:
         raise HTTPException(409, '審查頁在你打開之後被改過，請重新載入')
+
+
+@app.get('/api/core')
+def get_core():
+    """共用核心的閱讀頁（唯讀）：名詞、關係、狀態機與事件、規則、詞彙、變更紀錄。"""
+    return core_view.load() or {'path': 'core', 'empty': True}
 
 
 @app.get('/api/file')
