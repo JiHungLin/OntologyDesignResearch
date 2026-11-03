@@ -1,4 +1,5 @@
 // 黃金案例
+import { runAi } from './ai.js';
 import { $, api, caseOpen, enc, esc, go, HUMAN, inline, loadReview, nextTask, plain, remember, setTop, state, toast, write } from './core.js';
 import { progressSegs } from './decide.js';
 
@@ -122,6 +123,12 @@ export async function renderGolden(path, i) {
     const [cls, st] = stOf(x);
     return `<a href="${href(k)}" class="${k === i ? 'on' : ''} ${cls}">${esc(x.id)}<span class="st">${st}</span></a>`;
   }).join('')}</nav>` : '';
+  // 審查頁都填好、簽好了（交回後回來對答案的情況）：這頁就能交回，不用回首頁找按鈕
+  const allDone = !r.counts.open;
+  const handBack = allDone ? `<div class="card hand-back"><b>每一題都對完了？</b>
+    <p class="small" style="margin:4px 0 10px">交給 AI：改過的答案它會抄回 golden_cases.md、重新比對；沒改的，它會依你說明的理由處理設計。</p>
+    <div class="row"><input type="text" id="g_note" class="soft" style="flex:1 1 260px" placeholder="（選填）哪幾題你認為是設計錯了、為什麼">
+    <button class="btn big yellow" id="g_hand">對完了，交給 AI ›</button></div></div>` : '';
   const pager = cs.length > 1 ? `<div class="row case-pager">${i > 0 ? `<a class="btn" href="${href(i - 1)}">‹ 上一題 ${esc(cs[i - 1].id)}</a>` : ''}<span style="flex:1"></span>${i < cs.length - 1 ? `<a class="btn" href="${href(i + 1)}">下一題 ${esc(cs[i + 1].id)} ›</a>` : ''}</div>` : '';
   $('#app').innerHTML = `
     ${caseTabs}
@@ -151,6 +158,7 @@ export async function renderGolden(path, i) {
           <div class="row"><button class="btn big primary" id="g_save">${done && paper ? '送出修改' : '送出，對答案'}</button></div>
         </div>
         ${pager}
+        ${handBack}
       </section>
       <aside class="side">
         <div class="card hint"><h2 style="font-size:17px;margin:0 0 8px">提示卡</h2>
@@ -160,6 +168,12 @@ export async function renderGolden(path, i) {
         </div>
 ${wide ? '' : cmp}      </aside>
     </div>`;
+  const hb = $('#g_hand');
+  if (hb) hb.onclick = () => {
+    const note = $('#g_note').value.trim();
+    const step = (path.match(/_([\d-]+)\.md$/) || [])[1] || '';
+    runAi(r.slice, `審查 ${step}`, `審查好了。黃金案例已對過答案（改過的請抄回 golden_cases.md 並重新比對紙上推演）。${note ? `我的說明：${note}。` : ''}審查頁：${path}`, { review: path });
+  };
   $('#g_save').onclick = async () => {
     let exp = $('#g_exp') ? $('#g_exp').value.trim() : '';
     if (A.items) {   // 逐項：每一格都要填，存成「① …　② …」一行（docs/02 ⑥ 的寫法）
