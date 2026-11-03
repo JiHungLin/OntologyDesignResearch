@@ -112,7 +112,19 @@ export async function renderGolden(path, i) {
           : `<div class="lockbox">送出你的答案後才顯示，<br>免得被設計的答案影響。</div>`}
         </div>
 `;
+  // 案例切換：每個案例一顆，標出還沒填／已填／對不上；底下另有上一題、下一題
+  const stOf = x => {
+    const j = ((x.paper || {})['紙上判定'] || '').trim();
+    return caseOpen(x) ? ['', '還沒填'] : /^不一致/.test(j) ? ['off', '對不上'] : /^一致/.test(j) ? ['ok', '一致'] : ['ok', '已填'];
+  };
+  const href = k => `#/r/${p}/golden/${k}`;
+  const caseTabs = cs.length > 1 ? `<nav class="tabs core-tabs case-tabs" aria-label="切換案例">${cs.map((x, k) => {
+    const [cls, st] = stOf(x);
+    return `<a href="${href(k)}" class="${k === i ? 'on' : ''} ${cls}">${esc(x.id)}<span class="st">${st}</span></a>`;
+  }).join('')}</nav>` : '';
+  const pager = cs.length > 1 ? `<div class="row case-pager">${i > 0 ? `<a class="btn" href="${href(i - 1)}">‹ 上一題 ${esc(cs[i - 1].id)}</a>` : ''}<span style="flex:1"></span>${i < cs.length - 1 ? `<a class="btn" href="${href(i + 1)}">下一題 ${esc(cs[i + 1].id)} ›</a>` : ''}</div>` : '';
   $('#app').innerHTML = `
+    ${caseTabs}
     <div>
       <span class="chip">${esc(rest.length ? kind : c.id)}</span>
       <h1 style="margin:10px 0 4px;font-size:30px">${esc(rest.length ? rest.join('：') : c.title)}</h1>
@@ -138,6 +150,7 @@ export async function renderGolden(path, i) {
           <input type="text" id="g_who" class="soft" value="${esc(f('計算者') || name)}" placeholder="你的名字（不能是 AI）">
           <div class="row"><button class="btn big primary" id="g_save">${done && paper ? '送出修改' : '送出，對答案'}</button></div>
         </div>
+        ${pager}
       </section>
       <aside class="side">
         <div class="card hint"><h2 style="font-size:17px;margin:0 0 8px">提示卡</h2>
