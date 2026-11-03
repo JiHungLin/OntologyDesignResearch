@@ -571,3 +571,10 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
 .item-answers .item-q { display: flex; gap: 8px; align-items: baseline; font-size: 15px; margin-top: 6px; }
 .item-answers .item-q .no { font-weight: 900; color: var(--primary); }
 .item-answers input { font: inherit; padding: 8px 12px; border: 2px solid var(--ink); border-radius: 10px; }
+.case-tabs { margin-bottom: 14px; }
+.case-tabs a { display: inline-flex; gap: 6px; align-items: baseline; }
+.case-tabs a .st { font-size: 12px; font-weight: 400; }
+.case-tabs a.off:not(.on) { border-color: var(--turn); color: var(--turn); }
+.case-tabs a.off.on { background: var(--turn); border-color: var(--turn); }
+.case-tabs a.ok:not(.on) .st { color: var(--done); }
+.case-pager .btn { text-decoration: none; }
