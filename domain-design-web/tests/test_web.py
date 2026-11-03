@@ -402,6 +402,13 @@ def test_readonly_hook():
     assert h.read_only('ls inputs/shared; for f in inputs/shared/範圍釐清_*.md; do echo "== $f"; cat "$f"; done 2>/dev/null | head -80', root)
     assert h.read_only("grep -n -o 'EQ-[0-9]*' slices/x/04_rules.md | awk -F: '{print $1\": \"$NF}' | paste -sd' ' | tr '|' '\\n' | grep EQ; echo; python3 tools/lint.py x", root)
     assert h.read_only('python3 -I tools/lint.py x 2>&1 | tail -20', root)
+    # domain-trial ⑤ 被擋的：cd 進切片後的 ../../、rev、<( )、絕對或相對路徑的 tools/*.py、變數
+    assert h.read_only("cd /repo/slices/x && ls reviews; grep -n 'a' ../../inputs/r.md; wc -l *.md && git diff --stat", root)
+    assert h.read_only("awk 'NR==68' slices/PLAN.md | rev | cut -c1-60 | rev", root)
+    assert h.read_only("cd /repo/slices/x && diff <(sed -n '1,5p' a.md) <(sed -n '2,6p' b.md)", root)
+    assert h.read_only('cd /repo/slices/x && python3 ../../tools/table.py 03_flows.md --row D-19 --col 提出', root)
+    assert h.read_only('python3 /repo/tools/table.py /repo/slices/x/03_flows.md --row D-10', root)
+    assert h.read_only('D=/repo; wc -l $D/slices/x/*.md; ls ${D}/inputs', root)
     for py in ("python3 -I - <<'EOF'\nprint(1)\nEOF", 'python3 -c "print(1)"', 'cd x && python3 - <<E'):
         assert h.INLINE_PY.search(py), py
     assert not h.INLINE_PY.search('python3 -I tools/lint.py electricity-emission')
@@ -409,5 +416,7 @@ def test_readonly_hook():
                 'cat ../../x', 'echo $(rm x)', 'find . -delete', 'python3 -c 1', 'for f in *.md; do rm "$f"; done',
                 "awk '{system(\"rm x\")}' a", 'git checkout .', 'git -c core.pager=sh log', 'git diff --output=x',
                 'git grep -Ovim x', 'git push', 'python3 x.py', 'python3 /tmp/tools/a.py', 'ls; python3 ../tools/a.py',
-                'cat a 2>/tmp/x'):
+                'cat a 2>/tmp/x', "cd /repo/slices/x && sed -n '1p' a.md > /tmp/a.txt", 'cd /repo/slices/x && cat ../../../etc/passwd',
+                'cd /tmp && cat a', 'D=/etc; cat $D/passwd', 'cd /repo/slices && python3 ../x/tools/a.py', 'python3 /repo/tools/../x.py',
+                'cd; cat .bashrc', "diff <(rm a) b"):
         assert not h.read_only(bad, root), bad

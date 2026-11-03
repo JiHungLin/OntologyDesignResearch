@@ -16,7 +16,8 @@ import sys
 
 READ_ONLY = {'cd', 'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'egrep', 'fgrep', 'rg', 'sed', 'awk', 'echo', 'printf',
              'sort', 'uniq', 'cut', 'tr', 'diff', 'find', 'nl', 'column', 'basename', 'dirname', 'pwd', 'true', 'test',
-             '[', 'stat', 'file', 'realpath', 'readlink', 'tree', 'comm', 'paste', 'fold', 'expand', 'date'}
+             '[', 'stat', 'file', 'realpath', 'readlink', 'tree', 'comm', 'paste', 'fold', 'expand', 'date',
+             'rev', 'tac', 'md5sum', 'sha256sum'}
 LOOP_WORDS = {'for', 'in', 'do', 'done', 'while', 'if', 'then', 'else', 'elif', 'fi', '!', '{', '}'}
 SEPARATORS = {';', '&&', '||', '|', '\n', '(', ')', '&'}
 GIT_READ = {'status', 'diff', 'log', 'show', 'rev-parse', 'ls-files', 'blame', 'grep', 'shortlog', 'cat-file'}
@@ -26,22 +27,32 @@ PY_REASON = ('網頁裡不能跑自己寫的 python（python3 - <<EOF、python3 
              '找字、找編號用 Grep；表格欄數、格式、引用、編號用 python3 -I tools/lint.py <切片>；看改了什麼用 git diff --stat、git diff <檔案>。'
              '要驗算取位、比例分攤這類數字時，在檔案裡寫出算式與步驟，標 [未執行] 交給人核對（黃金案例的預期結果本來就由人算）。'
              '能跑的 python 只有 python3 tools/*。')
-TOOL_PY = re.compile(r'tools/[\w.-]+\.py')   # 允許清單本來就放行 python3 tools/*；串在其他只讀指令裡也放行
 REDIRECT_OK = re.compile(r'\d?>&\d|&>\s*/dev/null')   # 2>&1、&>/dev/null：只改輸出去向，不寫檔
 SED_WRITE = re.compile(r'(^|[;\d$/,\s])\s*[weW](\s|$)')   # sed 的 w（寫檔）、e（執行）指令，前面可以有位址
 
 
-def _ok_path(tok, roots):
-    if not tok.startswith(('/', '~')):
+def _inside(p, roots):
+    return any(p == r or p.startswith(r + os.sep) for r in roots)
+
+
+def _where(tok, here):
+    return os.path.realpath(os.path.join(here, os.path.expanduser(tok)))
+
+
+def _ok_path(tok, roots, here):
+    """路徑（相對的照目前資料夾算，cd 之後的 ../../ 也算得出來）要在設計 repo 或網頁資料夾裡。"""
+    if tok == '/dev/null':
+        return True
+    if '$' in tok:   # 沒設定過的變數：算不出來，只擋 ..
         return '..' not in tok.split('/')
-    p = os.path.realpath(os.path.expanduser(tok))
-    return any(p == r or p.startswith(r + os.sep) for r in roots) or p == '/dev/null'
+    return _inside(_where(tok, here), roots)
 
 
 def read_only(cmd, roots):
     if re.search(r'\$\(|`|<<|>\s*[^&/]|>>|>\s*/(?!dev/null)', cmd):   # 指令替換、heredoc、寫檔（2>/dev/null 可以）
         return False
     cmd = REDIRECT_OK.sub(' ', cmd)
+    cmd = cmd.replace('<(', ' ( ')   # diff <(sed …) <(sed …)：括號裡的指令照樣逐一檢查
     cmd = re.sub(r"'[|;&()]'|\"[|;&()]\"", 'SEP', cmd)   # tr '|' '\n' 的 '|' 是參數，不是管線（shlex 拆完分不出有沒有引號）
     try:
         lex = shlex.shlex(cmd, posix=True, punctuation_chars=';&|()')
@@ -52,8 +63,12 @@ def read_only(cmd, roots):
         return False
     head = True
     cur, pattern_left = None, False
+    here, env = roots[0], {}   # 目前資料夾（跟著 cd 走）、設定過的變數（D=…）
     for t in toks:
+        t = re.sub(r'\$\{?([A-Za-z_]\w*)\}?', lambda m: env.get(m.group(1), m.group(0)), t)
         if t in SEPARATORS or t == '\n':
+            if cur == 'cd':   # 只打 cd：回到家目錄
+                here = os.path.expanduser('~')
             head, cur = True, None
             continue
         if re.fullmatch(r'\d?>/dev/null', t):   # 2>/dev/null（例：done 2>/dev/null | head）
@@ -64,7 +79,9 @@ def read_only(cmd, roots):
                 continue
             if t in LOOP_WORDS:
                 continue
-            if re.fullmatch(r'[A-Za-z_]\w*=.*', t):   # 變數設定（UA=…）
+            if re.fullmatch(r'[A-Za-z_]\w*=.*', t):   # 變數設定（D=/repo）：之後的 $D 換成它再檢查路徑
+                k, v = t.split('=', 1)
+                env[k] = v
                 continue
             if t == 'git':
                 cur, head = 'git', False
@@ -82,12 +99,20 @@ def read_only(cmd, roots):
             continue
         if t in LOOP_WORDS:
             continue
-        if cur == 'py':
+        if cur == 'py':   # 設計 repo 的 tools/*.py（相對或絕對路徑都可以）；允許清單本來就放行 python3 tools/*
             if t in ('-I', '-B', '-u'):
                 continue
-            if not TOOL_PY.fullmatch(t):
+            p = _where(t, here)
+            if not (p.endswith('.py') and p.startswith(os.path.join(roots[0], 'tools') + os.sep)):
                 return False
             cur = 'py-args'
+            continue
+        if cur == 'cd':
+            if t.startswith('-'):
+                continue
+            if not _ok_path(t, roots, here):
+                return False
+            here, cur = _where(t, here), 'cd-done'
             continue
         if cur == 'git':   # 第一個參數是子指令
             if GIT_BAD.match(t) or t not in GIT_READ:
@@ -107,7 +132,7 @@ def read_only(cmd, roots):
             if cur == 'sed' and SED_WRITE.search(t):
                 return False
             continue
-        if not t.startswith('-') and not _ok_path(t, roots):
+        if not t.startswith('-') and not _ok_path(t, roots, here):
             return False
     return True
 
