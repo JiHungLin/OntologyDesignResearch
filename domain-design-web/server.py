@@ -237,6 +237,36 @@ def _spot_items(r, p):
     return out
 
 
+PAPER_KEYS = ('紙上推演', '紙上判定')
+
+
+def _paper(slice_name):
+    """06_evidence/golden_cases.md 每個案例的「紙上推演」「紙上判定」（AI 依設計推的，人填完審查頁之後才有），給「對答案」用。"""
+    path = os.path.join(kit.repo(), 'slices', slice_name, '06_evidence', 'golden_cases.md')
+    if not os.path.isfile(path):
+        return {}
+    out, cur, key = {}, None, None
+    with open(path, encoding='utf-8') as f:
+        for line in f.read().split('\n'):
+            m = re.match(r'^#{2,3} (GC\d+)', line)
+            if m:
+                cur, key = out.setdefault(m.group(1), {}), None
+                continue
+            if line.startswith('#'):
+                cur = key = None
+                continue
+            if cur is None:
+                continue
+            m = re.match(r'^- ([^：]+)：\s*(.*)$', line)
+            if m:
+                key = m.group(1) if m.group(1) in PAPER_KEYS else None
+                if key:
+                    cur[key] = m.group(2).strip()
+            elif key and line.startswith('  ') and line.strip():
+                cur[key] = (cur[key] + '\n' + line.strip()).strip()
+    return {k: v for k, v in out.items() if any(x and not x.startswith(('[未執行]', '（')) for x in v.values())}
+
+
 @app.get('/api/review')
 def get_review(path: str):
     p = _review_path(path)
@@ -246,6 +276,9 @@ def get_review(path: str):
     r['spot_items'] = _spot_items(r, p)
     for c in r['confirms']:
         c['context'] = evidence.context(c['cells'].get('在哪裡', ''), p)
+    paper = _paper(r['slice']) if r['slice'] and r['cases'] else {}
+    for c in r['cases']:
+        c['paper'] = paper.get(c['id'], {})
     r['model'] = r['flows'] = None
     steps = _review_steps((REVIEW_NAME.match(os.path.basename(p)) or [None, None, ''])[2])
     if r['slice'] and 2 in steps:

@@ -86,12 +86,13 @@ export async function renderGolden(path, i) {
     </section>` : '';
   const [kind, ...rest] = c.title.split('：');
   const done = !caseOpen(c);
+  const paper = (c.paper || {})['紙上推演'] || '', judged = (c.paper || {})['紙上判定'] || '';
   const name = remember('reviewer');
   $('#app').innerHTML = `
     <div>
       <span class="chip">${esc(rest.length ? kind : c.id)}</span>
       <h1 style="margin:10px 0 4px;font-size:30px">${esc(rest.length ? rest.join('：') : c.title)}</h1>
-      <p class="muted" style="margin:0">需要的資料都在這頁，不用翻檔案。你自己得出結果並送出後，才會顯示設計推出的答案，兩邊對不上的地方就是要討論的地方。</p>
+      <p class="muted" style="margin:0">需要的資料都在這頁，不用翻檔案。你先自己得出結果；三個都送出、交回審查頁後，AI 會依設計另外推一次，兩邊對不上的地方就是要討論的地方。</p>
     </div>
     ${tl}
     <div class="cols">
@@ -117,8 +118,9 @@ export async function renderGolden(path, i) {
           <details class="tech" style="margin-top:8px"><summary>技術細節</summary>${c.id} · ${inline(f('驗證'))} · <a class="ref-link" data-file="${esc(path)}" data-line="${c.line}">審查頁第 ${c.line} 行</a></details>
         </div>
         <div class="card ${done ? '' : 'dashed'}"><h2 style="font-size:17px;margin:0 0 8px">對答案</h2>
-          ${done ? `<div class="compare"><div><b>你</b>\n${esc(f('預期結果'))}</div><div><b>設計推出的</b>\n${esc(plain(f('紙上推演')) || '（AI 還沒推演，交給 AI 後補上）')}</div></div>
+          ${done && paper ? `<div class="compare"><div><b>你</b>\n${esc(f('預期結果'))}</div><div><b>設計推出的</b>${judged ? `　<span class="chip">${esc(judged)}</span>` : ''}\n${esc(plain(paper))}</div></div>
             <p class="small muted">對不上時，交給 AI 說明差在哪一步，由你決定哪個對。</p>`
+          : done ? `<div class="saved-note"><b>✓ 已存到審查頁</b><p class="small" style="margin:6px 0 0">設計推出的答案還沒有：AI 要等你把審查頁交回（說「審查好了」）後，才依 ②③④ 另外推一次，寫在 golden_cases.md。推完回到這頁就看得到兩邊對照。</p></div>`
           : `<div class="lockbox">送出你的答案後才顯示，<br>免得被設計的答案影響。</div>`}
         </div>
       </aside>
@@ -134,6 +136,11 @@ export async function renderGolden(path, i) {
       if ((cur.fields[k].value || '') === vals[k]) continue;
       if (!await write('/api/review/case', { line: cur.fields[k].line, key: k, value: vals[k] })) return;
     }
-    renderGolden(path, i);
+    // 存好了：有設計推出的答案就留在這頁對照；還沒有的話直接到下一個還沒填的案例（都填完就到下一件事）
+    const r2 = await loadReview(path);
+    const nxt = r2.cases.findIndex((x, k) => k !== i && caseOpen(x));
+    toast(`已存到審查頁（${c.id}）` + (nxt >= 0 && !paper ? `，接著是 ${r2.cases[nxt].id}` : ''));
+    if (paper) renderGolden(path, i);
+    else go(nxt >= 0 ? `#/r/${enc(path)}/golden/${nxt}` : nextTask(r2));
   };
 }
