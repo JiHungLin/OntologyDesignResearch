@@ -6,7 +6,7 @@
   --baseline：上一版的切片資料夾（預設取各步驟最新的 git tag），用來找被刪除或改名的名稱。
   表格、EQ 影響、範圍外、佔位符、黃金案例（含事後才到的輸入）、連鎖、core 前綴（--freeze 時亮紅燈）、被引用也在這裡檢查；
   審查頁（--freeze 時沒作答的亮紅燈）、挑錯反例、黃金案例自給自足也在這裡檢查；
-  跨切片引用（<切片>/<檔名> D-nn）也在這裡檢查；
+  跨切片引用（<切片>/<檔名> D-nn）、架構決定紀錄（architecture/DECISIONS.md）也在這裡檢查；
   「用在」「舊版上游」「使用者同意」「其他切片要求」只列提醒，不算紅燈。
 只檢查引用與結構對不對得起來，不代表內容正確。"""
 import os, re, subprocess, sys, tempfile
@@ -430,10 +430,11 @@ class Lint:
 
     # ---------- 2026-10-21 新增（流程待處理清單 #1、#2、#11～#18） ----------
     def md_files(self):
-        """表格檢查的範圍：本切片、slices/ 根目錄、core/、inputs/ 的所有 Markdown。"""
+        """表格檢查的範圍：本切片、slices/ 根目錄、core/、architecture/、inputs/ 的所有 Markdown。"""
         out = []
         for base, recursive in ((self.dir, True), (os.path.join(self.root, 'slices'), False),
-                                (os.path.join(self.root, 'core'), True), (os.path.join(self.root, 'inputs'), True)):
+                                (os.path.join(self.root, 'core'), True), (os.path.join(self.root, 'architecture'), True),
+                                (os.path.join(self.root, 'inputs'), True)):
             if not os.path.isdir(base): continue
             if recursive:
                 for d, _, fs in os.walk(base):
@@ -1167,6 +1168,82 @@ class Lint:
         else:
             print(f"    （{len(reqs)} 件，{pending} 件還沒處理）")
 
+    ADR_FIELDS = ['判斷', '狀態', '背景與訊號', '決定', '沒採用的做法', '代價', '重新評估的觸發',
+                  '資安影響', '提出／同意', '生效', '受影響切片']
+    PLATFORM_STATUS = re.compile(r'^(?:未定|已採用|不同做法[：:].+|見 ADR-\d{3}(?:[、，,]\s*ADR-\d{3})*)$')
+
+    def header_of(self, doc):
+        """交付物開頭區：(狀態, (行號, 讀取的輸入))。"""
+        status = inputs = None
+        for h2, h3, header, rows in doc.tables():
+            if header[:2] == ['項目', '內容']:
+                for no, c in rows:
+                    if c[0] == '狀態': status = c[1].strip()
+                    if c[0] == '讀取的輸入': inputs = (no, c[1])
+                break
+        return status, inputs
+
+    def check_architecture(self):
+        print("\n[架構決定] architecture/DECISIONS.md：ADR 欄位、狀態、背景有出處；平台約定 P1～P13；未凍結的 ⑤ 讀了紀錄"
+              + ("；⑤ 要凍結時沒有待確認的 ADR" if self.freeze else ""))
+        path = os.path.join(self.root, 'architecture', 'DECISIONS.md')
+        rel = 'architecture/DECISIONS.md'
+        if not os.path.exists(path):
+            return self.done('架構決定', 0, '', skipped='沒有 architecture/DECISIONS.md')
+        n, adrs, plat, refs, pending = 0, {}, set(), [], []
+        with open(path, encoding='utf-8') as fh:
+            for no, line in enumerate(fh, 1):
+                if '{{' in line and not line.lstrip().startswith('<!--'):
+                    self.red('架構決定', f"{rel}:{no} 還有範本的佔位符：{line.strip()[:60]}")
+        for h2, h3, header, rows in mb.Doc(path).tables():
+            if (h2 or '').startswith('一') and header[:2] == ['約定', '現況']:
+                for no, c in rows:
+                    n += 1
+                    m = re.match(r'P(\d+)\b', c[0].strip())
+                    if m: plat.add(int(m.group(1)))
+                    v = c[1].strip()
+                    if not self.PLATFORM_STATUS.match(v):
+                        self.red('架構決定', f"{rel}:{no} {c[0]} 的現況「{v}」不是 未定／已採用／不同做法：…／見 ADR-nnn")
+                    refs += [(no, r) for r in re.findall(r'ADR-\d{3}', ' '.join(c[1:]))]
+            m = re.match(r'(ADR-\d{3})', (h3 or '').strip())
+            if m and header[:2] == ['項目', '內容']:
+                aid = m.group(1)
+                if aid in adrs: self.red('架構決定', f"{rel} {aid} 重複")
+                fields = {c[0].strip(): (no, c[1].strip()) for no, c in rows}
+                adrs[aid] = fields
+        missing = sorted(set(range(1, 14)) - plat)
+        if plat and missing:
+            self.red('架構決定', f"{rel}「一、平台約定現況」少了 {'、'.join('P%d' % k for k in missing)}")
+        for aid, f in adrs.items():
+            n += 1
+            for k in self.ADR_FIELDS:
+                if not f.get(k, (0, ''))[1]:
+                    self.red('架構決定', f"{rel} {aid} 的「{k}」{'沒有這一欄' if k not in f else '沒填'}")
+            no, st = f.get('狀態', (0, ''))
+            m = re.match(r'^已取代[：:]\s*(ADR-\d{3})$', st)
+            if st and st not in ('暫定', '採用') and not m:
+                self.red('架構決定', f"{rel}:{no} {aid} 的狀態「{st}」不是 暫定／採用／已取代: ADR-nnn")
+            if m: refs.append((no, m.group(1)))
+            no, bg = f.get('背景與訊號', (0, ''))
+            if bg and '沒有訊號，用預設' not in bg and not re.search(r'\.md\b|PLAN|D-\d+', bg):
+                self.red('架構決定', f"{rel}:{no} {aid} 的「背景與訊號」沒有寫交付物的檔名與編號，也沒寫「沒有訊號，用預設」")
+            no, who = f.get('提出／同意', (0, ''))
+            if '待確認' in who: pending.append(f"{rel}:{no} {aid}")
+        for no, r in refs:
+            if r not in adrs: self.red('架構決定', f"{rel}:{no} 引用的 {r} 不存在")
+        d5 = self.docs.get('05_mapping.md')
+        if d5:
+            status, inputs = self.header_of(d5)
+            n += 1
+            if status and not status.startswith('已凍結') and (not inputs or 'architecture/DECISIONS.md' not in inputs[1]):
+                self.red('架構決定', f"05_mapping.md:{inputs[0] if inputs else 1} 「讀取的輸入」沒有 architecture/DECISIONS.md @ <commit>")
+            if pending:
+                if self.freeze and status == '待檢查':
+                    for p in pending: self.red('架構決定', f"{p} 還是待確認：⑤ 要凍結，ADR 要先由架構負責人同意")
+                else:
+                    for p in pending: print(f"    • {p} 待確認")
+        self.done('架構決定', n, '個 ADR、約定與 ⑤ 檔頭')
+
     def run(self):
         self.check_parse()
         self.check_residue(); self.check_cancelled(); self.check_ids(); self.check_glossary()
@@ -1175,7 +1252,7 @@ class Lint:
         self.check_tables(); self.check_placeholders(); self.check_eq_impact(); self.check_out_of_scope()
         self.check_golden(); self.check_late_inputs(); self.check_param_storage(); self.check_chain(); self.check_core_prefix(); self.check_referenced_by()
         self.check_reviews(); self.check_challenge(); self.check_golden_selfcontained(); self.check_user_agreement()
-        self.check_cross_refs(); self.check_requests()
+        self.check_cross_refs(); self.check_requests(); self.check_architecture()
         self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")

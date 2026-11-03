@@ -512,6 +512,61 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertIn('1 件都已處理', out)
 
+    PLAT = ''.join(f'| P{k} 約定 | 未定 | |\n' for k in range(1, 14))
+    ADR = ('### ADR-001　主資料庫類型\n\n| 項目 | 內容 |\n|---|---|\n| 判斷 | S2 |\n| 狀態 | {status} |\n'
+           '| 背景與訊號 | {bg} |\n| 決定 | 關聯式 |\n| 沒採用的做法 | 文件型：跨 Entity 規則多 |\n'
+           '| 代價 | 結構改版要遷移 |\n| 重新評估的觸發 | 出現多跳查詢 |\n| 資安影響 | 無 |\n'
+           '| 提出／同意 | {who} |\n| 生效 | 2026-11-03 |\n| 受影響切片 | — |\n')
+
+    def write_decisions(self, status='採用', bg='leave-backfill/04_rules.md R01', who='AI／○○（2026-11-03）', plat=None):
+        self.write('architecture/DECISIONS.md',
+                   '# 架構決定紀錄\n\n## 一、平台約定現況\n\n| 約定 | 現況 | 依據 |\n|---|---|---|\n'
+                   + (self.PLAT if plat is None else plat) + '\n## 二、選型\n\n'
+                   + self.ADR.format(status=status, bg=bg, who=who))
+
+    def write_mapping(self, status='待檢查', inputs='04_rules.md @ leave-backfill/04-v1；architecture/DECISIONS.md @ abc1234'):
+        self.write(self.slice_file('05_mapping.md'),
+                   f'# leave-backfill ⑤ 投影到實作\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | {status} |\n'
+                   f'| 讀取的輸入 | {inputs} |\n')
+
+    def test_architecture_record_passes(self):
+        self.write_decisions()
+        self.write_mapping()
+        code, out = self.lint()
+        section = out.split('[架構決定]')[1].split('\n[')[0]
+        self.assertNotIn('✗', section, out)
+        self.assertIn('✓ 通過', section)
+
+    def test_architecture_adr_fields_and_status(self):
+        self.write_decisions(status='決定了', bg='大家都用這個')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('ADR-001 的狀態「決定了」不是', out)
+        self.assertIn('ADR-001 的「背景與訊號」沒有寫交付物的檔名與編號', out)
+        self.write_decisions(status='已取代: ADR-009', plat=self.PLAT.replace('| P7 約定 | 未定 | |\n', ''))
+        code, out = self.lint()
+        self.assertIn('引用的 ADR-009 不存在', out)
+        self.assertIn('少了 P7', out)
+
+    def test_mapping_must_read_decisions(self):
+        self.write_decisions()
+        self.write_mapping(inputs='04_rules.md @ leave-backfill/04-v1')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('「讀取的輸入」沒有 architecture/DECISIONS.md', out)
+        self.write_mapping(status='已凍結', inputs='04_rules.md @ leave-backfill/04-v1')
+        code, out = self.lint()
+        self.assertNotIn('「讀取的輸入」沒有 architecture/DECISIONS.md', out)
+
+    def test_pending_adr_blocks_mapping_freeze(self):
+        self.write_decisions(who='AI／待確認')
+        self.write_mapping()
+        code, out = self.lint()
+        self.assertIn('ADR-001 待確認', out)
+        self.assertNotIn('還是待確認：⑤ 要凍結', out)
+        code, out = self.lint('--freeze')
+        self.assertIn('ADR-001 還是待確認：⑤ 要凍結', out)
+
 class TestSyncCore(Base):
     def sync(self, *args, tags=None):
         return run('sync_core.py', SLICE, '--tags', tags or f'2={SLICE}/02-v1,3={SLICE}/03-v1,4={SLICE}/04-v1', *args, cwd=self.dir)
