@@ -93,6 +93,7 @@ export async function renderHome(slice) {
     const step = last ? last.step : String(wait[0].n).padStart(2, '0');
     // 交回後 AI 做了紙上推演、和你的答案對不上：先回黃金案例頁對答案（改你的答案，或留著讓 AI 說明）
     const lr = last ? await loadReview(last.path) : null;
+    const handled = s && !s.running && s.purpose === `審查 ${step}` && !!s.last_reply;
     const off = lr ? lr.cases.map((c, k) => ({ c, k })).filter(x => /^不一致/.test(((x.c.paper || {})['紙上判定'] || '').trim())) : [];
     if (off.length) {
       const p = enc(last.path);
@@ -105,6 +106,22 @@ export async function renderHome(slice) {
           <p class="muted small">${off.map(x => `<a href="#/r/${p}/golden/${x.k}">${esc(x.c.id)}</a>`).join('　')}</p>
         </div>
         <div class="row"><a class="btn big yellow" href="#/r/${p}/golden/${off[0].k}">去對答案 ›</a><button class="btn big" id="handover">對完了，交給 AI</button></div>
+      </section>`;
+    } else if (handled) {
+      // AI 已經處理過這份審查頁的答案：下一步是繼續這一步（還要送下一份審查頁）或凍結，不是再交一次
+      const n = Math.max(...(step.match(/\d+/g) || ['0']).map(Number));
+      const more = /再送一份審查頁|再送審/.test(((lr && lr.meta.find(m => /填完之後/.test(m.key))) || {}).value || '');
+      hero = `
+      <section class="hero">
+        <div style="flex:999 1 480px;min-width:0">
+          <span class="chip">輪到你</span>
+          <h1>AI 處理完了：${esc(stepName(step))}</h1>
+          <p>${more ? `這份審查頁說這一輪還要再送一份審查頁：請 AI 繼續第 ${CIRCLED[n]} 步，產生下一份。都通過後才凍結。` : '結論都是「通過」的話，請 AI 凍結（凍結＝之後的修改都要留紀錄）。'}</p>
+          <p class="muted small">AI 的回覆在右邊的 AI 對話；按下面的按鈕時，網頁會問你要不要開新的 session。</p>
+        </div>
+        <div class="row">${more ? `<button class="btn big yellow" id="contStep">請 AI 繼續第 ${CIRCLED[n]} 步 ›</button><button class="btn big" id="freeze">請 AI 凍結</button>`
+          : `<button class="btn big yellow" id="freeze">請 AI 凍結 ›</button><button class="btn big" id="contStep">還要改，請 AI 繼續第 ${CIRCLED[n]} 步</button>`}
+          <button class="btn big" id="handover">再交一次審查頁</button></div>
       </section>`;
     } else hero = `
       <section class="hero">
@@ -178,6 +195,8 @@ export async function renderHome(slice) {
     const n = designDone ? 6 : h.next.n;
     runAi(slice, `第 ${n} 步`, `/domain-step ${n} ${slice}`);
   };
+  const cs = $('#contStep');
+  if (cs) cs.onclick = () => { const n = Math.max(...(h.reviews[0].step.match(/\d+/g) || ['0']).map(Number)); runAi(slice, `第 ${n} 步`, `/domain-step ${n} ${slice}`); };
   const ff = $('#finishFreeze');
   if (ff) ff.onclick = () => { const n = h.next.n; runAi(slice, `凍結 0${n}`, `/domain-freeze ${n} ${slice}`); };
   const ho = $('#handover');
