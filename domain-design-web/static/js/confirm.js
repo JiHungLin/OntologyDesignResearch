@@ -141,7 +141,7 @@ export function layout(model, showAll) {
     rows[row].forEach((id, k) => pos.set(id, w > 1 ? k * (Math.max(...rows.map(r => r.length)) - 1) / (w - 1) : 0));
   }
   // 每排最多 PER 個，多的換到下一排（上排往上長、下排往下長），圖不會比框寬
-  const W = 150, H = 56, GX = 22, GY = 80, PER = 4;
+  const W = 150, H = 56, GX = 56, GY = 120, PER = 4;   // 間隔放寬，關係的字放得下
   const chunk = ids => { const out = []; for (let k = 0; k < ids.length; k += PER) out.push(ids.slice(k, k + PER)); return out; };
   const bands = [...chunk(rows[0]).reverse(), ...chunk(rows[1]), ...chunk(rows[2])].filter(b => b.length);
   const width = Math.min(PER, Math.max(...bands.map(b => b.length))) * (W + GX) - GX;
@@ -168,6 +168,21 @@ export function edgePath(a, b) {
   return { d: `M${x1},${y1} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2}`, mx: (x1 + x2) / 2, my: (y1 + y2) / 2 };
 }
 
+// 關係的字（名稱＋幾對幾）：畫在方塊上面一層；和別的字或方塊（nodes）重疊時往下移開，不互相蓋住
+export function edgeLabels(items, nodes = []) {
+  const placed = [];
+  const onNode = (x, y, w) => nodes.some(n => x + w / 2 > n.x - 4 && x - w / 2 < n.x + n.w + 4 && y + 10 > n.y - 4 && y - 10 < n.y + n.h + 4);
+  return items.map(({ x, y, text }) => {
+    const w = [...text].reduce((n, ch) => n + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 13 : 7.5), 0) + 18;
+    const y0 = y;
+    for (let k = 0; k < 12 && (placed.some(p => Math.abs(p.x - x) < (p.w + w) / 2 + 4 && Math.abs(p.y - y) < 23) || onNode(x, y, w)); k++) {
+      y = y0 + (k % 2 ? -1 : 1) * 23 * Math.ceil((k + 1) / 2);   // 上下交替找空位
+    }
+    placed.push({ x, y, w });
+    return `<g class="elabel" transform="translate(${x},${y})"><rect x="${-w / 2}" y="-10" width="${w}" height="20" rx="10"></rect><text text-anchor="middle" y="4">${esc(text)}</text></g>`;
+  }).join('');
+}
+
 export function renderDiagram(r) {
   const L = layout(r.model, state.showAll);
   const sel = state.sel;
@@ -176,11 +191,12 @@ export function renderDiagram(r) {
     const lines = new Set([...(e ? e.confirm_lines : []), ...r.model.relations.filter(x => x.from === id && x.changed).flatMap(x => x.confirm_lines)]);
     return lines.size && [...lines].every(l => (r.confirms.find(c => c.line === l) || {}).answer);
   };
+  const labels = [];
   const edges = L.edges.map(x => {
     const g = edgePath(L.nodes.get(x.from), L.nodes.get(x.to));
     const hot = sel && (x.from === sel || x.to === sel);
-    const label = hot ? `<g class="elabel" transform="translate(${g.mx},${g.my})"><rect x="-38" y="-10" width="76" height="20" rx="10"></rect><text text-anchor="middle" y="4">${esc(x.label.slice(0, 6))} ${esc(x.card)}</text></g>` : '';
-    return `<path class="edge ${x.changed ? 'changed' : ''} ${hot ? 'hot' : ''} ${x.cancelled ? 'cancelled' : ''}" d="${g.d}"><title>${esc(x.from)} ${esc(x.name)}（${esc(x.label)}）→ ${esc(x.to)}　${esc(x.card)}</title></path>${label}`;
+    if (hot) labels.push({ x: g.mx, y: g.my, text: `${x.label || x.name} ${x.card}` });
+    return `<path class="edge ${x.changed ? 'changed' : ''} ${hot ? 'hot' : ''} ${x.cancelled ? 'cancelled' : ''}" d="${g.d}"><title>${esc(x.from)} ${esc(x.name)}（${esc(x.label)}）→ ${esc(x.to)}　${esc(x.card)}</title></path>`;
   });
   const nodes = [...L.nodes.values()].map(n => {
     const e = n.e;
@@ -191,7 +207,7 @@ export function renderDiagram(r) {
       ${e.kind === 'own' ? `<text class="sub" x="${n.w / 2}" y="44" text-anchor="middle">${esc(short(e.id, 22))}</text>` : ''}
       <title>${esc(e.definition || e.id)}</title></g>`;
   });
-  return `<svg width="${L.width}" height="${L.height}" viewBox="0 0 ${L.width} ${L.height}" role="img" aria-label="模型圖">${edges.join('')}${nodes.join('')}</svg>`;
+  return `<svg width="${L.width}" height="${L.height}" viewBox="0 0 ${L.width} ${L.height}" role="img" aria-label="模型圖">${edges.join('')}${nodes.join('')}${edgeLabels(labels, [...L.nodes.values()])}</svg>`;
 }
 
 export function entityPanel(r, id) {
