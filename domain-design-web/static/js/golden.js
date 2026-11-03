@@ -97,8 +97,21 @@ export async function renderGolden(path, i) {
   // 已填的預期結果「① 6 日　② 2 日」拆回各項
   const prevItems = {};
   for (const m of f('預期結果').matchAll(/([①-⑳])\s*([^①-⑳]*)/g)) prevItems[m[1]] = m[2].trim();
-  const paper = (c.paper || {})['紙上推演'] || '', judged = (c.paper || {})['紙上判定'] || '';
+  const paper = (c.paper || {})['紙上推演'] || '', judged = ((c.paper || {})['紙上判定'] || '').trim();
+  const off = /^不一致/.test(judged);
   const name = remember('reviewer');
+  // 有設計推出的答案時「對答案」放在主欄上方（推演很長，側欄太窄）
+  const wide = done && !!paper;
+  const cmp = `
+        <div class="card ${done ? '' : 'dashed'}"><h2 style="font-size:17px;margin:0 0 8px">對答案</h2>
+          ${done && paper ? `<div class="compare"><div><b>你</b>\n${esc(f('預期結果'))}</div><div><b>設計推出的</b>\n${esc(paper.split('\n').map(l => plain(l.replace(/^- /, '・'))).filter(Boolean).join('\n'))}</div></div>
+            ${off ? `<div class="saved-note off"><b>對不上</b><p class="small" style="margin:6px 0 0">${inline(plain(judged.replace(/^不一致[（(]?(待審查者複核[:：])?/, '').replace(/[）)]$/, '')))}</p>
+              <p class="small" style="margin:6px 0 0">你的答案要改：直接在下面「你的答案」改，按「送出修改」。你認為設計錯了：不用改，交給 AI 時說明。</p></div>`
+            : judged ? `<p class="small"><span class="chip">${esc(judged)}</span></p>` : ''}`
+          : done ? `<div class="saved-note"><b>✓ 已存到審查頁</b><p class="small" style="margin:6px 0 0">設計推出的答案還沒有：AI 要等你把審查頁交回（說「審查好了」）後，才依 ②③④ 另外推一次，寫在 golden_cases.md。推完回到這頁就看得到兩邊對照。</p></div>`
+          : `<div class="lockbox">送出你的答案後才顯示，<br>免得被設計的答案影響。</div>`}
+        </div>
+`;
   $('#app').innerHTML = `
     <div>
       <span class="chip">${esc(rest.length ? kind : c.id)}</span>
@@ -106,6 +119,7 @@ export async function renderGolden(path, i) {
       <p class="muted" style="margin:0">需要的資料都在這頁，不用翻檔案。你先自己得出結果；三個都送出、交回審查頁後，AI 會依設計另外推一次，兩邊對不上的地方就是要討論的地方。</p>
     </div>
     ${tl}
+    ${wide ? cmp : ''}
     <div class="cols">
       <section class="wide">
         <div class="card"><div class="label">情境</div>${inline(askOfCase(c).scene)}</div>
@@ -122,7 +136,7 @@ export async function renderGolden(path, i) {
           <textarea id="g_how" class="soft" rows="4">${esc(f('計算過程'))}</textarea>
           <label class="label" for="g_who" style="color:var(--ink)">計算者</label>
           <input type="text" id="g_who" class="soft" value="${esc(f('計算者') || name)}" placeholder="你的名字（不能是 AI）">
-          <div class="row"><button class="btn big primary" id="g_save">送出，對答案</button></div>
+          <div class="row"><button class="btn big primary" id="g_save">${done && paper ? '送出修改' : '送出，對答案'}</button></div>
         </div>
       </section>
       <aside class="side">
@@ -131,13 +145,7 @@ export async function renderGolden(path, i) {
           ${f('專家確認') ? `<div class="small" style="margin-top:8px"><b>還在等專家：</b>${inline(plain(f('專家確認')))}</div>` : ''}
           <details class="tech" style="margin-top:8px"><summary>技術細節</summary>${c.id} · ${inline(f('驗證'))} · <a class="ref-link" data-file="${esc(path)}" data-line="${c.line}">審查頁第 ${c.line} 行</a></details>
         </div>
-        <div class="card ${done ? '' : 'dashed'}"><h2 style="font-size:17px;margin:0 0 8px">對答案</h2>
-          ${done && paper ? `<div class="compare"><div><b>你</b>\n${esc(f('預期結果'))}</div><div><b>設計推出的</b>${judged ? `　<span class="chip">${esc(judged)}</span>` : ''}\n${esc(plain(paper))}</div></div>
-            <p class="small muted">對不上時，交給 AI 說明差在哪一步，由你決定哪個對。</p>`
-          : done ? `<div class="saved-note"><b>✓ 已存到審查頁</b><p class="small" style="margin:6px 0 0">設計推出的答案還沒有：AI 要等你把審查頁交回（說「審查好了」）後，才依 ②③④ 另外推一次，寫在 golden_cases.md。推完回到這頁就看得到兩邊對照。</p></div>`
-          : `<div class="lockbox">送出你的答案後才顯示，<br>免得被設計的答案影響。</div>`}
-        </div>
-      </aside>
+${wide ? '' : cmp}      </aside>
     </div>`;
   $('#g_save').onclick = async () => {
     let exp = $('#g_exp') ? $('#g_exp').value.trim() : '';
