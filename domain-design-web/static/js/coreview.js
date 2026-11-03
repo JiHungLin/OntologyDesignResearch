@@ -105,7 +105,8 @@ function entityDiagram(C, sel) {
   });
   // 選到的那個的線畫在最上面
   const es = [...edges.filter(x => !x.hot), ...edges.filter(x => x.hot)].map(x => x.svg).join('');
-  return `<svg width="${L.width}" height="${L.height}" viewBox="0 0 ${L.width} ${L.height}" role="img" aria-label="共用核心的名詞關係圖">
+  const f = sel && L.nodes.get(sel);
+  return `<svg width="${L.width}" height="${L.height}" viewBox="0 0 ${L.width} ${L.height}" role="img" aria-label="共用核心的名詞關係圖"${f ? ` data-focus="${f.x + f.w / 2},${f.y + f.h / 2}"` : ''}>
     <defs><marker id="carr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"></path></marker></defs>${es}${nodes.join('')}</svg>`;
 }
 
@@ -238,16 +239,7 @@ function changelogView(C) {
 
 // ---------- 事件 ----------
 
-// 圖比框寬時，把選到的名詞捲到中間
-function centerSel() {
-  const d = $('.core-view .diagram'), g = d && $(`.core-view .diagram [data-ent="${CSS.escape(state.coreSel || '')}"]`);
-  if (!g) return;
-  const x = +((g.getAttribute('transform') || '').match(/translate\(([\d.]+)/) || [])[1] || 0;
-  d.scrollLeft = x + 68 - d.clientWidth / 2;
-}
-
 function bindCore(C, tab, item) {
-  if (tab === 'entities') centerSel();
   $$('[data-ent]').forEach(b => b.onclick = () => go(`#/core/entities/${enc(b.dataset.ent)}`));
   const q = $('#coreQ');
   if (q) q.oninput = () => { state.coreQ = q.value; redrawEntities(C); };
