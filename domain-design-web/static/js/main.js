@@ -9,11 +9,12 @@ import { openFile, renderFile, switchTab } from './files.js';
 import { aiScope, curSession, openAi, refreshSlices, renderAiHead, runAi } from './ai.js';
 import { markNav, NARROW, narrow, refreshNav, setNav, syncNav } from './nav.js';
 import { renderHub, renderStart } from './overview.js';
+import { renderCore } from './coreview.js';
 import { renderDraft, renderEq, renderKickoff, renderPlan } from './plan.js';
 
 // ---------- 路由 ----------
 // #/ 總覽　#/start 主題草案　#/plan 規劃　#/draft/<檔> 推想草稿　#/new/<切片> 開始切片　#/eq/<切片> 專家問題
-// #/s/<切片> 切片首頁　#/r/<審查頁>/decide/<n>　/confirm[/<Entity>]　/golden/<n>　/finish
+// #/core[/<分頁>/<項目>] 共用核心　#/s/<切片> 切片首頁　#/r/<審查頁>/decide/<n>　/confirm[/<Entity>]　/golden/<n>　/finish
 
 export async function route() {
   $('#fileDrawer').hidden = true;
@@ -44,6 +45,7 @@ export async function route() {
     if (parts[0] === 'new' && parts[1]) return await renderKickoff(parts[1]);
     if (parts[0] === 'eq' && parts[1]) return await renderEq(parts[1]);
     if (parts[0] === 'f' && parts[1]) return await renderFile(parts.slice(1).join('/'));
+    if (parts[0] === 'core') return await renderCore(parts[1] || 'entities', parts[2] || null);
     return await renderHub();
   } catch (e) { toast(e.message); } finally { refreshNav(); }
 }

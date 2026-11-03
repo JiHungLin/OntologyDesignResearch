@@ -366,6 +366,31 @@ def test_flows_state_machines(repo):
     assert r['confirms'][0]['machine'] == 'Order' and order['confirms'] == [9]
 
 
+def test_core_view(repo, client):
+    # 沒有 core/ 時回 empty；有的話名詞卡、關係、狀態機（含 [候選] 與出處）、規則表都讀得出來
+    assert client.get('/api/core').json().get('empty')
+    core = repo / 'core'
+    core.mkdir()
+    (core / 'entities.md').write_text(
+        '# 共用核心：Entity\n\n### Site（據點） [候選]\n- 出處：demo（② @ demo/02-v1）\n- 層：domain\n- 定義：營運地點\n'
+        '- 主要屬性：\n  - `name`（據點名稱）\n- 被引用：\n', encoding='utf-8')
+    (core / 'relations.md').write_text(
+        '| 從 | 關係 | 到 | 幾對幾 | 有無期間 | 為什麼 | 狀態 | 出處 | 被引用 |\n|---|---|---|---|---|---|---|---|---|\n'
+        '| Site | partOf（屬於） | Organization | 1 | 無 | 理由 | [候選] | demo（② @ demo/02-v1） |  |\n', encoding='utf-8')
+    (core / 'flows.md').write_text(
+        '## 狀態機（demo）\n\n### Site（據點） [候選]（歷史需求：需要重建當時，依 demo:Q01）\n- 出處：demo（③ @ demo/03-v1）\n- 層：domain\n'
+        '狀態：Open（營運中）、Closed（已結束）\n\n| 從 | 到 | 觸發事件 | 誰可以做 | 前提條件 | 規則 |\n|---|---|---|---|---|---|\n'
+        '| （無） | Open | OpenSite | 使用者 | — | — |\n', encoding='utf-8')
+    c = client.get('/api/core').json()
+    e = c['entities'][0]
+    assert (e['id'], e['label'], e['status']) == ('Site', '據點', '候選') and e['attrs'][0]['name'] == 'name'
+    assert dict(e['fields'])['層'] == 'domain'
+    assert c['relations'][0]['label'] == '屬於' and c['relations'][0]['status'] == '候選'
+    sm = c['flows']['machines'][0]
+    assert (sm['status'], sm['history'], sm['meta']['出處']) == ('候選', '需要重建當時', 'demo（③ @ demo/03-v1）')
+    assert sm['notes'] == [] and sm['transitions'][0]['to'] == 'Open'
+
+
 def test_readonly_hook():
     import readonly_hook as h
     root = ['/repo']

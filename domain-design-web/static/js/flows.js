@@ -111,7 +111,8 @@ export function flowPanel(r, sm, tsel) {
     ${link(sm.line)}`;
 }
 
-export function flowsHtml(r, sel, tsel, inModel) {
+// intro：換掉上方的標題與說明（core 的閱讀頁沒有要確認的項目）
+export function flowsHtml(r, sel, tsel, inModel, intro) {
   const ms = r.flows.machines;
   const sm = ms.find(m => m.id === sel) || ms.find(m => (m.confirms || []).length) || ms.find(m => m.transitions.length) || ms[0];
   ms.forEach(m => (m.confirms || []).forEach(l => inModel.add(l)));
@@ -124,7 +125,7 @@ export function flowsHtml(r, sel, tsel, inModel) {
   const withSm = ms.filter(m => m.transitions.length), without = ms.filter(m => !m.transitions.length);
   return {
     sm, html: `
-    <div><h1 style="margin:0">看圖確認：流程與狀態</h1><p class="muted" style="margin:4px 0 0">點名稱看它的狀態圖；點圖上箭頭的字，看誰可以做、前提條件。⚙ 是系統自動做的；雙框是終點（之後不會再變）。有數字的名稱有要你確認的項目。</p></div>
+    ${intro || `<div><h1 style="margin:0">看圖確認：流程與狀態</h1><p class="muted" style="margin:4px 0 0">點名稱看它的狀態圖；點圖上箭頭的字，看誰可以做、前提條件。⚙ 是系統自動做的；雙框是終點（之後不會再變）。有數字的名稱有要你確認的項目。</p></div>`}
     <div class="todo">
       <div class="small"><b>有狀態的（${withSm.length}）</b></div><div class="todo-chips">${withSm.map(chip).join('')}</div>
       ${without.length ? `<div class="small" style="margin-top:8px"><b>沒有狀態、變化用日期記的（${without.length}）</b></div><div class="todo-chips">${without.map(chip).join('')}</div>` : ''}
