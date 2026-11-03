@@ -477,6 +477,23 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertIn('沒有「要得出」', out)
 
+    def test_golden_case_copies_multiline(self):
+        # 審查頁的計算過程分好幾行寫：不算沒作答；golden_cases.md 逐字抄回後不報「不同」（原本每讀一行就清空，永遠報不同）
+        self.setup_review()
+        rv = self.slice_file('reviews/2026-10-27_03.md')
+        text = open(os.path.join(self.dir, rv), encoding='utf-8').read()
+        fields = '- 預期結果：① 6 日\n- 計算過程：\n  - 1. 10 - 4 = 6\n  - 2. 取整數\n- 計算者：○○\n'
+        head, tail = text.split('## 結論', 1)
+        self.write(rv, head + '## 三、要你算的黃金案例\n\n### GC01 正常流程\n- 驗證：Q01\n- 情境：…\n' + fields + '\n## 結論' + tail)
+        gc = self.GC.format('[未執行]', '[未執行]').replace('- 情境：…\n', '- 情境：…\n' + fields).replace('| GC02 |  |', '| GC01 | |')
+        self.write(self.slice_file('06_evidence/golden_cases.md'), gc)
+        code, out = self.lint()
+        self.assertNotIn('和 golden_cases.md 不同', out)
+        self.assertNotIn('GC01 的「計算過程」', out)
+        self.write(self.slice_file('06_evidence/golden_cases.md'), gc.replace('  - 2. 取整數', '  - 2. 四捨五入'))
+        code, out = self.lint()
+        self.assertIn('GC01 的「計算過程」和 golden_cases.md 不同', out)
+
     def test_review_lists_partial_self_check(self):
         self.setup_review(look='更正方式')
         code, out = self.lint()
