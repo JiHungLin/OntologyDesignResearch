@@ -10,6 +10,7 @@ import { aiScope, curSession, openAi, refreshSlices, renderAiHead, runAi } from 
 import { markNav, NARROW, narrow, refreshNav, setNav, syncNav } from './nav.js';
 import { renderHub, renderStart } from './overview.js';
 import { renderCore } from './coreview.js';
+import { attachPanZoom } from './panzoom.js';
 import { renderDraft, renderEq, renderKickoff, renderPlan } from './plan.js';
 
 // ---------- 路由 ----------
@@ -107,5 +108,7 @@ $('#aiForm').onsubmit = e => {
   runAi(scope, s ? s.purpose : '對話', v, { keep: true });
 };
 window.addEventListener('hashchange', route);
+// 圖出現時掛上縮放與平移（各頁畫圖的程式不用改）
+new MutationObserver(() => $$('#app .diagram > svg:not([data-pz-on])').forEach(attachPanZoom)).observe($('#app'), { childList: true, subtree: true });
 
 refreshSlices().then(route).catch(e => toast(e.message));

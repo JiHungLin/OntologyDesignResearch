@@ -555,3 +555,13 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
 .core-filter input[type=search] { font: inherit; font-size: 15px; padding: 8px 14px; border: 2px solid var(--ink); border-radius: 12px; background: var(--card); }
 .core-view .src { white-space: nowrap; }
 .core-tbl tr.grp td { background: var(--hint); font-weight: 700; }
+
+/* 圖的縮放與平移（panzoom.js） */
+.diagram.pz { position: relative; overflow: hidden; }
+.diagram.pz svg { margin: 0; cursor: grab; touch-action: none; user-select: none; }
+.diagram.pz svg.dragging { cursor: grabbing; }
+.pz-ctl { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; align-items: center; gap: 2px; background: var(--card); border: 2px solid var(--ink); border-radius: 999px; padding: 2px 6px; }
+.pz-ctl button { font: inherit; font-size: 13px; font-weight: 700; border: 0; background: transparent; color: var(--ink); cursor: pointer; padding: 1px 8px; border-radius: 999px; }
+.pz-ctl button:hover { background: var(--bg); }
+.pz-pct { font-size: 12px; min-width: 3.2em; text-align: center; color: var(--muted); }
+.pz-hint { position: absolute; left: 14px; bottom: 6px; font-size: 12px; color: var(--muted); pointer-events: none; }
