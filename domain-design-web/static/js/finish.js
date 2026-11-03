@@ -102,7 +102,7 @@ export async function renderFinish(path, focus) {
       </section>` : ''}
 `}
     </div>`;
-  if (cur) window.scrollTo(0, 0);
+  if (cur) $('.page').scrollTo(0, 0);   // 主畫面自己捲動（style.css .page）
 
   const spotLine = spotRow ? spotRow.line : null;
   const saveSpot = async (itemsTxt, result) => {
