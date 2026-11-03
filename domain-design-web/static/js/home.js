@@ -91,7 +91,22 @@ export async function renderHome(slice) {
     // 審查頁都填好了、還沒凍結
     const last = h.reviews[0];
     const step = last ? last.step : String(wait[0].n).padStart(2, '0');
-    hero = `
+    // 交回後 AI 做了紙上推演、和你的答案對不上：先回黃金案例頁對答案（改你的答案，或留著讓 AI 說明）
+    const lr = last ? await loadReview(last.path) : null;
+    const off = lr ? lr.cases.map((c, k) => ({ c, k })).filter(x => /^不一致/.test(((x.c.paper || {})['紙上判定'] || '').trim())) : [];
+    if (off.length) {
+      const p = enc(last.path);
+      hero = `
+      <section class="hero">
+        <div style="flex:999 1 480px;min-width:0">
+          <span class="chip">輪到你</span>
+          <h1>對答案：${off.length} 個黃金案例和設計推出的不一樣</h1>
+          <p>AI 依設計另外推了一次，${off.map(x => esc(x.c.id)).join('、')} 和你的答案對不上。逐一看差在哪：你的答案要改就直接改了再送出；你認為設計錯了，就不用改，交給 AI 時說明。</p>
+          <p class="muted small">${off.map(x => `<a href="#/r/${p}/golden/${x.k}">${esc(x.c.id)}</a>`).join('　')}</p>
+        </div>
+        <div class="row"><a class="btn big yellow" href="#/r/${p}/golden/${off[0].k}">去對答案 ›</a><button class="btn big" id="handover">對完了，交給 AI</button></div>
+      </section>`;
+    } else hero = `
       <section class="hero">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>
