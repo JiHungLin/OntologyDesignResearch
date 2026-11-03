@@ -32,7 +32,9 @@ code { font-size: .9em; background: var(--bg); border-radius: 6px; padding: 0 4p
 .nav-toggle { flex: 0 0 auto; display: grid; place-items: center; width: 30px; height: 30px; margin-left: -6px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #fff; cursor: pointer; transition: background .15s; }
 .top .nav-toggle:hover { background: var(--dark2); }
 body:not(.nav-closed) .top .nav-toggle { display: none; }
-.page { flex: 1 1 auto; min-width: 320px; container: page / inline-size; display: flex; flex-direction: column; min-height: 100vh; transition: margin-right .2s ease; }
+/* 主畫面自己捲動（不是整個視窗）：右側抽屜打開、主畫面往左縮時，捲軸在主畫面右邊，不會被抽屜蓋住 */
+html, body { height: 100%; overflow: hidden; }
+.page { flex: 1 1 auto; min-width: 320px; container: page / inline-size; display: flex; flex-direction: column; height: 100vh; overflow-y: auto; overscroll-behavior: contain; transition: margin-right .2s ease; }
 /* 右側抽屜（AI 對話、檔案）打開時，主畫面縮完還有 720px 才往左縮（app.js syncDrawers），不然蓋在上面。
    主畫面裡的版面看主畫面本身多寬（container query），不是看整個視窗 */
 body.drawer-push .page { margin-right: var(--drawer-w); }
@@ -95,7 +97,7 @@ body.nav-closed .side-nav { margin-left: calc(-1 * var(--nav-w)); visibility: hi
 .code-view { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; margin: 0; }
 
 /* ---- 共用 ---- */
-main { flex: 1 1 auto; min-width: 0; max-width: 1080px; margin: 0 auto; padding: 40px 28px 140px; display: flex; flex-direction: column; gap: 40px; }
+main { flex: 1 1 auto; min-width: 0; width: 100%; max-width: 1080px; margin: 0 auto; padding: 40px 28px 140px; display: flex; flex-direction: column; gap: 40px; }
 .card { background: var(--card); border: 2px solid var(--ink); border-radius: var(--r); padding: 24px 28px; }
 .card.lift { box-shadow: 5px 5px 0 var(--ink); }
 .card.hint { background: #FFF5BF; border-color: #D9B92E; }
