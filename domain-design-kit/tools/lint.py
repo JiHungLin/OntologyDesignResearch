@@ -1272,7 +1272,32 @@ class Lint:
                     for p in pending: self.red('架構決定', f"{p} 還是待確認：⑤ 要凍結，ADR 要先由架構負責人同意")
                 else:
                     for p in pending: print(f"    • {p} 待確認")
+            if status and not status.startswith('已凍結'):
+                n += self.check_s1_mapping(adrs, d5)
         self.done('架構決定', n, '個 ADR、約定與 ⑤ 檔頭')
+
+    def check_s1_mapping(self, adrs, d5):
+        """S1 的 ADR 列到本切片的規則，⑤ 第三區那一列的說明要引用 ADR（2026-11-03，T05，先試用）。"""
+        s1 = {}
+        for aid, f in adrs.items():
+            if f.get('判斷', (0, ''))[1] != 'S1' or f.get('狀態', (0, ''))[1] not in ('暫定', '採用'): continue
+            for seg in re.split(r'[；;]', self.expand(f.get('背景與訊號', (0, ''))[1])):
+                if re.search(rf'(?<![\w-]){re.escape(self.slice)}/04_rules\.md', seg):
+                    for r in re.findall(r'(?<![A-Za-z0-9])R\d+\b', seg): s1.setdefault(r, set()).add(aid)
+        if not s1: return 0
+        seen = set()
+        for h2, h3, header, rows in d5.tables():
+            if header[:2] != ['規則', '落實位置'] or h3: continue
+            for no, c in rows:
+                ids = set(re.findall(r'(?<![A-Za-z0-9])R\d+\b', self.expand(c[0])))
+                for r in sorted(ids & set(s1)):
+                    seen.add(r)
+                    if not any(a in ' '.join(c[2:]) for a in s1[r]):
+                        self.red('架構決定', f"05_mapping.md:{no} {r} 在 {'、'.join(sorted(s1[r]))}（S1）裡，"
+                                           f"「說明」要寫靠什麼防同時送出並引用 ADR 編號")
+        for r in sorted(set(s1) - seen):
+            self.red('架構決定', f"05_mapping.md 第三區沒有 {r}（{'、'.join(sorted(s1[r]))} 的 S1 規則）")
+        return len(s1)
 
     def run(self):
         self.check_parse()

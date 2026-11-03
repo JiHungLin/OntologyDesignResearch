@@ -537,21 +537,40 @@ class TestLint(Base):
         self.assertIn('1 件都已處理', out)
 
     PLAT = ''.join(f'| P{k} 約定 | 未定 | |\n' for k in range(1, 14))
-    ADR = ('### ADR-001　主資料庫類型\n\n| 項目 | 內容 |\n|---|---|\n| 判斷 | S2 |\n| 狀態 | {status} |\n'
+    ADR = ('### ADR-001　主資料庫類型\n\n| 項目 | 內容 |\n|---|---|\n| 判斷 | {kind} |\n| 狀態 | {status} |\n'
            '| 背景與訊號 | {bg} |\n| 決定 | 關聯式 |\n| 沒採用的做法 | 文件型：跨 Entity 規則多 |\n'
            '| 代價 | 結構改版要遷移 |\n| 重新評估的觸發 | 出現多跳查詢 |\n| 資安影響 | 無 |\n'
            '| 提出／同意 | {who} |\n| 生效 | 2026-11-03 |\n| 受影響切片 | — |\n')
 
-    def write_decisions(self, status='採用', bg='leave-backfill/04_rules.md R01', who='AI／○○（2026-11-03）', plat=None):
+    def write_decisions(self, status='採用', bg='leave-backfill/04_rules.md R01', who='AI／○○（2026-11-03）', plat=None,
+                        kind='S2'):
         self.write('architecture/DECISIONS.md',
                    '# 架構決定紀錄\n\n## 一、平台約定現況\n\n| 約定 | 現況 | 依據 |\n|---|---|---|\n'
                    + (self.PLAT if plat is None else plat) + '\n## 二、選型\n\n'
-                   + self.ADR.format(status=status, bg=bg, who=who))
+                   + self.ADR.format(status=status, bg=bg, who=who, kind=kind))
 
-    def write_mapping(self, status='待檢查', inputs='04_rules.md @ leave-backfill/04-v1；architecture/DECISIONS.md @ abc1234'):
+    def write_mapping(self, status='待檢查', inputs='04_rules.md @ leave-backfill/04-v1；architecture/DECISIONS.md @ abc1234',
+                      rules=''):
         self.write(self.slice_file('05_mapping.md'),
                    f'# leave-backfill ⑤ 投影到實作\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | {status} |\n'
-                   f'| 讀取的輸入 | {inputs} |\n')
+                   f'| 讀取的輸入 | {inputs} |\n'
+                   + (f'\n## 三、規則 → 落實位置\n\n| 規則 | 落實位置 | 說明 |\n|---|---|---|\n{rules}' if rules else ''))
+
+    def test_s1_rules_cite_adr_in_mapping(self):
+        self.write_decisions(kind='S1', bg='other/04_rules.md R09；leave-backfill/04_rules.md R01～R02')
+        self.write_mapping(rules='| R01 | service | 跨表檢查 |\n')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('R01 在 ADR-001（S1）裡', out)
+        self.assertIn('第三區沒有 R02', out)
+        self.assertNotIn('R09', out.split('[架構決定]')[1].split('\n[')[0])
+        self.write_mapping(rules='| R01、R02 | service | 交易中先鎖同一人（ADR-001） |\n')
+        code, out = self.lint()
+        section = out.split('[架構決定]')[1].split('\n[')[0]
+        self.assertNotIn('✗', section, out)
+        self.write_mapping(status='已凍結', rules='| R01 | service | 跨表檢查 |\n')
+        code, out = self.lint()
+        self.assertNotIn('R01 在 ADR-001（S1）裡', out)
 
     def test_architecture_record_passes(self):
         self.write_decisions()

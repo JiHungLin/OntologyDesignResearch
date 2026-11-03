@@ -27,7 +27,7 @@
 |---|---|---|---|
 
 ## 三、規則 → 落實位置
-<!-- db constraint／db trigger／service／人工 -->
+<!-- db constraint／db trigger／service／人工。S1 的 ADR 列到的規則，「說明」寫靠什麼防同時送出並引用 ADR 編號（docs/02 ⑤） -->
 
 | 規則 | 落實位置 | 說明 |
 |---|---|---|
