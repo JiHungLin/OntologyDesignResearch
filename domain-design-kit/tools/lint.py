@@ -979,7 +979,7 @@ class Lint:
                     self.check_golden_ask(rel, gc)
             for gc in r['cases']:
                 for k in ('預期結果', '計算過程', '計算者'):
-                    if not gc['fields'].get(k, (0, ''))[1]:
+                    if not self.case_value(gc, k):
                         unanswered.append(f"{rel}:{gc['no']} {gc['id']} 的「{k}」"); break
             self.check_case_copies(rel, r)
             # 自評「部分」或 ✗ 的完成標準要在審查頁
@@ -1034,17 +1034,31 @@ class Lint:
                     self.red('審查頁', f"{rel}:{ln} {gc['id']} 的「{k}」寫了 {m.group(1)}：情境與要得出用白話，編號放在「驗證」")
                     break
 
+    @staticmethod
+    def case_value(gc, k):
+        """審查頁黃金案例一個欄位的內容：同一行的值加上底下縮排的子項（計算過程常分好幾行寫）。"""
+        head = gc['fields'].get(k, (0, ''))[1]
+        return '\n'.join([head] * bool(head) + [t for _, t in gc['items'].get(k, [])])
+
     def check_case_copies(self, rel, r):
         path = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
         if not r['cases'] or not os.path.exists(path): return
-        gold, cur = {}, None
+        gold, cur, key = {}, None, None
         for no, h2, h3, line in mb.Doc(path).items:
-            if h3 is None and h2 and re.match(r'GC\d+', h2): cur = h2.split()[0]; gold[cur] = {}
-            m = re.match(r'^- (預期結果|計算過程|計算者)[：:]\s*(.*)$', line or '')
-            if cur and m: gold[cur][m.group(1)] = m.group(2).strip()
+            gid = h2.split()[0] if h3 is None and h2 and re.match(r'GC\d+', h2) else None
+            if gid != cur: cur, key = gid, None     # 換到下一個案例才重來（原本每一行都清空，永遠比對不上）
+            if cur is None: continue
+            gold.setdefault(cur, {})
+            m = re.match(r'^- ([^：:]+)[：:]\s*(.*)$', line or '')
+            if m:
+                key = m.group(1) if m.group(1) in ('預期結果', '計算過程', '計算者') else None
+                if key: gold[cur][key] = m.group(2).strip()
+                continue
+            sub = re.match(r'^\s+- (.*)$', line or '')
+            if key and sub: gold[cur][key] = (gold[cur][key] + '\n' + sub.group(1).strip()).strip()
         for gc in r['cases']:
             for k in ('預期結果', '計算過程', '計算者'):
-                v = gc['fields'].get(k, (0, ''))[1]
+                v = self.case_value(gc, k)
                 if not v: continue
                 g = gold.get(gc['id'], {}).get(k, '')
                 if re.sub(r'\s+', '', g) != re.sub(r'\s+', '', v):
