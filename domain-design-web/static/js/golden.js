@@ -16,7 +16,7 @@ export function askOfCase(c) {
 export function askHtml(ask) {
   const m = ask.match(/^(\d+)\s*筆[（(]([\s\S]+)[）)]$/);
   const items = m ? m[2].split('；').map(x => ({ no: '', text: x.trim() })) : askParts(ask);
-  return `${m ? `<p style="margin:0 0 4px"><b>共 ${m[1]} 筆</b></p>` : ''}<ul class="ask-list">${items.map(a => `<li>${a.no ? `<span class="no">${a.no}</span>` : ''}<span>${inline(a.text)}</span></li>`).join('')}</ul>`;
+  return `${m ? `<p style="margin:0 0 4px"><b>共 ${m[1]} 項</b></p>` : ''}<ul class="ask-list">${items.map(a => `<li>${a.no ? `<span class="no">${a.no}</span>` : ''}<span>${inline(a.text)}</span></li>`).join('')}</ul>`;
 }
 
 // 提示卡：輸入欄是縮排的條列（每行「- …」）就一行一點；舊格式用「；」分
@@ -41,7 +41,7 @@ export function timelineOf(c) {
   };
   let evs = build(pick('情境'));
   if (evs.length < 2) evs = build(pick('情境') + '；' + pick('輸入'));
-  // 「要回答」問到的日期標成「你來算」
+  // 「要回答」問到的日期標成「你來判斷」
   for (const a of askParts(pick('要回答'))) {
     for (const d of a.text.match(/\d{4}-\d{2}-\d{2}/g) || []) {
       let e = evs.find(x => x.date === d);
@@ -76,7 +76,7 @@ export async function renderGolden(path, i) {
   setTop([`#/s/${enc(r.slice)}`, '關卡'], progressSegs(cs, i, x => !caseOpen(x), k => `#/r/${p}/golden/${k}`) + `<span class="count">案例 ${i + 1} / ${cs.length}</span>`);
   const f = k => (c.fields[k] || {}).value || '';
   const evs = timelineOf(c);
-  const askChip = e => e.ask ? `<span class="chip turn">你來算 ${[...new Set(e.ask)].join('')}</span>` : '';
+  const askChip = e => e.ask ? `<span class="chip turn">你來判斷 ${[...new Set(e.ask)].join('')}</span>` : '';
   const tl = evs.length > 1 ? `
     <section class="card timeline">
       <div class="tl-wrap"><div class="tl"><div class="axis"></div>${evs.map((e, k) => `
@@ -97,13 +97,13 @@ export async function renderGolden(path, i) {
     <div class="cols">
       <section class="wide">
         <div class="card"><div class="label">情境</div>${inline(askOfCase(c).scene)}</div>
-        <div class="card"><div class="label">要你算</div>${askOfCase(c).ask ? askHtml(askOfCase(c).ask)
-          : '<p class="muted" style="margin:0">審查頁沒有寫要算什麼：照情境與右邊的提示卡算出結果，一行寫一個。</p>'}
-          <p class="small muted" style="margin:6px 0 0">把結果填在下面「預期結果」，算法寫在「計算過程」。</p></div>
+        <div class="card"><div class="label">要你得出的結果</div>${askOfCase(c).ask ? askHtml(askOfCase(c).ask)
+          : '<p class="muted" style="margin:0">審查頁沒有寫要得出什麼：照情境與右邊的提示卡，寫出這個情境走完的結果（數字、日期、會不會被擋下、變成什麼狀態……），一行寫一個。</p>'}
+          <p class="small muted" style="margin:6px 0 0">可能是數字，也可能是判斷（例：會不會被擋下、用哪一年度、變成什麼狀態）。把結果填在下面「預期結果」，怎麼得出的寫在「計算過程」。</p></div>
         <div class="card" style="display:flex;flex-direction:column;gap:10px">
           <label class="label" for="g_exp" style="color:var(--ink);font-size:17px">你的答案（預期結果）</label>
-          <textarea id="g_exp" rows="5" placeholder="一行寫一個結果（要算幾筆就寫幾行），單位要寫">${esc(f('預期結果'))}</textarea>
-          <label class="label" for="g_how" style="color:var(--ink)">怎麼算的（計算過程，附依據）</label>
+          <textarea id="g_exp" rows="5" placeholder="一行寫一個結果（上面列了幾項就寫幾行）；數字要寫單位">${esc(f('預期結果'))}</textarea>
+          <label class="label" for="g_how" style="color:var(--ink)">怎麼得出的（計算過程，附依據）</label>
           <textarea id="g_how" class="soft" rows="4">${esc(f('計算過程'))}</textarea>
           <label class="label" for="g_who" style="color:var(--ink)">計算者</label>
           <input type="text" id="g_who" class="soft" value="${esc(f('計算者') || name)}" placeholder="你的名字（不能是 AI）">
