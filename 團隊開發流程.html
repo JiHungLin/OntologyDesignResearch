@@ -141,7 +141,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
   <p class="lede">六步是每條情境切片都要走的。在第一條切片之前，先為整個 domain 畫一版草圖：它就是一次粗略的 ①②，順序同樣是先蒐集現實、再切情境、再列名詞。使用者不需要事先知道切片怎麼切，由 AI 和人一起討論出來。</p>
   <div class="grid2">
     <div class="pr"><span class="k">1</span><p><strong>盤點現實資料。</strong>AI 先列出這個領域通常有哪些資料（表單、規章、法規、常出問題的案例），標出已有、待提供、找不到。</p></div>
-    <div class="pr"><span class="k">2</span><p><strong>切片地圖（slices/PLAN.md）。</strong>有哪些情境（起點 → 可驗證的結果）、屬於哪個領域、依賴與建議順序；第一條選正常流程，用來建立共用核心。</p></div>
+    <div class="pr"><span class="k">2</span><p><strong>切片地圖（slices/PLAN.md）。</strong>有哪些情境（起點 → 可驗證的結果）、屬於哪個領域、依賴與建議順序；第一條選正常流程，用來建立共用核心。整體目標一定要問部署形態（地端、雲端或混合）與規模、尖峰，不知道寫「未定」；地圖同意後做架構初判。</p></div>
     <div class="pr"><span class="k">3</span><p><strong>全局名詞草圖（slices/ENTITY_SKETCH.md）。</strong>所有切片會用到的名詞、預計由哪條切片正式定義。只是參考，正式定義在每條切片的第 ② 步。</p></div>
     <div class="pr"><span class="k">4</span><p><strong>人同意後才開始第一條。</strong>地圖、草圖由人明確同意；它們引用的推想草稿都要先被接受為假設。</p></div>
   </div>
@@ -230,7 +230,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
     <div class="row" role="row">
       <div class="name"><span>⑤</span>投影到實作</div>
       <div><div class="lbl">交付物</div>對照表六區：概念→表與欄位、事件→API（其他切片的事件要觸發本切片時，列出連鎖，凍結時記到共用核心的事件上）、規則→落實位置、推導值與歷史需求→資料身分與保存方式、技術欄位、Use Case 走一遍；AI 依此與平台約定產生 schema 與 API（請求與回應寫到欄位層級）<div class="files"><span class="file">05_mapping.md</span><span class="file">schema.sql</span><span class="file">api.yaml</span></div></div>
-      <div><div class="lbl">關卡</div><ul><li>每張業務表、每支 API 指得回概念；技術欄位與平台表標明「技術」即可</li><li>推導值已決定身分、歷史需求已決定保存方式；動作與規則都有落實位置（依平台約定）</li><li>每個正式 Use Case 照步驟走一遍 API：每一步的輸入都拿得到（例：建立的項目有回傳編號）</li><li>紙上驗證（預設）：人工算好的黃金案例，照設計推演一遍，結果一致；先列出「結果判定或交出之後才到的輸入」，每一種都有案例或沒挑的理由（試用中）</li></ul></div>
+      <div><div class="lbl">關卡</div><ul><li>開始前：架構決策關卡（平台第一次做 ⑤：依《架構決策指南》從 ②③④ 讀訊號，寫 ADR 給架構負責人同意）或訊號複查（之後每條）；凍結時判斷要不要把做法提升到架構決定紀錄（試用中）</li><li>每張業務表、每支 API 指得回概念；技術欄位與平台表標明「技術」即可</li><li>推導值已決定身分、歷史需求已決定保存方式；動作與規則都有落實位置（依平台約定）</li><li>每個正式 Use Case 照步驟走一遍 API：每一步的輸入都拿得到（例：建立的項目有回傳編號）</li><li>紙上驗證（預設）：人工算好的黃金案例，照設計推演一遍，結果一致；先列出「結果判定或交出之後才到的輸入」，每一種都有案例或沒挑的理由（試用中）</li></ul></div>
     </div>
 
     <div class="row" role="row">
@@ -336,7 +336,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
 
 <section aria-labelledby="platform">
   <h2 id="platform">平台架構約定（決定一次，各 domain 依循）</h2>
-  <p class="note">以下不屬於 domain 設計，由平台統一決定（平台＝一個產品，目前每個 domain repo 各一個）；現況由架構負責人在《平台架構約定.md》填寫，P13 的目標值由平台負責人填（兩個角色見精簡版 0.5）。</p>
+  <p class="note">以下不屬於 domain 設計，由平台統一決定（平台＝一個產品，目前每個 domain repo 各一個）；約定本身是約束與選項；每個平台的現況、選型（資料庫、交易邊界、同步或非同步、部署單元、分層）與跨切片沿用的做法，寫在該 domain repo 的架構決定紀錄 <code>architecture/DECISIONS.md</code>（ADR），由架構負責人同意，P13 的目標值由平台負責人定（兩個角色見精簡版 0.5）。選型的判斷方法見《架構決策指南》。</p>
   <div class="tbl">
     <table>
       <thead><tr><th>約定</th><th>內容</th></tr></thead>
