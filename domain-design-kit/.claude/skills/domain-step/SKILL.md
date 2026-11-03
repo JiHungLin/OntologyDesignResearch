@@ -86,7 +86,7 @@ argument-hint: "<1-6> [切片代號]"
 | ② | `01_scope.md`、`core/`、`slices/ENTITY_SKETCH.md` | `02_entities.md`；必要時更新 `slices/ENTITY_SKETCH.md` | 本體懷疑者 |
 | ③ | `01_scope.md`、`02_entities.md` | `03_flows.md`、`03_use_cases.md` | 時間與帳務、隱私與濫用、實作者 |
 | ④ | `02_entities.md`、`03_flows.md`、`03_use_cases.md`、`inputs/` 的法規與政策原文 | `04_rules.md`；回填 `03_flows.md`、`03_use_cases.md` | 領域實務、時間與帳務、實作者 |
-| ⑤ | 已凍結的 ②③④、`docs/03` | `05_mapping.md`、`schema.sql`、`api.yaml` | 隱私與濫用、實作者 |
+| ⑤ | 已凍結的 ②③④、`docs/03`、`architecture/DECISIONS.md` | `05_mapping.md`、`schema.sql`、`api.yaml` | 隱私與濫用、實作者 |
 | ⑥ | `01_scope.md`、`03_use_cases.md`、`04_rules.md`、`02_entities.md`、`05_mapping.md`、實作 | `06_evidence/` | 領域實務 |
 
 ### ① 範圍與驗收問題
@@ -126,6 +126,8 @@ argument-hint: "<1-6> [切片代號]"
 - 回填 `03_flows.md` 狀態轉換的「規則」欄與 `03_use_cases.md` 的「規則」，並在「回填紀錄」列出。被回填的檔案若已凍結，記 CHANGELOG。
 
 ### ⑤ 投影到實作
+- **開始前先做 `/domain-arch`**（`docs/01` ⑤，先試用）：紀錄中還沒有「採用」的選型 → 架構決策關卡；已經有 → 訊號複查。做完、而且 ⑤ 要用的 ADR 沒有「待確認」，才開始。開頭區「讀取的輸入」寫 `architecture/DECISIONS.md @ <commit>`。
+- 資料庫、交易邊界、同步或非同步、分層照紀錄的 ADR，不在 ⑤ 另選；照紀錄的「應用架構約定」，不沿用時在「決定與理由」寫理由與 ADR 編號。紀錄沒有、又會被其他切片沿用的做法，照常寫進「決定與理由」，凍結時由 `/domain-arch 提升` 判斷。
 - 依 `docs/03` 平台約定。**先只產出 `05_mapping.md`，停下來請人確認對照表**；人確認後，再依對照表產生 `schema.sql` 與 `api.yaml`（`docs/01` ⑤ 的提示範本）。這些都是設計文件，不建立實際的資料庫或服務。
 - 每張業務表、每個業務欄位、每支 API 都要在對照表；技術欄位標 `[技術]`。
 - ②③④「反例處理」中理由為「技術措施，留給第 ⑤ 步」的反例，在這一步處理：寫進對照表或「決定與理由」，不適用的寫理由。
