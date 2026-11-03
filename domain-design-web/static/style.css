@@ -17,7 +17,7 @@
 .side-nav { scrollbar-gutter: stable; }
 .side-nav::-webkit-scrollbar { width: 8px; }
 * { box-sizing: border-box; }
-.core-view [hidden] { display: none !important; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans TC', system-ui, sans-serif; font-size: 16px; line-height: 1.75; }
 a { color: #4A2FE0; }
@@ -548,7 +548,6 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
 .rule-card dl.kv { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; }
 .rule-card dl.kv dt { color: var(--muted); font-weight: 700; }
 .rule-card dl.kv dd { margin: 0; }
-.core-view [hidden] { display: none !important; }
 .core-view .diagram svg { max-width: none; margin: 0; }
 .core-view .model-split { grid-template-columns: minmax(0, 1.3fr) minmax(360px, 1fr); }
 .core-filter input[type=search] { font: inherit; font-size: 15px; padding: 8px 14px; border: 2px solid var(--ink); border-radius: 12px; background: var(--card); }
