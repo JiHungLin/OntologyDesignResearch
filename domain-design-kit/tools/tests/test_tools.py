@@ -2,7 +2,7 @@
 """工具測試：python3 tools/tests/test_tools.py
 用 tools/tests/fixture/（範例切片 leave-backfill）當測試資料：原樣要全部通過；
 每個測試改壞一處，確認工具抓得到。"""
-import os, shutil, subprocess, sys, tempfile, unittest
+import os, re, shutil, subprocess, sys, tempfile, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.dirname(HERE)
@@ -508,6 +508,59 @@ class TestLint(Base):
         self.write(self.slice_file('api.yaml'), api + '  bad: [\n')
         code, out = self.lint()
         self.assertIn('不是合法的 YAML', out)
+
+    # ---------- ⑥ 執行紀錄與審查頁（2026-11-04） ----------
+    def run_evidence(self, name, *cmd, cwd=None):
+        env = dict(os.environ, DESIGN_REPO=self.dir)
+        p = subprocess.run([sys.executable, os.path.join(TOOLS, 'run_evidence.py'), SLICE, name, '--', *cmd],
+                           cwd=cwd or self.dir, capture_output=True, text=True, env=env)
+        return p.returncode, p.stdout + p.stderr
+
+    def test_run_evidence_writes_log(self):
+        code, out = self.run_evidence('golden', sys.executable, '-c', 'print("GC01 1.491"); raise SystemExit(3)')
+        self.assertEqual(code, 3, out)
+        rel = re.search(r'執行紀錄：(06_evidence/results/\S+\.log)', out).group(1)
+        log = open(os.path.join(self.dir, self.slice_file(rel)), encoding='utf-8').read()
+        self.assertTrue(log.startswith('# 執行紀錄（tools/run_evidence.py 產生，不手改）'), log)
+        self.assertIn('- 結束碼：3', log)
+        self.assertIn('GC01 1.491', log)
+        self.assertIn('- 實作版本：', log)
+        code, out = self.run_evidence('Bad Name', 'true')
+        self.assertNotEqual(code, 0)
+        self.assertIn('名稱只用英文小寫', out)
+
+    def setup_evidence(self, header='# 執行紀錄（tools/run_evidence.py 產生，不手改）', ver='impl @ abc1234（有未 commit 的修改：否）',
+                       want='abc1234', cite='（results/2026-11-05_101500_golden.log:12）'):
+        self.write(self.slice_file('reviews/2026-11-05_06.md'), '# 審查頁\n')
+        self.write(self.slice_file('06_evidence/results/2026-11-05_101500_golden.log'),
+                   f'{header}\n- 切片：{SLICE}\n- 名稱：golden\n- 指令：pytest\n- 執行目錄：/x\n- 實作版本：{ver}\n\n## 輸出\nGC01 6 日\n')
+        self.write(self.slice_file('06_evidence/signoff.md'), f'# signoff\n\n- 實作版本：impl @ {want}（對應設計 tag：…）\n')
+        gc = self.GC.format('一致', '通過').replace('- 判定：通過', f'- 系統結果：6 日{cite}\n- 判定：通過').replace('| GC02 |  |', '| GC01 | |')
+        self.write(self.slice_file('06_evidence/golden_cases.md'), gc)
+        code, out = self.lint()
+        return out.split('[執行紀錄]')[1].split('\n[')[0]
+
+    def test_evidence_log_citations(self):
+        self.assertNotIn('✗', self.setup_evidence())
+        self.assertIn('沒有寫依據的 log 位置', self.setup_evidence(cite=''))
+        self.assertIn('不是 tools/run_evidence.py 產生的', self.setup_evidence(header='# 我自己寫的'))
+        self.assertIn('有未 commit 的修改時跑的', self.setup_evidence(ver='impl @ abc1234（有未 commit 的修改：是）'))
+        self.assertIn('和 signoff.md 的 def5678 不同', self.setup_evidence(want='def5678'))
+
+    def test_evidence_skipped_without_step6_review(self):
+        code, out = self.lint()
+        self.assertIn('沒有 ⑥ 的審查頁', out.split('[執行紀錄]')[1].split('\n[')[0])
+
+    def test_executor_is_not_signer(self):
+        self.setup_review(verdict='')
+        rv = self.slice_file('reviews/2026-10-27_03.md')
+        text = open(os.path.join(self.dir, rv), encoding='utf-8').read()
+        text = text.replace('| 步驟 | 審查者（非產出者） | 日期 | 結論 |\n|---|---|---|---|\n| ③ |  |  |  |',
+                            '| 步驟 | 執行者 | 審查者（非產出者） | 日期 | 結論 |\n|---|---|---|---|---|\n| ③ | 甲 | 甲 | 2026-11-05 | 通過 |')
+        self.assertIn('| ③ | 甲 | 甲 |', text)
+        self.write(rv, text)
+        code, out = self.lint()
+        self.assertIn('執行者和審查者（簽核者）是同一人「甲」', out)
 
     def test_review_lists_partial_self_check(self):
         self.setup_review(look='更正方式')

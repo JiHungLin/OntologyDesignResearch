@@ -17,6 +17,8 @@ STEP_FILES = {2: '02_entities.md', 3: '03_flows.md', 4: '04_rules.md'}
 EXAMPLE_SINCE = '2026-10-28'   # 審查頁問題要有「例子」、選項要有「→」的起始日（之前的審查頁不回頭補）
 GOLDEN_ASK_SINCE = '2026-11-04'   # 黃金案例要有逐項的「要得出」的起始日（docs/02 ⑥，先試用）
 CODE_REF = re.compile(r'(?<![A-Za-z])(R\d{2,}|D-\d+|X-\d+)(?!\d)')
+SIGNOFF = '06_evidence/signoff.md'
+EVIDENCE_HEADER = '# 執行紀錄（tools/run_evidence.py 產生，不手改）'
 ALL_FILES = ['01_scope.md', '02_entities.md', '03_flows.md', '03_use_cases.md', '04_rules.md', '05_mapping.md']
 HISTORY_H2 = {'決定與理由', '檢查紀錄', '回填紀錄'}
 HISTORY_H3 = {'反例處理', '六問判斷紀錄'}
@@ -57,6 +59,8 @@ class Lint:
         self.dir = os.path.join(root, 'slices', slice_name)
         self.docs = {f: mb.Doc(os.path.join(self.dir, f)) for f in ALL_FILES
                      if os.path.exists(os.path.join(self.dir, f))}
+        so = os.path.join(self.dir, SIGNOFF)       # ⑥ 只在審查頁相關的檢查用，不混進 ①～⑤ 的內容檢查
+        self.signoff = mb.Doc(so) if os.path.exists(so) else None
         self.data = mb.build(root, slice_name)
         self.parse_problems = list(mb.problems)
         self.fails, self.skipped = [], []
@@ -847,12 +851,16 @@ class Lint:
 
 
     # ---------- 2026-10-27 新增（流程待處理清單 #19～#38） ----------
-    STEP_OF = {'01_scope.md': 1, '02_entities.md': 2, '03_flows.md': 3, '04_rules.md': 4, '05_mapping.md': 5}
+    STEP_OF = {'01_scope.md': 1, '02_entities.md': 2, '03_flows.md': 3, '04_rules.md': 4, '05_mapping.md': 5, SIGNOFF: 6}
+
+    def step_doc(self, f):
+        return self.signoff if f == SIGNOFF else self.docs[f]
 
     def review_refs(self):
         """各步檔案檢查紀錄的「審查頁」行：{檔名: (行號, [reviews/…])}；沒有這一行的是舊格式，不列入。"""
         out = {}
-        for f, d in self.docs.items():
+        docs = list(self.docs.items()) + ([(SIGNOFF, self.signoff)] if self.signoff else [])
+        for f, d in docs:
             if f not in self.STEP_OF: continue
             for no, h2, h3, line in d.items:
                 m = re.match(r'^- 審查頁[：:]\s*(.*)$', line or '')
@@ -926,7 +934,7 @@ class Lint:
         n = 0
         pending = {}                                      # 審查頁 → [送審中的步驟檔]
         for f, (no, paths) in refs.items():
-            status = self.doc_status(self.docs[f])
+            status = self.doc_status(self.step_doc(f))
             if status != '待檢查': continue
             n += 1
             if not paths:
@@ -968,6 +976,9 @@ class Lint:
             elif not any(c[0].strip() for no, c in r['spot']):
                 unanswered.append(f"{rel} 抽查")
             for no, c in r['verdicts']:
+                who = next((c[k].strip() for k in c if k.startswith('審查者')), '')
+                if c.get('執行者', '').strip() and who and c['執行者'].strip() == who:
+                    self.red('審查頁', f"{rel}:{no} {c['步驟']} 的執行者和審查者（簽核者）是同一人「{who}」")
                 miss = [k for k in c if k != '步驟' and not c[k].strip()]
                 if miss: unanswered.append(f"{rel}:{no} 結論（{c['步驟']}）")
                 elif self.freeze and not c.get('結論', '').strip().startswith('通過'):
@@ -984,7 +995,7 @@ class Lint:
             self.check_case_copies(rel, r)
             # 自評「部分」或 ✗ 的完成標準要在審查頁
             for f in files:
-                for h2, h3, header, rows in self.docs[f].tables():
+                for h2, h3, header, rows in self.step_doc(f).tables():
                     k = mb.col(header, 'AI 自評')
                     if h2 != '檢查紀錄' or k is None: continue
                     for no, c in rows:
@@ -999,7 +1010,7 @@ class Lint:
 
     def check_excerpt(self, rel, no, c):
         where, quote = c.get('在哪裡', ''), c.get('原文', '')
-        m = re.search(r'([\w./-]+\.(?:md|yaml|sql)):(\d+)', where)
+        m = re.search(r'([\w./-]+\.(?:md|yaml|sql|log)):(\d+)', where)
         if not m:
             self.red('審查頁', f"{rel}:{no} 「在哪裡」要寫 `檔名:行號`（現在是「{where}」）"); return
         frags = [x for part in re.findall(r'「([^」]*)」', quote) for x in part.split('…') if len(x.strip()) >= 2]
@@ -1069,6 +1080,7 @@ class Lint:
         refs = self.review_refs()
         n = 0
         for f, (no, paths) in refs.items():
+            if f == SIGNOFF: continue                      # ⑥ 沒有挑錯
             d = self.docs[f]
             if self.doc_status(d) != '待檢查': continue
             n += 1
@@ -1227,6 +1239,61 @@ class Lint:
                 break
         return status, inputs
 
+    def check_evidence(self):
+        """⑥ 審查頁（2026-11-04 起）存在時：系統結果與回答表的「結果」寫 log 位置，log 是 run_evidence.py 產生、版本和 signoff.md 相同。"""
+        print("\n[執行紀錄] ⑥ 的系統結果與回答表寫出 results/…log 位置；log 是 tools/run_evidence.py 產生的、"
+              "沒有未 commit 的修改、實作版本和 signoff.md 相同")
+        rdir = os.path.join(self.dir, 'reviews')
+        if not (os.path.isdir(rdir) and any(re.match(r'\d{4}-\d{2}-\d{2}_06(-\d)?\.md$', n) for n in os.listdir(rdir))):
+            return self.done('執行紀錄', 0, '', skipped='沒有 ⑥ 的審查頁（2026-11-04 起的新做法）')
+        want = None
+        if self.signoff:
+            for no, h2, h3, line in self.signoff.items:
+                m = re.match(r'^- 實作版本[：:].*@\s*([0-9a-f]{7,40})', line or '')
+                if m: want = m.group(1)
+        cites = []                                    # (出處, 值)
+        gpath = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
+        if os.path.exists(gpath):
+            cur, seen = None, None
+            for no, h2, h3, line in mb.Doc(gpath).items:
+                gid = h2.split()[0] if h3 is None and h2 and re.match(r'GC\d+', h2) else None
+                if gid != seen: seen, cur = gid, ({'id': gid} if gid else None)   # 換案例才重來
+                m = re.match(r'^- (系統結果|判定)[：:]\s*(.*)$', line or '')
+                if cur is not None and m: cur[m.group(1)] = (no, m.group(2).strip())
+                if cur and '系統結果' in cur and '判定' in cur:
+                    v = cur['系統結果'][1]
+                    if not cur['判定'][1].startswith('不採用') and v and not v.startswith(('[未執行]', '（')):
+                        cites.append((f"06_evidence/golden_cases.md:{cur['系統結果'][0]} {cur['id']} 的系統結果", v))
+                    cur = None
+        apath = os.path.join(self.dir, '06_evidence', 'answers.md')
+        if os.path.exists(apath):
+            for h2, h3, header, rows in mb.Doc(apath).tables():
+                k, j = mb.col(header, '結果'), mb.col(header, '判定')
+                if k is None: continue
+                for no, c in rows:
+                    if c[k].strip() and not c[k].strip().startswith('[未執行]') and not (j is not None and c[j].strip().startswith('[未執行]')):
+                        cites.append((f"06_evidence/answers.md:{no} {c[0]} 的結果", c[k]))
+        n = 0
+        for where, v in cites:
+            n += 1
+            logs = re.findall(r'(results/[\w.-]+\.log)(?::\d+)?', v)
+            if not logs:
+                self.red('執行紀錄', f"{where} 沒有寫依據的 log 位置（results/<檔名>.log:行號）"); continue
+            for rel in logs:
+                path = os.path.join(self.dir, '06_evidence', rel)
+                if not os.path.exists(path):
+                    self.red('執行紀錄', f"{where} 的 {rel} 不存在"); continue
+                head = open(path, encoding='utf-8').read(2000).split('\n')
+                if head[0].strip() != EVIDENCE_HEADER:
+                    self.red('執行紀錄', f"06_evidence/{rel} 不是 tools/run_evidence.py 產生的（第一行不是執行紀錄的檔頭）"); continue
+                ver = next((l for l in head if l.startswith('- 實作版本：')), '')
+                if '有未 commit 的修改：是' in ver:
+                    self.red('執行紀錄', f"06_evidence/{rel} 是在有未 commit 的修改時跑的，不能當簽核依據；commit 後重跑")
+                m = re.search(r'@\s*([0-9a-f]{7,40})', ver)
+                if want and m and not (want.startswith(m.group(1)) or m.group(1).startswith(want)):
+                    self.red('執行紀錄', f"06_evidence/{rel} 的實作版本 {m.group(1)} 和 signoff.md 的 {want} 不同；改了程式要重跑")
+        self.done('執行紀錄', n, '個引用 log 的結果')
+
     def check_api(self):
         """⑤ 的 api.yaml：讀得進來，$ref 都指得到（AI 不必自己寫 python 驗證，網頁也會擋）。"""
         print("\n[API] api.yaml 讀得進來；每個 $ref 都指得到（同檔的 #/…，或同資料夾的其他檔案）")
@@ -1373,7 +1440,7 @@ class Lint:
         self.check_tables(); self.check_placeholders(); self.check_eq_impact(); self.check_out_of_scope()
         self.check_golden(); self.check_late_inputs(); self.check_param_storage(); self.check_chain(); self.check_core_prefix(); self.check_referenced_by()
         self.check_reviews(); self.check_challenge(); self.check_golden_selfcontained(); self.check_user_agreement()
-        self.check_cross_refs(); self.check_requests(); self.check_architecture(); self.check_api()
+        self.check_cross_refs(); self.check_requests(); self.check_architecture(); self.check_api(); self.check_evidence()
         self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")
