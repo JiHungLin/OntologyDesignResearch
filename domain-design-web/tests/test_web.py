@@ -482,3 +482,13 @@ def test_approvals(repo, client, tmp_path):
     assert _json.loads(hp.stdout)['hookSpecificOutput']['permissionDecision'] == 'ask'
     cmd = sessions._command(dict(s, turns=0, name='n'), 'hi')
     assert cmd[cmd.index('--permission-prompt-tool') + 1] == 'mcp__web__approve'
+
+
+def test_executor_cell(tmp_path):
+    # ⑥ 的結論表多一欄「執行者」，簽名時和審查者、日期、結論一起寫回（docs/02「第 ⑥ 步的審查頁」）
+    p = tmp_path / 'r.md'
+    p.write_text('# r\n\n## 結論\n\n| 步驟 | 執行者 | 審查者（非產出者） | 日期 | 結論 |\n|---|---|---|---|---|\n| ⑥ | | | | |\n', encoding='utf-8')
+    review.set_cells(str(p), 7, {'執行者': '甲', '審查者（非產出者）': '乙', '日期': '2026-11-05', '結論': '通過'})
+    assert '| ⑥ | 甲 | 乙 | 2026-11-05 | 通過 |' in p.read_text(encoding='utf-8')
+    with pytest.raises(ValueError):
+        review.set_cells(str(p), 7, {'步驟': '⑤'})
