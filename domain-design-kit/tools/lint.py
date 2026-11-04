@@ -853,6 +853,7 @@ class Lint:
 
     # ---------- 2026-10-27 新增（流程待處理清單 #19～#38） ----------
     STEP_OF = {'01_scope.md': 1, '02_entities.md': 2, '03_flows.md': 3, '04_rules.md': 4, '05_mapping.md': 5, SIGNOFF: 6}
+    ANGLES = ('本體懷疑者', '領域實務', '時間與帳務', '隱私與濫用', '實作者')   # docs/01 0.5 挑錯角度（關卡判定由人擔任，不是 AI 挑錯）
 
     def step_doc(self, f):
         return self.signoff if f == SIGNOFF else self.docs[f]
@@ -873,7 +874,7 @@ class Lint:
     def parse_review(path):
         """審查頁：問題、確認列、抽查、結論、黃金案例、這輪的挑錯。"""
         lines = open(path, encoding='utf-8').read().split('\n')
-        r = {'questions': [], 'confirms': [], 'spot': None, 'verdicts': [], 'cases': [], 'x_ids': [], 'lines': lines}
+        r = {'questions': [], 'confirms': [], 'spot': None, 'verdicts': [], 'cases': [], 'x_ids': [], 'x_by_step': {}, 'lines': lines}
         h2 = h3 = None
         inside = False
         for i, l in enumerate(lines, 1):
@@ -908,7 +909,11 @@ class Lint:
         for h2_, h3_, header, rows in mb.Doc(path).tables():
             if header[:2] == ['項目', '內容']:
                 for no, c in rows:
-                    if c[0] == '這輪的挑錯': r['x_ids'] = Lint.expand_ids(c[1])
+                    if c[0] == '這輪的挑錯':
+                        r['x_ids'] = Lint.expand_ids(c[1])
+                        for seg in re.split(r'[；;]', c[1]):
+                            m = re.match(r'\s*([①②③④⑤⑥])', seg)
+                            if m: r['x_by_step'].setdefault('①②③④⑤⑥'.index(m.group(1)) + 1, []).extend(Lint.expand_ids(seg))
             elif '原文' in header and '在哪裡' in header and '確認' in header:
                 r['confirms'] += [(no, dict(zip(header, c))) for no, c in rows]
             elif header[:1] == ['抽查了哪幾條']:
@@ -1089,20 +1094,29 @@ class Lint:
             d = self.docs[f]
             if self.doc_status(d) != '待檢查': continue
             n += 1
-            xs, ai = set(), 0
+            xs, ai, src = set(), 0, {}
             for h2, h3, header, rows in d.tables():
                 if h3 == '反例處理' and header[:2] == ['#', '反例']:
                     k = mb.col(header, '來源')
                     for rno, c in rows:
                         xs.add(c[0].strip())
-                        if k is not None and c[k].strip().startswith('AI 挑錯'): ai += 1
+                        if k is not None:
+                            src[c[0].strip()] = (rno, c[k].strip())
+                            if c[k].strip().startswith('AI 挑錯'): ai += 1
             if not ai:
                 self.red('挑錯', f"{f} 送審了，「反例處理」沒有來源為「AI 挑錯」的反例（docs/01 該步完成標準）")
             if paths and os.path.exists(os.path.join(self.dir, paths[-1])):
-                listed = self.parse_review(os.path.join(self.dir, paths[-1]))['x_ids']
-                for x in listed:
+                review = self.parse_review(os.path.join(self.dir, paths[-1]))
+                for x in review['x_ids']:
                     if not any(x in self.x_ids(g) for g in self.docs if g in self.STEP_OF):
                         self.red('挑錯', f"{paths[-1]}「這輪的挑錯」的 {x} 不在任何一步的「反例處理」"); break
+                # 這輪新增、來源是 AI 挑錯的反例要寫角度（2026-11-04 T27：成效要分角度數；舊反例不檢查）
+                for x in review['x_by_step'].get(self.STEP_OF[f], []):
+                    rno, s = src.get(x, (None, ''))
+                    m = re.match(r'^AI 挑錯\s*(?:[（(]([^）)]*)[）)])?', s)
+                    if m and (m.group(1) or '').strip() not in self.ANGLES:
+                        self.red('挑錯', f"{f}:{rno} {x} 的來源「{s}」沒有寫挑錯角度（{'、'.join(self.ANGLES)}之一，"
+                                         f"例：AI 挑錯（隱私與濫用）；docs/01 0.5、docs/02 反例處理）")
         self.done('挑錯', n, '個送審的交付物', skipped=None if n else ('沒有送審中的新格式交付物' if refs else None))
 
     def x_ids(self, f):
