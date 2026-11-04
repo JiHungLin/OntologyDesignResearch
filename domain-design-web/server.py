@@ -231,6 +231,19 @@ def _spot_items(r, p):
         for c, nums in re.findall(r'([①-⑥])\s*第\s*([\d、，, ]+)\s*條', hint):
             n = '①②③④⑤⑥'.index(c) + 1
             groups.append((c, files[n], nums))
+    if not groups and '：' in hint:
+        # AI 沒照格式、直接寫完成標準的文字（「signoff.md『完成標準』中——每筆黃金案例…；每條 P0…」）：
+        # 用文字比對這一輪各步的完成標準，找回是第幾條
+        norm = lambda t: re.sub(r'[\s`「」『』（）()，、。；：:—-]', '', re.sub(r'（[^）]*）|\([^)]*\)', '', t))   # 括號裡的例子常被省略
+        frags = [norm(x) for x in re.split(r'[；;]', hint.split('：', 1)[1].split('——')[-1]) if len(norm(x)) >= 6]
+        steps = _review_steps((REVIEW_NAME.match(os.path.basename(p)) or [None, None, ''])[2], r.get('meta'))
+        files = {n: fn for n, _, fn in project.STEP_FILES}
+        for n in sorted(steps):
+            f = kit.resolve(files[n], sdir)
+            rows = _criteria(f) if f else []
+            hit = [i for i, (_, c) in enumerate(rows, 1) if any(fr[:10] in norm(c[0]) or norm(c[0])[:10] in fr for fr in frags)]
+            if hit:
+                groups.append(('①②③④⑤⑥'[n - 1], files[n], '、'.join(map(str, hit))))
     out = []
     for step, fn, nums in groups:
         f = kit.resolve(fn, sdir)
