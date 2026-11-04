@@ -329,6 +329,7 @@ export function showEvent(ev) {
   const log = $('#aiLog');
   if (ev.kind === 'me') {
     state.lastText = '';
+    state.turnDenied = new Set();   // 這一輪人在核准卡片上選「不放行」的指令
     // 新 session 的第一則是「交接提示＋要做的事」：泡泡只放最後一段，整段收起來
     const paras = ev.text.trim().split(/\n\s*\n/);
     const last = paras[paras.length - 1];
@@ -339,15 +340,19 @@ export function showEvent(ev) {
   else if (ev.kind === 'text' && ev.sub) addStep(log, `<div class="sub-text">${inline(ev.text)}</div>`, '子代理');
   else if (ev.kind === 'text') { log.insertAdjacentHTML('beforeend', `<div class="t md">${md(ev.text)}</div>`); state.lastText = ev.text; }
   else if (ev.kind === 'tool') addStep(log, `<b>${esc(TOOL_NAME[ev.name] || ev.name)}</b> <code>${esc(ev.brief || '')}</code>`, ev.sub ? '子代理' : (TOOL_NAME[ev.name] || ev.name));
-  else if (ev.kind === 'approval') log.insertAdjacentHTML('beforeend', `<div class="${ev.allow ? 'ok-line' : 'deny'} small">${ev.allow ? '✓ 放行' : '✗ 不放行'}（${esc(ev.by || '')}）：<code>${esc(ev.brief || '')}</code>${ev.message ? `　${esc(ev.message)}` : ''}</div>`);
+  else if (ev.kind === 'approval' && !ev.allow && state.turnDenied) state.turnDenied.add(ev.brief || '');
+  if (ev.kind === 'approval') log.insertAdjacentHTML('beforeend', `<div class="${ev.allow ? 'ok-line' : 'deny'} small">${ev.allow ? '✓ 放行' : '✗ 不放行'}（${esc(ev.by || '')}）：<code>${esc(ev.brief || '')}</code>${ev.message ? `　${esc(ev.message)}` : ''}</div>`);
   else if (ev.kind === 'compacted') log.insertAdjacentHTML('beforeend', '<div class="deny">這個 session 剛經過摘要壓縮，建議做完這一段就開新的 session。</div>');
   else if (ev.kind === 'error') log.insertAdjacentHTML('beforeend', `<div class="err">${esc(ev.text)}</div>`);
   else if (ev.kind === 'result') {
     // 被擋下的指令收成一塊：AI 多半會改用別的方法繼續，結果真的缺東西才要處理
     const dn = ev.denials || [];
-    if (dn.length) log.insertAdjacentHTML('beforeend', `<details class="deny"><summary>這一輪有 ${dn.length} 個指令被網頁的權限擋下</summary>
-      <p class="small" style="margin:6px 0">包括你在核准卡片上選「不放行」的，和網頁一定擋的（自己寫的 python）。AI 通常會改用別的方法繼續；只有它最後說缺了什麼、做不完時才需要處理。</p>
-      <ul class="small">${dn.map(d => `<li><code>${esc(d.tool)}</code> ${esc(((d.input || {}).command || JSON.stringify(d.input || '')).slice(0, 200))}</li>`).join('')}</ul></details>`);
+    // 分兩種：人在核准卡片上選了不放行的；網頁直接擋下的（自己寫的 python，或 2026-11-04 核准卡片上線前的紀錄）
+    const cmdOf = d => ((d.input || {}).command || JSON.stringify(d.input || '')).slice(0, 300);
+    const byYou = d => state.turnDenied && state.turnDenied.has(cmdOf(d));
+    if (dn.length) log.insertAdjacentHTML('beforeend', `<details class="deny"><summary>這一輪有 ${dn.length} 個指令沒有執行</summary>
+      <p class="small" style="margin:6px 0">「你不放行」是你在核准卡片上選的；「網頁擋下」是網頁一定擋的（自己寫的 python），或核准卡片上線前（2026-11-04）的舊紀錄。AI 通常會改用別的方法繼續；只有它最後說缺了什麼、做不完時才需要處理。</p>
+      <ul class="small">${dn.map(d => `<li><span class="chip">${byYou(d) ? '你不放行' : '網頁擋下'}</span> <code>${esc(d.tool)}</code> ${esc(cmdOf(d).slice(0, 200))}</li>`).join('')}</ul></details>`);
     if (!ev.ok) log.insertAdjacentHTML('beforeend', `<div class="err">${esc(ev.text)}</div>`);
     else if (ev.text && ev.text.trim() !== (state.lastText || '').trim()) log.insertAdjacentHTML('beforeend', `<div class="t md">${md(ev.text)}</div>`);
     log.insertAdjacentHTML('beforeend', '<div class="turn-end"></div>');
