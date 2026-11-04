@@ -6,7 +6,7 @@
   --baseline：上一版的切片資料夾（預設取各步驟最新的 git tag），用來找被刪除或改名的名稱。
   表格、EQ 影響、範圍外、佔位符、黃金案例（含事後才到的輸入）、連鎖、core 前綴（--freeze 時亮紅燈）、被引用也在這裡檢查；
   審查頁（--freeze 時沒作答的亮紅燈）、挑錯反例、黃金案例自給自足也在這裡檢查；
-  跨切片引用（<切片>/<檔名> D-nn）、架構決定紀錄（architecture/DECISIONS.md）也在這裡檢查；
+  跨切片引用（<切片>/<檔名> D-nn）、架構決定紀錄（architecture/DECISIONS.md）、② 的資料性質（P11）也在這裡檢查；
   「用在」「舊版上游」「使用者同意」「其他切片要求」只列提醒，不算紅燈。
 只檢查引用與結構對不對得起來，不代表內容正確。"""
 import os, re, subprocess, sys, tempfile
@@ -1438,6 +1438,59 @@ class Lint:
                 n += self.check_s1_mapping(adrs, d5)
         self.done('架構決定', n, '個 ADR、約定與 ⑤ 檔頭')
 
+    NATURES = ('不含個資', '可識別個人', '特種個資')   # docs/03 P11 資料性質（2026-11-04，T26）
+
+    def data_nature_policy(self):
+        """architecture/DECISIONS.md 第一區「P11 資料性質」：None（沒有紀錄）／'未定'／'已採用'／'不處理'。"""
+        path = os.path.join(self.root, 'architecture', 'DECISIONS.md')
+        if not os.path.exists(path): return None
+        for h2, h3, header, rows in mb.Doc(path).tables():
+            if (h2 or '').startswith('一') and header[:2] == ['約定', '現況']:
+                for no, c in rows:
+                    if re.match(r'P11\s*資料性質', c[0].strip()):
+                        v = c[1].strip()
+                        if v == '已採用': return '已採用'
+                        if v.startswith('不同做法'): return '不處理'
+                        return '未定'
+        return '未定'
+
+    def check_data_nature(self):
+        print("\n[資料性質] 處理個資的平台（P11 資料性質 已採用），② 新增的每個屬性都標 [性質: 不含個資／可識別個人／特種個資]")
+        d = self.docs.get('02_entities.md')
+        if not d: return self.done('資料性質', 0, '', skipped='沒有 02_entities.md')
+        policy = self.data_nature_policy()
+        if policy is None: return self.done('資料性質', 0, '', skipped='沒有 architecture/DECISIONS.md')
+        if policy == '不處理': return self.done('資料性質', 0, '', skipped='P11 資料性質：不處理個資')
+        status, _ = self.header_of(d)
+        frozen = bool(status and status.startswith('已凍結'))
+        attrs, in_attrs = [], False
+        for no, h2, h3, line in d.items:
+            if line is None or h2 != '新增':
+                in_attrs = False; continue
+            if re.match(r'^- ', line):
+                in_attrs = bool(re.match(r'^- 主要屬性[：:]', line)); continue
+            m = re.match(r'^\s{2,}- `([A-Za-z][A-Za-z0-9_]*)', line)
+            if in_attrs and m: attrs.append((no, h3, m.group(1), line))
+        if not attrs: return self.done('資料性質', 0, '')
+        if policy == '未定':
+            msg = "architecture/DECISIONS.md「P11 資料性質」還沒決定（沒有這一列或是未定）：② 開始前要決定，用 /domain-arch 問人"
+            if frozen: print(f"    • {msg}（② 已凍結，只提醒）"); return self.done('資料性質', len(attrs), '個屬性')
+            self.red('資料性質', msg); return self.done('資料性質', len(attrs), '個屬性')
+        missing = []
+        for no, card, name, line in attrs:
+            vals = re.findall(r'(?<!`)\[性質:\s*([^\]]*)\]', line)
+            if not vals: missing.append(f"02_entities.md:{no} {card.split('（')[0].strip()}.{name} 沒有標資料性質")
+            for v in vals:
+                if v.strip() not in self.NATURES:
+                    missing.append(f"02_entities.md:{no} {name} 的「[性質: {v.strip()}]」不是 {'／'.join(self.NATURES)}")
+        if frozen and missing:
+            print(f"    • ② 已凍結，{len(missing)} 處要補標（用 /domain-change 回頭補標，只加標記）：")
+            for m in missing[:10]: print(f"      {m}")
+            if len(missing) > 10: print(f"      …另 {len(missing) - 10} 處")
+        else:
+            for m in missing: self.red('資料性質', m)
+        self.done('資料性質', len(attrs), '個屬性')
+
     def check_s1_mapping(self, adrs, d5):
         """S1 的 ADR 列到本切片的規則，⑤ 第三區那一列的說明要引用 ADR（2026-11-03，T05，先試用）。"""
         s1 = {}
@@ -1469,7 +1522,7 @@ class Lint:
         self.check_tables(); self.check_placeholders(); self.check_eq_impact(); self.check_out_of_scope()
         self.check_golden(); self.check_late_inputs(); self.check_param_storage(); self.check_chain(); self.check_core_prefix(); self.check_referenced_by()
         self.check_reviews(); self.check_challenge(); self.check_golden_selfcontained(); self.check_user_agreement()
-        self.check_cross_refs(); self.check_requests(); self.check_architecture(); self.check_api(); self.check_evidence()
+        self.check_cross_refs(); self.check_requests(); self.check_architecture(); self.check_data_nature(); self.check_api(); self.check_evidence()
         self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")
