@@ -115,10 +115,16 @@ export function setTop(back, mid) {
   $('#topMid').innerHTML = mid || '';
 }
 
-export function stepName(step) {
-  const nums = (step.match(/\d+/g) || []).map(Number);
-  if (!nums.length) return step;
-  return nums.length > 1 ? `${CIRCLED[nums[0]]}～${CIRCLED[nums[nums.length - 1]]}` : CIRCLED[nums[0]];
+// 審查頁涵蓋的步驟：伺服器從「這輪審查的步驟」讀出的 steps（含回頭修改的步驟）；沒有時看檔名的兩位數
+// （「03-04」是 ③④；「05-2」的 2 是第 2 份，不是第 ② 步）
+export function stepNums(x) {
+  if (x && x.steps && x.steps.length) return x.steps;
+  const nums = (String((x && x.step) || x || '').match(/(?<!\d)\d{2}(?!\d)/g) || []).map(Number);
+  return nums.length > 1 ? Array.from({ length: nums[nums.length - 1] - nums[0] + 1 }, (_, k) => nums[0] + k) : nums;
+}
+export function stepName(x) {
+  const nums = stepNums(x);
+  return nums.length ? nums.map(n => CIRCLED[n]).join('') : String((x && x.step) || x || '');
 }
 
 export const LEVEL_NAME = { 1: '範圍', 2: '名詞盤點', 3: '流程', 4: '規則', 5: '對照與紙上驗證', 6: '驗收' };

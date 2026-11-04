@@ -432,3 +432,13 @@ def test_readonly_hook():
                 'cd /tmp && cat a', 'D=/etc; cat $D/passwd', 'cd /repo/slices && python3 ../x/tools/a.py', 'python3 /repo/tools/../x.py',
                 'cd; cat .bashrc', "diff <(rm a) b"):
         assert not h.read_only(bad, root), bad
+
+
+def test_review_steps():
+    # 審查頁涵蓋的步驟：先看「這輪審查的步驟」（含回頭修改的步驟），沒有才看檔名；「05-2」的 2 是第 2 份
+    import server
+    meta = [{'key': '這輪審查的步驟', 'value': '⑤ schema.sql、api.yaml（依確認的對照表）；④ 04_rules.md（回頭修改）'}]
+    assert server._review_steps('05-2', meta) == {4, 5}
+    assert server._review_steps('05-2') == {5}
+    assert server._review_steps('03-04') == {3, 4}
+    assert server._review_steps('02-05') == {2, 3, 4, 5}
