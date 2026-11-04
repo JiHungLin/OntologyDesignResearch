@@ -1273,13 +1273,15 @@ class Lint:
                 for no, c in rows:
                     if c[k].strip() and not c[k].strip().startswith('[未執行]') and not (j is not None and c[j].strip().startswith('[未執行]')):
                         cites.append((f"06_evidence/answers.md:{no} {c[0]} 的結果", c[k]))
-        n, envs = 0, {}
+        n, envs, seen = 0, {}, set()
         for where, v in cites:
             n += 1
             logs = re.findall(r'(results/[\w.-]+\.log)(?::\d+)?', v)
             if not logs:
                 self.red('執行紀錄', f"{where} 沒有寫依據的 log 位置（results/<檔名>.log:行號）"); continue
             for rel in logs:
+                if rel in seen: continue                   # 同一份 log 被好幾處引用，只檢查、只報一次
+                seen.add(rel)
                 path = os.path.join(self.dir, '06_evidence', rel)
                 if not os.path.exists(path):
                     self.red('執行紀錄', f"{where} 的 {rel} 不存在"); continue
