@@ -761,6 +761,51 @@ class TestLint(Base):
         code, out = self.lint('--freeze')
         self.assertIn('ADR-001 還是待確認：⑤ 要凍結', out)
 
+    def data_nature(self, out):
+        return out.split('[資料性質]')[1].split('\n[')[0]
+
+    def test_data_nature_required_when_platform_handles_personal_data(self):
+        # P11 資料性質（2026-11-04，T26）：沒有紀錄不檢查；未定時未凍結的 ② 亮紅燈；已採用時每個新增屬性都要標三種之一
+        code, out = self.lint()
+        self.assertIn('未檢查（沒有 architecture/DECISIONS.md）', self.data_nature(out))
+        self.write_decisions()
+        code, out = self.lint()
+        self.assertIn('「P11 資料性質」還沒決定', self.data_nature(out))
+        self.write_decisions(plat=self.PLAT + '| P11 資料性質 | 不同做法：不處理個資 | 只有匿名統計 |\n')
+        code, out = self.lint()
+        self.assertIn('未檢查（P11 資料性質：不處理個資）', self.data_nature(out))
+        self.write_decisions(plat=self.PLAT + '| P11 資料性質 | 已採用 | 處理員工個資 |\n')
+        code, out = self.lint()
+        sec = self.data_nature(out)
+        self.assertEqual(code, 1, out)
+        self.assertIn('Employment.start_date 沒有標資料性質', sec)
+        self.assertIn('LeaveOccurrence.balance_after 沒有標資料性質', sec)
+        f = self.slice_file('02_entities.md')
+        self.edit(f, '`start_date`（到職日）', '`start_date`（到職日）[性質: 可識別個人]')
+        self.edit(f, '`hours`（時數）', '`hours`（時數）[性質: 敏感]')
+        code, out = self.lint()
+        sec = self.data_nature(out)
+        self.assertNotIn('start_date 沒有標', sec)
+        self.assertIn('「[性質: 敏感]」不是 不含個資／可識別個人／特種個資', sec)
+        for old, new in [('`hours`（時數）[性質: 敏感]', '`hours`（時數）[性質: 可識別個人]'),
+                         ('`leave_type`（假別，分類值 LEAVE_TYPE）', '`leave_type`（假別，分類值 LEAVE_TYPE）[性質: 不含個資]'),
+                         ('`balance_after`（扣除後餘額）[推導]', '`balance_after`（扣除後餘額）[推導] [性質: 可識別個人]'),
+                         ('`requested_hours`（申請時數）', '`requested_hours`（申請時數）[性質: 特種個資]')]:
+            self.edit(f, old, new)
+        code, out = self.lint()
+        sec = self.data_nature(out)
+        self.assertNotIn('✗', sec, out)
+        self.assertIn('✓ 通過（檢查了 5 個屬性）', sec)
+
+    def test_data_nature_frozen_entities_only_remind(self):
+        self.write_decisions(plat=self.PLAT + '| P11 資料性質 | 已採用 | 處理員工個資 |\n')
+        f = self.slice_file('02_entities.md')
+        self.edit(f, '# leave-backfill ② 名詞盤點\n', '# leave-backfill ② 名詞盤點\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 已凍結 |\n')
+        code, out = self.lint()
+        sec = self.data_nature(out)
+        self.assertNotIn('✗', sec, out)
+        self.assertIn('② 已凍結，5 處要補標', sec)
+
 class TestSyncCore(Base):
     def sync(self, *args, tags=None):
         return run('sync_core.py', SLICE, '--tags', tags or f'2={SLICE}/02-v1,3={SLICE}/03-v1,4={SLICE}/04-v1', *args, cwd=self.dir)
