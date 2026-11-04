@@ -112,11 +112,29 @@ export async function renderHome(slice) {
       // AI 已經處理過這份審查頁的答案：下一步是繼續這一步（還要送下一份審查頁）或凍結，不是再交一次
       const n = Math.max(0, ...stepNums(stepOf));
       const more = /再送一份審查頁|再送審/.test(((lr && lr.meta.find(m => /填完之後/.test(m.key))) || {}).value || '');
-      hero = `
+      // AI 處理答案時發現要回頭改設計（審查頁選了要改設計的選項、凍結條件不滿足）：主按鈕改成回頭修改，不是凍結
+      const said = s.last_reply || '';
+      const back = /不能凍結|才能凍結|這一輪不凍結|先不凍結|回頭修改/.test(said);
+      const nextLine = ((said.match(/下一步[：:]\s*([^\n]+)/g) || []).pop() || '').replace(/^下一步[：:]\s*/, '');
+      const said_ = nextLine ? `<div class="hero-next"><b>AI 說下一步：</b>${esc(plain(nextLine))}</div>` : '';
+      if (back) hero = `
+      <section class="hero">
+        <div style="flex:999 1 480px;min-width:0">
+          <span class="chip">輪到你</span>
+          <h1>AI 處理完了：${esc(stepName(stepOf))} 還不能凍結</h1>
+          <p>AI 依你的答案判斷，要先回頭修改設計（或補人才能填的欄位），這一輪才能凍結。詳細在右邊的 AI 對話。</p>
+          ${said_}
+          <p class="muted small">按下面的按鈕時，網頁會問你要不要開新的 session。</p>
+        </div>
+        <div class="row"><button class="btn big yellow" id="goBack">請 AI 依審查頁回頭修改 ›</button><button class="btn big" id="showAi">看 AI 怎麼說</button>
+          <button class="btn big" id="freeze">仍然請 AI 凍結</button></div>
+      </section>`;
+      else hero = `
       <section class="hero">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>
           <h1>AI 處理完了：${esc(stepName(stepOf))}</h1>
+          ${said_}
           <p>${more ? `這份審查頁說這一輪還要再送一份審查頁：請 AI 繼續第 ${CIRCLED[n]} 步，產生下一份。都通過後才凍結。` : '結論都是「通過」的話，請 AI 凍結（凍結＝之後的修改都要留紀錄）。'}</p>
           <p class="muted small">AI 的回覆在右邊的 AI 對話；按下面的按鈕時，網頁會問你要不要開新的 session。</p>
         </div>
@@ -196,6 +214,8 @@ export async function renderHome(slice) {
     const n = designDone ? 6 : h.next.n;
     runAi(slice, `第 ${n} 步`, `/domain-step ${n} ${slice}`);
   };
+  const gb = $('#goBack');
+  if (gb) gb.onclick = () => { const r0 = h.reviews[0]; runAi(slice, '回頭修改', `/domain-change 依審查頁 ${r0.path} 的作答回頭修改設計：照你上一次處理這份審查頁時列出的項目（要改的步驟、要開的 EQ、要重跑的測試）`, { review: r0.path }); };
   const cs = $('#contStep');
   if (cs) cs.onclick = () => { const n = Math.max(0, ...stepNums(h.reviews[0])); runAi(slice, `第 ${n} 步`, `/domain-step ${n} ${slice}`); };
   const ff = $('#finishFreeze');

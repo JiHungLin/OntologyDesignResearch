@@ -589,3 +589,4 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
 .approve-card .where.sandbox { color: var(--done); border-color: var(--done); background: #E3F7EC; }
 .approve-card .where.manage { color: var(--primary); border-color: var(--primary); background: var(--card); }
 .approve-card .where.host { color: #C2410C; border-color: var(--turn); background: var(--card); }
+.hero-next { background: var(--card); color: var(--ink); border: 2px solid var(--ink); border-radius: 12px; padding: 8px 12px; margin: 8px 0; font-size: 15px; }
