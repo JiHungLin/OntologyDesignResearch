@@ -24,7 +24,7 @@ GIT_READ = {'status', 'diff', 'log', 'show', 'rev-parse', 'ls-files', 'blame', '
 GIT_BAD = re.compile(r'^(-c|-C|--output.*|--ext-diff|-O.*|--open-files-in-pager.*|--exec-path.*)$')   # 改設定、寫檔、開外部程式
 INLINE_PY = re.compile(r'\bpython3?(\s+-[A-Za-z]+)*\s+(-c\b|-(\s|$))|\bpython3?\b[^\n;|&]*<<')
 PY_REASON = ('網頁裡不能跑自己寫的 python（python3 - <<EOF、python3 -c），一定會被擋。改用：讀某幾行用 Read 的 offset／limit；'
-             '找字、找編號用 Grep；表格欄數、格式、引用、編號用 python3 -I tools/lint.py <切片>；看改了什麼用 git diff --stat、git diff <檔案>。'
+             '找字、找編號用 Grep；表格欄數、格式、引用、編號，以及 api.yaml 讀不讀得進來、$ref 指不指得到，都用 python3 -I tools/lint.py <切片>（舊版工具包沒有 API 檢查時，用 Read 看 api.yaml，有疑問寫進挑錯或審查頁）；看改了什麼用 git diff --stat、git diff <檔案>。'
              '要驗算取位、比例分攤這類數字時，在檔案裡寫出算式與步驟，標 [未執行] 交給人核對（黃金案例的預期結果本來就由人算）。'
              '能跑的 python 只有 python3 tools/*。')
 REDIRECT_OK = re.compile(r'\d?>&\d|&>\s*/dev/null')   # 2>&1、&>/dev/null：只改輸出去向，不寫檔
