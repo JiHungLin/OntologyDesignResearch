@@ -85,7 +85,7 @@ export async function renderHub() {
   } else if (N.kind === 'review') {
     const f = N.item.f;
     hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到你</span>
-      <h1>審查 ${esc(f.slice)} ${esc(stepName(f.review.step))}</h1><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p>
+      <h1>審查 ${esc(f.slice)} ${esc(stepName(f.review))}</h1><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p>
       <p>還有 ${f.review.counts.open} 件事要做。</p></div><a class="btn big yellow" href="#/s/${enc(f.slice)}">去審查 ›</a></section>`;
   } else if (N.kind === 'slice') {
     const f = N.item.f;

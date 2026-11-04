@@ -111,7 +111,7 @@ export async function renderAiNext(s) {
     start: ['寫主題草案', '#/start'],
     'plan-ai': ['請 AI 規劃', '#/'],
     plan: ['看規劃：補資料、看草稿、同意地圖', '#/plan'],
-    review: it && it.f.review && [`開始審查 ${it.code} ${stepName(it.f.review.step)}`, `#/r/${enc(it.f.review.path)}`],
+    review: it && it.f.review && [`開始審查 ${it.code} ${stepName(it.f.review)}`, `#/r/${enc(it.f.review.path)}`],
     slice: it && [`到 ${it.code} 首頁，交給 AI 做 ${step}`, `#/s/${enc(it.code)}`],
     pick: it && ['開始下一條切片：' + it.code, `#/new/${enc(it.code)}`],
   }[N.kind];

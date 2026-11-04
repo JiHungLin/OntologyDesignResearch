@@ -1,5 +1,5 @@
 // 抽查與簽名過關
-import { $, $$, api, enc, esc, firstOpenQ, go, inline, loadReview, md, plain, remember, setTop, state, toast, today, write } from './core.js';
+import { $, $$, api, enc, esc, firstOpenQ, go, inline, loadReview, md, plain, remember, setTop, state, stepNums, toast, today, write } from './core.js';
 import { runAi } from './ai.js';
 import { narrow } from './nav.js';
 
@@ -147,8 +147,8 @@ export async function renderFinish(path, focus) {
     if (await write('/api/review/cells', { line: x.line, cells: { [key]: who, '日期': today(), '結論': b.dataset.v } })) renderFinish(path);
   });
   const ho = $('#handover');
-  const step = (path.match(/_([\d-]+)(?:-\d)?\.md$/) || [])[1] || '';
+  const step = (path.match(/_([\d-]+)\.md$/) || [])[1] || '';
   if (ho) ho.onclick = () => runAi(r.slice, `審查 ${step}`, `審查好了。審查頁：${path}`, { review: path });
   const fz = $('#freeze');
-  if (fz) fz.onclick = () => runAi(r.slice, `凍結 ${step}`, `/domain-freeze ${(step.match(/\d+/g) || []).map(Number).join(',')} ${r.slice}`, { review: path });
+  if (fz) fz.onclick = () => runAi(r.slice, `凍結 ${step}`, `/domain-freeze ${stepNums(r.steps ? r : step).join(',')} ${r.slice}`, { review: path });
 }

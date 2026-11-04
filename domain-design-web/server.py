@@ -73,10 +73,11 @@ def status():
                 try:
                     r = review.parse(p)
                     reviews.append({'path': kit.rel(p), 'date': m.group(1), 'step': m.group(2),
+                                    'steps': sorted(_review_steps(m.group(2), r['meta'])),
                                     'title': r['title'], 'counts': r['counts']})
                 except Exception as e:  # 看不懂的審查頁照樣列出，讓人知道
                     reviews.append({'path': kit.rel(p), 'date': m.group(1), 'step': m.group(2),
-                                    'title': n, 'error': str(e)})
+                                    'steps': sorted(_review_steps(m.group(2))), 'title': n, 'error': str(e)})
         out.append({'slice': s, 'reviews': reviews, 'session': sessions.active(s)})
     return {'repo': kit.repo(), 'slices': out, 'gitignored': sessions.gitignored()}
 
@@ -85,9 +86,17 @@ STEPS = [('01', '範圍', '01_scope.md'), ('02', '名詞', '02_entities.md'), ('
          ('04', '規則', '04_rules.md'), ('05', '對照', '05_mapping.md'), ('06', '驗收', '06_evidence')]
 
 
-def _review_steps(step):
-    """審查頁檔名的步驟：「02」或「02-05」（合成一份，含中間各步）。"""
-    nums = [int(x) for x in re.findall(r'\d+', step)]
+CIRCLED = '①②③④⑤⑥'
+
+
+def _review_steps(step, meta=None):
+    """審查頁涵蓋的步驟。先看「這輪審查的步驟」列出的 ①～⑥（回頭修改的步驟也在這裡）；
+    沒有時看檔名：「02」或「02-05」（合成一份，含中間各步）。檔名只認兩位數，「05-2」的 2 是第 2 份，不是第 ② 步。"""
+    v = next((m['value'] for m in meta or [] if m['key'] == '這輪審查的步驟'), '')
+    got = {CIRCLED.index(c) + 1 for c in re.findall(r'(?:^|[；;、，,]\s*)([①-⑥])', v)}
+    if got:
+        return got
+    nums = [int(x) for x in re.findall(r'(?<!\d)\d{2}(?!\d)', step)]
     return set(range(nums[0], nums[-1] + 1)) if nums else set()
 
 
@@ -107,7 +116,7 @@ def home(slice: str):
     st = status()
     s = next(x for x in st['slices'] if x['slice'] == slice)
     current = next((r for r in s['reviews'] if r.get('counts') and r['counts']['open']), None)
-    on = _review_steps(current['step']) if current else set()
+    on = set(current['steps']) if current else set()
     steps = project.steps(slice)
     levels = []
     for x in steps:
@@ -121,7 +130,7 @@ def home(slice: str):
            'session': s['session']}
     if current:
         r = get_review(current['path'])
-        out['current'] = {'path': r['path'], 'title': r['title'], 'step': current['step'], 'counts': r['counts'],
+        out['current'] = {'path': r['path'], 'title': r['title'], 'step': current['step'], 'steps': current['steps'], 'counts': r['counts'],
                           'meta': r['meta'], 'model': bool(r.get('model'))}
     return out
 
@@ -280,7 +289,8 @@ def get_review(path: str):
     for c in r['cases']:
         c['paper'] = paper.get(c['id'], {})
     r['model'] = r['flows'] = None
-    steps = _review_steps((REVIEW_NAME.match(os.path.basename(p)) or [None, None, ''])[2])
+    steps = _review_steps((REVIEW_NAME.match(os.path.basename(p)) or [None, None, ''])[2], r['meta'])
+    r['steps'] = sorted(steps)
     if r['slice'] and 2 in steps:
         m = model.load(r['slice'])
         if m:

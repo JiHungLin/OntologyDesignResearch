@@ -1,5 +1,5 @@
 // 切片首頁：輪到你、關卡
-import { $, api, CIRCLED, enc, esc, firstOpenQ, LEVEL_NAME, loadReview, nextTask, plain, setTop, state, stepName, tasksOf } from './core.js';
+import { $, api, CIRCLED, enc, esc, firstOpenQ, LEVEL_NAME, loadReview, nextTask, plain, setTop, state, stepName, stepNums, tasksOf } from './core.js';
 import { bindWaiting, openAi, pendingAsk, runAi, runningCard, sessionOf, waitingCard } from './ai.js';
 import { markNav, STEP_FILE } from './nav.js';
 
@@ -44,8 +44,8 @@ export async function renderHome(slice) {
   } else if (cur) {
     const r = await loadReview(cur.path);
     const c = r.counts;
-    const nums = (cur.step.match(/\d+/g) || []).map(Number);
-    const title = nums.length > 1 ? `關卡 ${stepName(cur.step)}` : `關卡 ${CIRCLED[nums[0]]}　${LEVEL_NAME[nums[0]] || ''}`;
+    const nums = stepNums(cur);
+    const title = nums.length > 1 ? `關卡 ${stepName(cur)}` : `關卡 ${CIRCLED[nums[0]]}　${LEVEL_NAME[nums[0]] || ''}`;
     const parts = [];
     if (c.questions) parts.push(`<strong>${c.questions} 個決定</strong>`);
     if (c.confirms) parts.push(r.model ? `<strong>1 張模型圖</strong>（${c.confirms} 項確認）` : `<strong>${c.confirms} 項確認</strong>`);
@@ -91,6 +91,7 @@ export async function renderHome(slice) {
     // 審查頁都填好了、還沒凍結
     const last = h.reviews[0];
     const step = last ? last.step : String(wait[0].n).padStart(2, '0');
+    const stepOf = last || step;
     // 交回後 AI 做了紙上推演、和你的答案對不上：先回黃金案例頁對答案（改你的答案，或留著讓 AI 說明）
     const lr = last ? await loadReview(last.path) : null;
     const handled = s && !s.running && s.purpose === `審查 ${step}` && !!s.last_reply;
@@ -109,13 +110,13 @@ export async function renderHome(slice) {
       </section>`;
     } else if (handled) {
       // AI 已經處理過這份審查頁的答案：下一步是繼續這一步（還要送下一份審查頁）或凍結，不是再交一次
-      const n = Math.max(...(step.match(/\d+/g) || ['0']).map(Number));
+      const n = Math.max(0, ...stepNums(stepOf));
       const more = /再送一份審查頁|再送審/.test(((lr && lr.meta.find(m => /填完之後/.test(m.key))) || {}).value || '');
       hero = `
       <section class="hero">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>
-          <h1>AI 處理完了：${esc(stepName(step))}</h1>
+          <h1>AI 處理完了：${esc(stepName(stepOf))}</h1>
           <p>${more ? `這份審查頁說這一輪還要再送一份審查頁：請 AI 繼續第 ${CIRCLED[n]} 步，產生下一份。都通過後才凍結。` : '結論都是「通過」的話，請 AI 凍結（凍結＝之後的修改都要留紀錄）。'}</p>
           <p class="muted small">AI 的回覆在右邊的 AI 對話；按下面的按鈕時，網頁會問你要不要開新的 session。</p>
         </div>
@@ -127,7 +128,7 @@ export async function renderHome(slice) {
       <section class="hero">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>
-          <h1>審查填好了：${esc(stepName(step))}</h1>
+          <h1>審查填好了：${esc(stepName(stepOf))}</h1>
           <p>交給 AI 依你的答案修改；結論都是「通過」的話，請 AI 凍結（凍結＝之後的修改都要留紀錄）。</p>
         </div>
         <div class="row"><button class="btn big yellow" id="handover">交給 AI 處理答案</button><button class="btn big" id="freeze">請 AI 凍結</button></div>
@@ -185,7 +186,7 @@ export async function renderHome(slice) {
             <button class="btn" id="changeBtn">交給 AI 判斷</button></div>
           <div class="small muted" style="margin-top:6px">AI 會判斷要回哪一步、影響多大，先提出方案，不會直接改。</div>
         </section>
-        ${past.length ? `<details class="past"><summary>之前的關卡（${past.length}）</summary>${past.map(x => `<a href="#/r/${enc(x.path)}/finish">${esc(x.date)} ${esc(stepName(x.step))}${x.counts && !x.counts.open ? ' ✓' : ''}</a>`).join('')}</details>` : ''}
+        ${past.length ? `<details class="past"><summary>之前的關卡（${past.length}）</summary>${past.map(x => `<a href="#/r/${enc(x.path)}/finish">${esc(x.date)} ${esc(stepName(x))}${x.counts && !x.counts.open ? ' ✓' : ''}</a>`).join('')}</details>` : ''}
       </section>
     </div>`;
   bindWaiting();
@@ -196,13 +197,13 @@ export async function renderHome(slice) {
     runAi(slice, `第 ${n} 步`, `/domain-step ${n} ${slice}`);
   };
   const cs = $('#contStep');
-  if (cs) cs.onclick = () => { const n = Math.max(...(h.reviews[0].step.match(/\d+/g) || ['0']).map(Number)); runAi(slice, `第 ${n} 步`, `/domain-step ${n} ${slice}`); };
+  if (cs) cs.onclick = () => { const n = Math.max(0, ...stepNums(h.reviews[0])); runAi(slice, `第 ${n} 步`, `/domain-step ${n} ${slice}`); };
   const ff = $('#finishFreeze');
   if (ff) ff.onclick = () => { const n = h.next.n; runAi(slice, `凍結 0${n}`, `/domain-freeze ${n} ${slice}`); };
   const ho = $('#handover');
   if (ho) ho.onclick = () => { const r0 = h.reviews[0]; runAi(slice, `審查 ${r0.step}`, `審查好了。審查頁：${r0.path}`, { review: r0.path }); };
   const fz = $('#freeze');
-  if (fz) fz.onclick = () => { const r0 = h.reviews[0]; runAi(slice, `凍結 ${r0.step}`, `/domain-freeze ${(r0.step.match(/\d+/g) || []).map(Number).join(',')} ${slice}`, { review: r0.path }); };
+  if (fz) fz.onclick = () => { const r0 = h.reviews[0]; runAi(slice, `凍結 ${r0.step}`, `/domain-freeze ${stepNums(r0).join(',')} ${slice}`, { review: r0.path }); };
   const cb = $('#changeBtn');
   const change = () => { const v = $('#changeText').value.trim(); if (v) runAi(slice, '修改', `/domain-change ${v}`); };
   cb.onclick = change;
