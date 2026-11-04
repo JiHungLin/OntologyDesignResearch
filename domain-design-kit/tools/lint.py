@@ -18,6 +18,7 @@ EXAMPLE_SINCE = '2026-10-28'   # 審查頁問題要有「例子」、選項要�
 GOLDEN_ASK_SINCE = '2026-11-04'   # 黃金案例要有逐項的「要得出」的起始日（docs/02 ⑥，先試用）
 CODE_REF = re.compile(r'(?<![A-Za-z])(R\d{2,}|D-\d+|X-\d+)(?!\d)')
 SIGNOFF = '06_evidence/signoff.md'
+SPOT_FORMAT_SINCE = '2026-11-04'   # 抽查可挑的條目寫「⑥ 第 n 條」：從這天的審查頁起檢查
 EVIDENCE_HEADER = '# 執行紀錄（tools/run_evidence.py 產生，不手改）'
 ALL_FILES = ['01_scope.md', '02_entities.md', '03_flows.md', '03_use_cases.md', '04_rules.md', '05_mapping.md']
 HISTORY_H2 = {'決定與理由', '檢查紀錄', '回填紀錄'}
@@ -973,6 +974,10 @@ class Lint:
                 self.check_excerpt(rel, no, c)
             if r['spot'] is None:
                 self.red('審查頁', f"{rel} 沒有「抽查」表")
+            hint = next(((i, l) for i, l in enumerate(r['lines'], 1) if l.startswith('可挑的條目')), None)
+            if hint and os.path.basename(rel)[:10] >= SPOT_FORMAT_SINCE and \
+                    not re.search(r'[①-⑥]\s*第\s*\d', hint[1]) and not re.search(r'（[^）]*沒有[^）]*）|沒有可挑', hint[1]):
+                self.red('審查頁', f"{rel}:{hint[0]} 可挑的條目要寫成「⑥ 第 1、4、9 條」（步驟加完成標準表的第幾條，docs/02「審查頁」），不寫完成標準的文字")
             elif not any(c[0].strip() for no, c in r['spot']):
                 unanswered.append(f"{rel} 抽查")
             for no, c in r['verdicts']:

@@ -599,6 +599,21 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertIn('執行者和審查者（簽核者）是同一人「甲」', out)
 
+    def test_spot_hint_format(self):
+        # 2026-11-04 起的審查頁：可挑的條目寫「③ 第 1、4 條」，不寫完成標準的文字（網頁對不回是哪幾條）
+        self.setup_review()
+        old = os.path.join(self.dir, self.slice_file('reviews/2026-10-27_03.md'))
+        text = open(old, encoding='utf-8').read()
+        os.remove(old)
+        self.edit(self.slice_file('03_flows.md'), '- 審查頁：reviews/2026-10-27_03.md', '- 審查頁：reviews/2026-11-05_03.md')
+        hint = lambda h: text.replace('## 四、抽查\n\n', f'## 四、抽查\n\n{h}\n\n')
+        self.write(self.slice_file('reviews/2026-11-05_03.md'), hint('可挑的條目（AI 不預選）：完成標準中——每個狀態都有更正方式；每個事件都有觸發者'))
+        code, out = self.lint()
+        self.assertIn('可挑的條目要寫成', out)
+        self.write(self.slice_file('reviews/2026-11-05_03.md'), hint('可挑的條目（AI 不預選）：③ 第 1、4 條'))
+        code, out = self.lint()
+        self.assertNotIn('可挑的條目要寫成', out)
+
     def test_review_lists_partial_self_check(self):
         self.setup_review(look='更正方式')
         code, out = self.lint()
