@@ -1227,6 +1227,58 @@ class Lint:
                 break
         return status, inputs
 
+    def check_api(self):
+        """⑤ 的 api.yaml：讀得進來，$ref 都指得到（AI 不必自己寫 python 驗證，網頁也會擋）。"""
+        print("\n[API] api.yaml 讀得進來；每個 $ref 都指得到（同檔的 #/…，或同資料夾的其他檔案）")
+        path = os.path.join(self.dir, 'api.yaml')
+        rel = self.rel(path)
+        if not os.path.exists(path):
+            return self.done('API', 0, '', skipped='沒有 api.yaml')
+        try:
+            with open(path, encoding='utf-8') as fh:
+                doc = mb.yaml.safe_load(fh)
+        except mb.yaml.YAMLError as e:
+            mark = getattr(e, 'problem_mark', None)
+            where = f"{rel}:{mark.line + 1}" if mark else rel
+            self.red('API', f"{where} 不是合法的 YAML：{getattr(e, 'problem', None) or e}")
+            return self.done('API', 1, '個檔案')
+        cache = {path: doc}
+
+        def resolve(ref):
+            file, _, ptr = ref.partition('#')
+            target = os.path.normpath(os.path.join(self.dir, file)) if file else path
+            if target not in cache:
+                if not os.path.exists(target): return f"找不到檔案 {file}"
+                try:
+                    with open(target, encoding='utf-8') as fh: cache[target] = mb.yaml.safe_load(fh)
+                except mb.yaml.YAMLError: return f"{file} 不是合法的 YAML"
+            o = cache[target]
+            for k in [x for x in ptr.split('/') if x]:
+                k = k.replace('~1', '/').replace('~0', '~')
+                if isinstance(o, dict) and k in o: o = o[k]
+                elif isinstance(o, list) and k.isdigit() and int(k) < len(o): o = o[int(k)]
+                else: return f"沒有「{k}」"
+            return None
+
+        n, bad = 0, {}
+        def walk(o):
+            nonlocal n
+            if isinstance(o, dict):
+                for k, v in o.items():
+                    if k == '$ref' and isinstance(v, str):
+                        n += 1
+                        why = resolve(v)
+                        if why: bad.setdefault(v, why)
+                    else: walk(v)
+            elif isinstance(o, list):
+                for v in o: walk(v)
+        walk(doc)
+        with open(path, encoding='utf-8') as fh: text = fh.read().split('\n')
+        for ref, why in bad.items():
+            no = next((i for i, l in enumerate(text, 1) if ref in l), 0)
+            self.red('API', f"{rel}:{no} 的 $ref {ref} 指不到（{why}）")
+        self.done('API', n or 1, '個 $ref' if n else '個檔案')
+
     def check_architecture(self):
         print("\n[架構決定] architecture/DECISIONS.md：ADR 欄位、狀態、背景有出處；平台約定 P1～P13；未凍結的 ⑤ 讀了紀錄"
               + ("；⑤ 要凍結時沒有待確認的 ADR" if self.freeze else ""))
@@ -1321,7 +1373,7 @@ class Lint:
         self.check_tables(); self.check_placeholders(); self.check_eq_impact(); self.check_out_of_scope()
         self.check_golden(); self.check_late_inputs(); self.check_param_storage(); self.check_chain(); self.check_core_prefix(); self.check_referenced_by()
         self.check_reviews(); self.check_challenge(); self.check_golden_selfcontained(); self.check_user_agreement()
-        self.check_cross_refs(); self.check_requests(); self.check_architecture()
+        self.check_cross_refs(); self.check_requests(); self.check_architecture(); self.check_api()
         self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")

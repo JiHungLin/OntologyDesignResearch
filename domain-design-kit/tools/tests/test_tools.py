@@ -494,6 +494,21 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertIn('GC01 的「計算過程」和 golden_cases.md 不同', out)
 
+    def test_api_yaml_refs(self):
+        # ⑤ 的 api.yaml：讀得進來、$ref 都指得到（AI 不必自己寫 python 驗證）
+        api = ('openapi: 3.0.3\npaths:\n  /leaves:\n    post:\n      requestBody:\n        content:\n          application/json:\n'
+               '            schema: {$ref: "#/components/schemas/Leave"}\ncomponents:\n  schemas:\n    Leave: {type: object}\n')
+        self.write(self.slice_file('api.yaml'), api)
+        code, out = self.lint()
+        self.assertIn('檢查了 1 個 $ref', out)
+        self.write(self.slice_file('api.yaml'), api.replace('schemas/Leave"', 'schemas/Leaves"'))
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('#/components/schemas/Leaves 指不到（沒有「Leaves」）', out)
+        self.write(self.slice_file('api.yaml'), api + '  bad: [\n')
+        code, out = self.lint()
+        self.assertIn('不是合法的 YAML', out)
+
     def test_review_lists_partial_self_check(self):
         self.setup_review(look='更正方式')
         code, out = self.lint()
