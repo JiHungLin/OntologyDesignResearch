@@ -629,6 +629,20 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertIn('X-09 不在任何一步的「反例處理」', out)
 
+    def test_challenge_angle_required(self):
+        """這輪新增、來源是 AI 挑錯的反例要寫角度（2026-11-04 T27）"""
+        self.setup_review()
+        code, out = self.lint()
+        self.assertNotIn('沒有寫挑錯角度', out)
+        for bad in ('AI 挑錯', 'AI 挑錯（第二輪）'):
+            self.setup_review(src=bad)
+            code, out = self.lint()
+            self.assertEqual(code, 1, out)
+            self.assertIn('X-01 的來源「' + bad + '」沒有寫挑錯角度', out)
+        self.setup_review(src='AI 挑錯', xs='')               # 不在這輪的舊反例不檢查
+        code, out = self.lint()
+        self.assertNotIn('沒有寫挑錯角度', out)
+
     def test_user_agreement_reminder(self):
         self.setup_review()
         code, out = self.lint()
