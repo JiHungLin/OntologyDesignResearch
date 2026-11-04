@@ -450,7 +450,8 @@ export function waitingCard(scope) {
     <div class="row spread"><span class="chip turn">AI 在等你回答${many ? `：${ask.length} 題，每題選一個再送出` : ''}</span><button class="btn ghost small-btn" data-seen="${esc(key)}">不用回了</button></div>
     <p class="small muted" style="margin:6px 0 0">AI 停在這裡等你（${esc(s.purpose)}）。先回答，它才會接著做完；這時去按別的事，會開新的 session，這些問題就沒人接。</p>
     ${askHtml(ask, true)}
-    <div class="row" style="margin-top:10px"><input type="text" class="soft" data-replytext style="flex:1" placeholder="${many ? '補充或都不是？寫一句（可省略）' : '都不是？寫一句'}"><button class="btn primary" data-asksend ${many ? 'disabled' : ''}>送出</button></div>
+    <div class="ask-other"><label class="label">${many ? '補充，或都不是（可省略）' : '其他：都不是的話，寫一句'}</label>
+      <div class="row"><input type="text" class="soft" data-replytext style="flex:1" placeholder="${many ? '補充或都不是？寫一句（可省略）' : '都不是？寫一句'}"><button class="btn primary" data-asksend ${many ? 'disabled' : ''}>送出</button></div></div>
   </section>`;
 }
 
