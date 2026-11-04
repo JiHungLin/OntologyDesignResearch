@@ -1242,7 +1242,7 @@ class Lint:
     def check_evidence(self):
         """⑥ 審查頁（2026-11-04 起）存在時：系統結果與回答表的「結果」寫 log 位置，log 是 run_evidence.py 產生、版本和 signoff.md 相同。"""
         print("\n[執行紀錄] ⑥ 的系統結果與回答表寫出 results/…log 位置；log 是 tools/run_evidence.py 產生的、"
-              "沒有未 commit 的修改、實作版本和 signoff.md 相同")
+              "沒有未 commit 的修改、實作版本和 signoff.md 相同；在通過檢查的同一個驗證環境裡跑")
         rdir = os.path.join(self.dir, 'reviews')
         if not (os.path.isdir(rdir) and any(re.match(r'\d{4}-\d{2}-\d{2}_06(-\d)?\.md$', n) for n in os.listdir(rdir))):
             return self.done('執行紀錄', 0, '', skipped='沒有 ⑥ 的審查頁（2026-11-04 起的新做法）')
@@ -1273,7 +1273,7 @@ class Lint:
                 for no, c in rows:
                     if c[k].strip() and not c[k].strip().startswith('[未執行]') and not (j is not None and c[j].strip().startswith('[未執行]')):
                         cites.append((f"06_evidence/answers.md:{no} {c[0]} 的結果", c[k]))
-        n = 0
+        n, envs = 0, {}
         for where, v in cites:
             n += 1
             logs = re.findall(r'(results/[\w.-]+\.log)(?::\d+)?', v)
@@ -1292,6 +1292,14 @@ class Lint:
                 m = re.search(r'@\s*([0-9a-f]{7,40})', ver)
                 if want and m and not (want.startswith(m.group(1)) or m.group(1).startswith(want)):
                     self.red('執行紀錄', f"06_evidence/{rel} 的實作版本 {m.group(1)} 和 signoff.md 的 {want} 不同；改了程式要重跑")
+                env = next((l[len('- 環境：'):] for l in head if l.startswith('- 環境：')), '')
+                chk = next((l[len('- 環境檢查：'):] for l in head if l.startswith('- 環境檢查：')), '')
+                if not chk.startswith('通過'):
+                    self.red('執行紀錄', f"06_evidence/{rel} 的驗證環境沒有通過檢查（{chk or '檔頭沒有環境檢查'}）；照 docs/01 ⑥「驗證環境」用 compose.yaml 跑")
+                elif env:
+                    envs.setdefault(env, rel)
+        if len(envs) > 1:
+            self.red('執行紀錄', "簽核用的 log 不是在同一個驗證環境跑的：" + '、'.join(f"{r}（{e[:60]}）" for e, r in envs.items()))
         self.done('執行紀錄', n, '個引用 log 的結果')
 
     def check_api(self):

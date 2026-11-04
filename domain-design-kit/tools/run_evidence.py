@@ -3,7 +3,9 @@
 存成 slices/<切片>/06_evidence/results/<日期>_<時分秒>_<名稱>.log（docs/02 ⑥ `results/`）。
 
 用法（在實作程式所在的資料夾執行，實作版本取那裡的 git）：
-    python3 <設計 repo>/tools/run_evidence.py <切片> <名稱> -- <指令…>
+    python3 <設計 repo>/tools/run_evidence.py <切片> <名稱> [--env <compose.yaml>] -- <指令…>
+--env 省略時，用執行目錄的 compose.yaml（或 compose.yml、docker-compose.yml）。環境定義用 check_env.py 檢查，
+結果與環境指紋寫進檔頭（docs/01 ⑥「驗證環境」）。
 例：
     python3 ../domain-trial/tools/run_evidence.py electricity-emission golden -- pytest tests/test_golden.py -v
 
@@ -18,6 +20,19 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.environ.get('DESIGN_REPO') or os.path.dirname(HERE)   # 設計 repo：tools/ 的上一層（測試時用 DESIGN_REPO 指定）
 HEADER = '# 執行紀錄（tools/run_evidence.py 產生，不手改）'
+COMPOSE = ('compose.yaml', 'compose.yml', 'docker-compose.yml', 'docker-compose.yaml')
+
+
+def environment(env):
+    """(環境那一行, 環境檢查那一行)。"""
+    if env is None:
+        env = next((c for c in COMPOSE if os.path.exists(c)), None)
+    if not env:
+        return '（沒有環境定義檔）', '未檢查（沒有環境定義檔）'
+    sys.path.insert(0, HERE)
+    import check_env
+    probs, fp = check_env.check(env)
+    return f'{os.path.relpath(os.path.realpath(env))}：{fp}', ('通過' if not probs else '未通過：' + '；'.join(probs))
 
 
 def git(*args):
@@ -39,8 +54,13 @@ def version():
 
 
 def main(argv):
+    env = None
+    if len(argv) > 3 and argv[2] == '--env':
+        env, argv = argv[3], argv[:2] + argv[4:]
+        if not os.path.exists(env):
+            sys.exit(f'找不到環境定義：{env}')
     if '--' not in argv or argv.index('--') != 2 or len(argv) < 4:
-        sys.exit('用法：python3 tools/run_evidence.py <切片> <名稱> -- <指令…>')
+        sys.exit('用法：python3 tools/run_evidence.py <切片> <名稱> [--env <compose.yaml>] -- <指令…>')
     slice_, name, cmd = argv[0], argv[1], argv[3:]
     if not re.fullmatch(r'[a-z0-9][a-z0-9-]*', name):
         sys.exit(f'名稱只用英文小寫、數字與 -（現在是「{name}」）')
@@ -52,6 +72,7 @@ def main(argv):
     start = datetime.datetime.now().astimezone()
     path = os.path.join(out_dir, f"{start:%Y-%m-%d_%H%M%S}_{name}.log")
     ver = version()
+    env_line, env_check = environment(env)
     try:
         p = subprocess.run(cmd, capture_output=True, text=True)
         code, output = p.returncode, p.stdout + (('\n' if p.stdout and not p.stdout.endswith('\n') else '') + p.stderr if p.stderr else '')
@@ -61,7 +82,7 @@ def main(argv):
     shown = ' '.join(c if re.fullmatch(r"[\w./:=@%+,-]+", c) else "'" + c.replace("'", "'\\''") + "'" for c in cmd)
     with open(path, 'w', encoding='utf-8') as f:
         f.write(f"{HEADER}\n- 切片：{slice_}\n- 名稱：{name}\n- 指令：{shown}\n- 執行目錄：{os.getcwd()}\n"
-                f"- 實作版本：{ver}\n- 開始：{start.isoformat(timespec='seconds')}\n- 結束：{end.isoformat(timespec='seconds')}\n"
+                f"- 實作版本：{ver}\n- 環境：{env_line}\n- 環境檢查：{env_check}\n- 開始：{start.isoformat(timespec='seconds')}\n- 結束：{end.isoformat(timespec='seconds')}\n"
                 f"- 結束碼：{code}\n\n## 輸出\n{output}")
     sys.stdout.write(output)
     print(f"\n執行紀錄：{os.path.relpath(path, sdir)}（結束碼 {code}）")
