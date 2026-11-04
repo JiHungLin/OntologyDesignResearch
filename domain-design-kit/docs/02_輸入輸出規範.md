@@ -901,6 +901,8 @@ python3 tools/run_evidence.py electricity-emission golden -- docker compose exec
 - 指令：docker compose exec app pytest tests/test_golden.py -v
 - 執行目錄：/home/me/impl
 - 實作版本：impl/electricity-emission @ 3f2a9c1（有未 commit 的修改：否）
+- 環境：compose.yaml：compose.yaml sha256:5d1c0e9a2b7f；Dockerfile sha256:91aa…；requirements.txt sha256:0c3e…
+- 環境檢查：通過
 - 開始：2026-11-05T10:15:00+08:00
 - 結束：2026-11-05T10:15:42+08:00
 - 結束碼：0
@@ -913,6 +915,28 @@ python3 tools/run_evidence.py electricity-emission golden -- docker compose exec
 - 系統結果、回答表的「結果」寫 `results/<檔名>.log:行號`，行號指到結果那一行；`lint.py` 檢查檔案存在、檔頭是工具產生的、實作版本和 `signoff.md` 相同。
 - 有未 commit 的修改時跑出的 log 只能當除錯參考，不能當簽核依據；改了程式就重跑。
 - 截圖等工具存不了的，放在 `results/` 並在 `signoff.md` 寫明是什麼、誰截的。
+
+**驗證環境**（先試用）：實作附 Docker Compose 的環境定義（預設放在實作的根目錄，檔名 `compose.yaml`；在別處時 `run_evidence.py` 加 `--env <路徑>`），`python3 tools/check_env.py <compose.yaml>` 檢查：
+
+| 檢查 | 要求 |
+|---|---|
+| 固定版本 | 每個 service 的 `image` 寫 `名稱@sha256:<digest>`；用 `build` 的，Dockerfile 每個 `FROM`（前一階段的名稱除外）也一樣；context 在定義檔的資料夾裡 |
+| 和主機隔開 | 不用 `privileged`、`cap_add`、`network_mode`／`pid`／`ipc`／`userns_mode: host`；不掛 `docker.sock`；bind mount 只用相對路徑掛同一個 repo 裡的檔案（實作和設計同一個 repo 時可以掛 `slices/` 的 schema），其他用具名 volume；`build` 的 context 也在 repo 裡 |
+| 對外 | `ports` 只綁 `127.0.0.1`（例：`127.0.0.1:55432:5432`），或不開 |
+
+```yaml
+services:
+  db:
+    image: postgres:15@sha256:<digest>
+    environment: { POSTGRES_PASSWORD: test-only, POSTGRES_DB: ee }
+    ports: ["127.0.0.1:55432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data", "../slices/electricity-emission/schema.sql:/docker-entrypoint-initdb.d/1.sql:ro"]   # impl/compose.yaml，同一個 repo
+volumes:
+  pgdata: {}
+```
+
+- 只放測試資料與測試用的密碼，不放真資料、真密鑰；正式跑之前重建（`docker compose down -v` 後再 `up`）。
+- 環境指紋＝定義檔、Dockerfile、鎖定檔（`requirements.txt`、`poetry.lock`、`uv.lock`、`package-lock.json` 等）的 sha256 前 12 碼；任何一個改了，指紋就變，要重跑。
 
 ### `questions.md`
 
@@ -1107,7 +1131,8 @@ python3 tools/run_evidence.py electricity-emission golden -- docker compose exec
 | ADR 的訊號真的支持它的決定；代價與觸發寫得出來 | 讀內容 | AI 判斷（`/domain-arch`），架構負責人同意 |
 | 還沒凍結的 ⑤，「讀取的輸入」有 `architecture/DECISIONS.md`（紀錄存在時）；⑤ 要凍結時，紀錄中沒有「待確認」的 ADR | 比對檔頭、搜尋 | 程式（lint.py；後者 --freeze 時） |
 | `answers.md` 涵蓋所有 Qnn | 比對編號 | 程式 |
-| ⑥ 審查頁存在時（2026-11-04 起）：系統結果與回答表的「結果」有 `results/…log` 位置，log 存在、檔頭是 `run_evidence.py` 產生的、實作版本和 `signoff.md` 相同、沒有未 commit 的修改；結論表的執行者和審查者不同人 | 比對檔案與檔頭 | 程式（lint.py） |
+| ⑥ 審查頁存在時（2026-11-04 起）：系統結果與回答表的「結果」有 `results/…log` 位置，log 存在、檔頭是 `run_evidence.py` 產生的、實作版本和 `signoff.md` 相同、沒有未 commit 的修改、環境檢查通過且所有 log 的環境指紋相同；結論表的執行者和審查者不同人 | 比對檔案與檔頭 | 程式（lint.py） |
+| ⑥ 的驗證環境（`compose.yaml`）固定版本、和主機隔開、port 只綁 127.0.0.1 | 解析定義檔 | 程式（check_env.py，由 run_evidence.py 自動執行） |
 | 狀態為 `[待專家確認]` 的項目，對應的 EQ 存在於 `questions.md` | 比對 EQ | 程式（lint.py） |
 | 每個 `[待專家確認: EQ-nnn]` 所在的項目（表格列的編號、卡片或段落標題），都列在該 EQ 的「影響」 | 比對編號 | 程式（lint.py） |
 | ①「範圍外但會用到」的歸屬切片存在於切片地圖 | 比對切片代號 | 程式（lint.py） |
@@ -1150,4 +1175,4 @@ python3 tools/run_evidence.py electricity-emission golden -- docker compose exec
 | 修改凍結過的檔案，或送審後做了改變設計的修改 | 同時在 `CHANGELOG.md` 記一筆（第一次凍結前的整理性修改，在凍結那一筆總結） | 只改檔案、不留紀錄；把改變設計的修改當成整理性修改略過 |
 | ⑤ 紙上驗證 | 依設計逐步推演黃金案例，填「紙上推演」與「紙上判定」 | 填寫黃金案例的預期結果 |
 | 其他切片要求修改（任何一步） | 停下來提出要改哪條切片的哪一步、為什麼，搜尋並列出受影響的位置；人同意後在被要求的切片 CHANGELOG 記「其他切片要求」，由那條切片自己的 session 回頭修改（自己的審查頁）；本切片依賴它的，等它凍結後才凍結 | 未經人同意就改別的切片已凍結的內容 |
-| ⑥ | 產生合成資料、寫測試；實作指令每條等人核准後才執行；測試用 `tools/run_evidence.py` 執行並存 log，系統結果與回答表寫 log 位置；產生 ⑥ 審查頁 | 計算黃金案例的預期結果；簽核；手寫或修改 log；把實作指令放進自動放行清單；用沒 commit 的程式跑出的 log 當簽核依據 |
+| ⑥ | 產生合成資料、寫測試；寫驗證環境 `compose.yaml` 並用 `check_env.py` 檢查；實作指令每條等人核准後才執行；測試用 `tools/run_evidence.py` 執行並存 log，系統結果與回答表寫 log 位置；產生 ⑥ 審查頁 | 計算黃金案例的預期結果；簽核；手寫或修改 log；把實作指令放進自動放行清單；用沒 commit 的程式跑出的 log 當簽核依據；在主機上直接起資料庫或服務（不在驗證環境裡） |

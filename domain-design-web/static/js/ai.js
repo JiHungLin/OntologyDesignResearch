@@ -202,6 +202,15 @@ export async function send(s, text, opts = {}) {
 // 輪詢背景工作的事件；做完時重新整理畫面（AI 可能改了檔案）
 // AI 要執行允許清單之外的指令（第 ⑥ 步的 docker、pytest、tools/run_evidence.py…）：停下來等人核准，一次一條
 // （docs/01 ⑥「實作指令與執行紀錄」；網頁這邊由 approve_mcp.py 轉過來，終端機則是 Claude Code 自己問）
+// 指令在哪裡執行（docs/01 ⑥「驗證環境」）：只在 compose 沙盒裡、建立或管理沙盒、在主機上
+export function whereRuns(cmd) {
+  const c = String(cmd || '');
+  if (/\bdocker[ -]compose\b[^\n;&|]*\b(exec|run)\b/.test(c)) return ['sandbox', '只在沙盒內執行（docker compose）'];
+  if (/\bdocker[ -]compose\b/.test(c)) return ['manage', '建立或管理沙盒（docker compose）：會在主機上起、停容器或下載 image'];
+  if (/\bdocker\b/.test(c)) return ['host', '直接用 docker，不在 compose 沙盒裡：版本、網路、資料都沒有管控'];
+  return ['host', '在主機上執行（不在沙盒裡）'];
+}
+
 function approvalCards(box, s, aps) {
   setAiBusy(true);
   const a = aps[0];
@@ -211,6 +220,7 @@ function approvalCards(box, s, aps) {
   box.innerHTML = `<div class="approve-card">
     <div class="label">AI 要執行這條指令，等你核准${aps.length > 1 ? `（還有 ${aps.length - 1} 條在排隊）` : ''}</div>
     ${inp.description ? `<p style="margin:4px 0 6px"><b>用途：</b>${esc(inp.description)}</p>` : ''}
+    <div class="where ${whereRuns(cmd)[0]}">${esc(whereRuns(cmd)[1])}</div>
     <pre class="cmd">${esc(cmd)}</pre>
     <p class="small muted" style="margin:6px 0">按「放行」就會在這台電腦上執行一次（${esc(TOOL_NAME[a.tool] || a.tool)}）。看不懂在做什麼、或不是這一步該做的，就不放行並寫一句原因，AI 會照你說的改。</p>
     <div class="row" style="gap:6px;flex-wrap:wrap"><input type="text" id="apWho" class="soft" style="flex:0 1 140px" value="${esc(who)}" placeholder="核准人（執行者）">

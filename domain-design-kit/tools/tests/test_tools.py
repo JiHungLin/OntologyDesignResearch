@@ -530,10 +530,15 @@ class TestLint(Base):
         self.assertIn('名稱只用英文小寫', out)
 
     def setup_evidence(self, header='# 執行紀錄（tools/run_evidence.py 產生，不手改）', ver='impl @ abc1234（有未 commit 的修改：否）',
-                       want='abc1234', cite='（results/2026-11-05_101500_golden.log:12）'):
+                       want='abc1234', cite='（results/2026-11-05_101500_golden.log:12）',
+                       env='compose.yaml：compose.yaml sha256:aaaa', chk='通過', env2=None):
         self.write(self.slice_file('reviews/2026-11-05_06.md'), '# 審查頁\n')
         self.write(self.slice_file('06_evidence/results/2026-11-05_101500_golden.log'),
-                   f'{header}\n- 切片：{SLICE}\n- 名稱：golden\n- 指令：pytest\n- 執行目錄：/x\n- 實作版本：{ver}\n\n## 輸出\nGC01 6 日\n')
+                   f'{header}\n- 切片：{SLICE}\n- 名稱：golden\n- 指令：pytest\n- 執行目錄：/x\n- 實作版本：{ver}\n- 環境：{env}\n- 環境檢查：{chk}\n\n## 輸出\nGC01 6 日\n')
+        self.write(self.slice_file('06_evidence/results/2026-11-05_101600_answers.log'),
+                   f'{header}\n- 實作版本：{ver}\n- 環境：{env2 or env}\n- 環境檢查：通過\n\n## 輸出\nQ01 6 天\n')
+        self.write(self.slice_file('06_evidence/answers.md'), '# answers\n\n| 驗收問題 | 能否回答 | 用哪個查詢或 API | 結果 | 判定 |\n|---|---|---|---|---|\n'
+                   '| Q01 | 能 | GET /x | 6 天（results/2026-11-05_101600_answers.log:5） | 通過 |\n')
         self.write(self.slice_file('06_evidence/signoff.md'), f'# signoff\n\n- 實作版本：impl @ {want}（對應設計 tag：…）\n')
         gc = self.GC.format('一致', '通過').replace('- 判定：通過', f'- 系統結果：6 日{cite}\n- 判定：通過').replace('| GC02 |  |', '| GC01 | |')
         self.write(self.slice_file('06_evidence/golden_cases.md'), gc)
@@ -546,6 +551,38 @@ class TestLint(Base):
         self.assertIn('不是 tools/run_evidence.py 產生的', self.setup_evidence(header='# 我自己寫的'))
         self.assertIn('有未 commit 的修改時跑的', self.setup_evidence(ver='impl @ abc1234（有未 commit 的修改：是）'))
         self.assertIn('和 signoff.md 的 def5678 不同', self.setup_evidence(want='def5678'))
+        self.assertIn('驗證環境沒有通過檢查', self.setup_evidence(chk='未檢查（沒有環境定義檔）'))
+        self.assertIn('不是在同一個驗證環境跑的', self.setup_evidence(env2='compose.yaml：compose.yaml sha256:bbbb'))
+
+    def test_check_env(self):
+        # ⑥ 的驗證環境：image 固定 digest、不和主機共用、不掛主機路徑與 docker.sock、port 只綁 127.0.0.1
+        d = os.path.join(self.dir, 'impl')
+        os.makedirs(d)
+        good = ('services:\n  db:\n    image: postgres:15@sha256:' + 'a' * 64 + '\n    ports: ["127.0.0.1:55432:5432"]\n'
+                '    volumes: ["pgdata:/var/lib/postgresql/data", "./schema.sql:/docker-entrypoint-initdb.d/1.sql:ro"]\n'
+                '  app:\n    build: .\n    volumes: ["./src:/app/src"]\nvolumes:\n  pgdata: {}\n')
+        with open(os.path.join(d, 'compose.yaml'), 'w', encoding='utf-8') as f: f.write(good)
+        with open(os.path.join(d, 'Dockerfile'), 'w', encoding='utf-8') as f:
+            f.write('FROM python:3.12-slim@sha256:' + 'b' * 64 + ' AS base\nFROM base\n')
+        code, out = run('check_env.py', os.path.join(d, 'compose.yaml'), cwd=self.dir)
+        self.assertEqual(code, 0, out)
+        self.assertIn('環境指紋：compose.yaml sha256:', out)
+        x = ('  x:\n    image: busybox@sha256:' + 'c' * 64 + '\n    privileged: true\n    network_mode: host\n'
+             '    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]\n')
+        bad = good.replace('@sha256:' + 'a' * 64, '').replace('127.0.0.1:55432', '55432').replace('./src', '/home/x') \
+                  .replace('volumes:\n  pgdata', x + 'volumes:\n  pgdata')
+        with open(os.path.join(d, 'compose.yaml'), 'w', encoding='utf-8') as f: f.write(bad)
+        code, out = run('check_env.py', os.path.join(d, 'compose.yaml'), cwd=self.dir)
+        self.assertEqual(code, 1, out)
+        for msg in ('沒有用 @sha256: 固定版本', '對外開放', 'repo 以外的主機路徑', 'privileged', 'network_mode 是 host', 'docker.sock'):
+            self.assertIn(msg, out)
+        # run_evidence 把環境與檢查結果寫進檔頭
+        with open(os.path.join(d, 'compose.yaml'), 'w', encoding='utf-8') as f: f.write(good)
+        code, out = self.run_evidence('golden', 'true', cwd=d)
+        rel = re.search(r'執行紀錄：(06_evidence/results/\S+\.log)', out).group(1)
+        log = open(os.path.join(self.dir, self.slice_file(rel)), encoding='utf-8').read()
+        self.assertIn('- 環境：compose.yaml：compose.yaml sha256:', log)
+        self.assertIn('- 環境檢查：通過', log)
 
     def test_evidence_skipped_without_step6_review(self):
         code, out = self.lint()
