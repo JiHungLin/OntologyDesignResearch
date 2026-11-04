@@ -461,7 +461,7 @@ def test_approvals(repo, client, tmp_path):
     assert _json.loads(p.stdout.readline())['id'] == 1
     assert _json.loads(p.stdout.readline())['result']['tools'][0]['name'] == 'approve'
     import time
-    for _ in range(40):
+    for _ in range(100):   # 機器忙時（另一個 AI 在跑）approve_mcp.py 寫出請求會慢一點
         pend = client.get(f"/api/sessions/{s['id']}/approvals").json()['pending']
         if pend: break
         time.sleep(0.1)
