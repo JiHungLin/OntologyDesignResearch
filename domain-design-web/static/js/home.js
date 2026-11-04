@@ -160,7 +160,7 @@ export async function renderHome(slice) {
       <p class="muted">①～⑥ 都凍結了。回總覽挑下一條。</p><a class="btn big primary" href="#/">回總覽</a></section>`;
   }
 
-  const designDone = h.levels.slice(0, 5).every(l => l.state === 'frozen') && h.levels[5].state !== 'frozen';
+  const designDone = h.levels.slice(0, 5).every(l => l.state === 'frozen') && h.levels[5].state === 'locked';   // ⑥ 開始後（進行中、審查中、待凍結）照一般關卡顯示
   if (designDone && !(s && s.running) && !asking) {
     hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>設計完成（待驗證）</h1>
       <p class="muted">①～⑤ 都凍結了，這是一個設計版本。第 ⑥ 步等系統實作好再做；現在可以開始下一條切片。</p>

@@ -5,7 +5,7 @@ import { route } from './main.js';
 export const $ = (s, el = document) => el.querySelector(s);
 export const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 export const CIRCLED = ['', '①', '②', '③', '④', '⑤', '⑥'];
-export const state = { slices: [], sessions: [], scope: null, slice: null, home: null, project: null, review: null, path: null, sel: null, showAll: false, watching: {} };
+export const state = { slices: [], sessions: [], scope: null, slice: null, home: null, project: null, review: null, path: null, sel: null, showAll: false, watching: {}, approvals: {} };
 
 // ---------- 工具 ----------
 
@@ -24,7 +24,7 @@ export function esc(s) {
 }
 
 // 行內：`code`，「檔名:行號」做成點了打開檔案的連結
-export const FILE_REF = /`?([^\s`「」（）()、，；<>]+?\.(?:md|ya?ml|js|sql|py)):(\d+)`?/g;
+export const FILE_REF = /`?([^\s`「」（）()、，；<>]+?\.(?:md|ya?ml|js|sql|py|log)):(\d+)`?/g;
 export function inline(s) {
   return esc(s)
     .replace(FILE_REF, (m, f, n) => `<a class="ref-link" data-file="${f}" data-line="${n}">${f}:${n}</a>`)

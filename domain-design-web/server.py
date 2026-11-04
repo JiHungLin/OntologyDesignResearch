@@ -37,7 +37,7 @@ async def revalidate(request, call_next):
         resp.headers['Cache-Control'] = 'no-cache'
     return resp
 
-TEXT_EXT = {'.md', '.txt', '.yaml', '.yml', '.json', '.js', '.csv', '.py', ''}
+TEXT_EXT = {'.md', '.txt', '.yaml', '.yml', '.json', '.js', '.csv', '.py', '.log', '.sql', ''}
 REVIEW_NAME = re.compile(r'^(\d{4}-\d{2}-\d{2})_(.+)\.md$')
 
 
@@ -428,6 +428,32 @@ def get_events(sid: str, after: int = 0):
     if sessions.get(sid) is None:
         raise HTTPException(404, '找不到這個 session')
     return sessions.events(sid, after)
+
+
+@app.get('/api/sessions/{sid}/approvals')
+def get_approvals(sid: str):
+    """AI 在等人核准的指令（第 ⑥ 步的實作指令等，docs/01 ⑥「實作指令與執行紀錄」）。"""
+    if sessions.get(sid) is None:
+        raise HTTPException(404, '找不到這個 session')
+    return {'pending': sessions.pending_approvals(sid)}
+
+
+class Decision(BaseModel):
+    allow: bool
+    message: str = ''
+    by: str = ''
+
+
+@app.post('/api/sessions/{sid}/approvals/{rid}')
+def post_approval(sid: str, rid: str, d: Decision):
+    if sessions.get(sid) is None:
+        raise HTTPException(404, '找不到這個 session')
+    try:
+        return sessions.decide_approval(sid, rid, d.allow, d.message.strip(), d.by.strip())
+    except KeyError:
+        raise HTTPException(404, '找不到這個核准請求（可能已經逾時）')
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
 
 
 KIT = os.path.join(HERE, '..', 'domain-design-kit')

@@ -42,7 +42,8 @@ def resolve(rel, base=None):
     審查頁中的「在哪裡」常寫成相對於切片資料夾（02_entities.md:150），所以先試 base，再試 repo 根目錄；
     AI 也常把規劃檔寫成 PLAN.md:65、ENTITY_SKETCH.md:40（實際在 slices/ 底下），最後再試 slices/。"""
     root = repo()
-    for b in ([base] if base else []) + [root, os.path.join(root, 'slices')]:
+    # ⑥ 的系統結果寫 results/<檔名>.log:行號（相對於 06_evidence/，docs/02 ⑥ `results/`）
+    for b in ([base, os.path.join(base, '06_evidence')] if base else []) + [root, os.path.join(root, 'slices')]:
         p = os.path.realpath(os.path.join(b, rel))
         if (p == root or p.startswith(root + os.sep)) and os.path.isfile(p):
             return p

@@ -4,6 +4,7 @@ claude -p 不能核准權限，允許清單又只能一個指令一個指令比�
 「cd …; for f in …; do cat …; done」「grep … | head」被擋，再改用別的方法（白跑一趟，也讓人以為出錯）。
 這裡把指令拆開，每一段都是只讀的指令、讀的路徑都在設計 repo（或網頁資料夾）裡，就回答 allow；
 git 只放行讀的子指令（status、diff、log、show…）。
+tools/run_evidence.py 雖然在 tools/ 底下，但會執行它包住的實作指令，回答 ask，一律交給人核准（approve_mcp.py）。
 自己寫的 python（python3 - <<EOF、python3 -c）一定被擋，這裡直接拒絕並附上改用什麼——
 挑錯、核對的子代理拿不到網頁附加的系統提示，只能從被擋的理由學到。
 其他一律不表示意見，照原本的權限規則（允許清單、被擋就擋）。
@@ -27,6 +28,7 @@ PY_REASON = ('網頁裡不能跑自己寫的 python（python3 - <<EOF、python3 
              '找字、找編號用 Grep；表格欄數、格式、引用、編號，以及 api.yaml 讀不讀得進來、$ref 指不指得到，都用 python3 -I tools/lint.py <切片>（舊版工具包沒有 API 檢查時，用 Read 看 api.yaml，有疑問寫進挑錯或審查頁）；看改了什麼用 git diff --stat、git diff <檔案>。'
              '要驗算取位、比例分攤這類數字時，在檔案裡寫出算式與步驟，標 [未執行] 交給人核對（黃金案例的預期結果本來就由人算）。'
              '能跑的 python 只有 python3 tools/*。')
+EVIDENCE = re.compile(r'\brun_evidence\.py\b')
 REDIRECT_OK = re.compile(r'\d?>&\d|&>\s*/dev/null')   # 2>&1、&>/dev/null：只改輸出去向，不寫檔
 SED_WRITE = re.compile(r'(^|[;\d$/,\s])\s*[weW](\s|$)')   # sed 的 w（寫檔）、e（執行）指令，前面可以有位址
 
@@ -145,6 +147,10 @@ def main():
     if INLINE_PY.search(cmd):
         json.dump({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'deny',
                                           'permissionDecisionReason': PY_REASON}}, sys.stdout)
+        return
+    if EVIDENCE.search(cmd):   # 在 tools/ 底下，但會執行它包住的實作指令：一律交給人核准（docs/01 ⑥）
+        json.dump({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'ask',
+                                          'permissionDecisionReason': 'tools/run_evidence.py 會執行實作指令，要人逐條核准'}}, sys.stdout)
         return
     roots = [os.path.realpath(data.get('cwd') or os.getcwd()), os.path.dirname(os.path.realpath(__file__))]
     if read_only(cmd, roots):

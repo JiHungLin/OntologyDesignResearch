@@ -35,8 +35,9 @@ export function anyRunning() { return state.sessions.some(s => s.running); }
 export function renderAiHead() {
   const s = curSession();
   const run = state.sessions.find(x => x.running);
-  $('#aiDot').className = 'dot ' + (run ? 'busy' : s ? 'on' : '');
-  $('#aiLabel').textContent = run ? `AI 處理中（${scopeName(run.slice)}）` : s ? 'AI 待命中' : 'AI';
+  const ask = run && (state.approvals[run.id] || []).length;
+  $('#aiDot').className = 'dot ' + (ask ? 'ask' : run ? 'busy' : s ? 'on' : '');
+  $('#aiLabel').textContent = ask ? `AI 等你核准指令（${ask}）` : run ? `AI 處理中（${scopeName(run.slice)}）` : s ? 'AI 待命中' : 'AI';
 }
 
 export function openAi(scope) {
@@ -89,6 +90,8 @@ export async function renderAiNext(s) {
   const box = $('#aiNext');
   box.innerHTML = '';
   setAiBusy(s && s.running);
+  const aps = s && s.running ? state.approvals[s.id] || [] : [];
+  if (aps.length) { approvalCards(box, s, aps); return; }
   if (s && s.running) {
     box.innerHTML = `<div class="ai-busy"><span class="spinner"></span><div><b>AI 正在處理</b>，做完會在這裡通知你，畫面也會自動更新。
       <div class="small muted" id="aiLive">${esc(liveText())}</div></div></div>`;
@@ -197,6 +200,49 @@ export async function send(s, text, opts = {}) {
 }
 
 // 輪詢背景工作的事件；做完時重新整理畫面（AI 可能改了檔案）
+// AI 要執行允許清單之外的指令（第 ⑥ 步的 docker、pytest、tools/run_evidence.py…）：停下來等人核准，一次一條
+// （docs/01 ⑥「實作指令與執行紀錄」；網頁這邊由 approve_mcp.py 轉過來，終端機則是 Claude Code 自己問）
+function approvalCards(box, s, aps) {
+  setAiBusy(true);
+  const a = aps[0];
+  const inp = a.input || {};
+  const cmd = inp.command || inp.file_path || JSON.stringify(inp, null, 2);
+  const who = remember('reviewer') || '';
+  box.innerHTML = `<div class="approve-card">
+    <div class="label">AI 要執行這條指令，等你核准${aps.length > 1 ? `（還有 ${aps.length - 1} 條在排隊）` : ''}</div>
+    ${inp.description ? `<p style="margin:4px 0 6px"><b>用途：</b>${esc(inp.description)}</p>` : ''}
+    <pre class="cmd">${esc(cmd)}</pre>
+    <p class="small muted" style="margin:6px 0">按「放行」就會在這台電腦上執行一次（${esc(TOOL_NAME[a.tool] || a.tool)}）。看不懂在做什麼、或不是這一步該做的，就不放行並寫一句原因，AI 會照你說的改。</p>
+    <div class="row" style="gap:6px;flex-wrap:wrap"><input type="text" id="apWho" class="soft" style="flex:0 1 140px" value="${esc(who)}" placeholder="核准人（執行者）">
+      <input type="text" id="apWhy" class="soft" style="flex:1 1 200px" placeholder="（不放行時）原因或要它怎麼做"></div>
+    <div class="row" style="margin-top:8px;gap:8px"><button class="btn primary" id="apYes">放行這一次</button><button class="btn" id="apNo">不放行</button></div></div>`;
+  const go_ = async allow => {
+    const by = $('#apWho').value.trim();
+    if (!by) { toast('請填核准人（就是 ⑥ 的執行者）'); $('#apWho').focus(); return; }
+    remember('reviewer', by);
+    try { await api(`/api/sessions/${s.id}/approvals/${a.id}`, { allow, message: $('#apWhy').value.trim(), by }); }
+    catch (e) { toast(e.message); }
+    state.approvals[s.id] = aps.slice(1);
+    renderAiHead(); renderAiNext(s);
+  };
+  $('#apYes').onclick = () => go_(true);
+  $('#apNo').onclick = () => go_(false);
+}
+
+async function pollApprovals(sid) {
+  let ap;
+  try { ap = (await api(`/api/sessions/${sid}/approvals`)).pending; } catch (e) { return; }
+  const before = (state.approvals[sid] || []).map(x => x.id).join();
+  state.approvals[sid] = ap;
+  if (ap.map(x => x.id).join() === before) return;
+  renderAiHead();
+  if (ap.length) {
+    if ($('#aiDrawer').hidden) openAi((state.sessions.find(x => x.id === sid) || {}).slice);
+    else renderAiNext(state.sessions.find(x => x.id === sid));
+    toast('AI 要執行一條指令，等你核准');
+  }
+}
+
 export function watch(sid, onEvent) {
   const w = state.watching[sid] = state.watching[sid] || { n: 0 };
   if (onEvent) w.onEvent = onEvent;
@@ -219,7 +265,8 @@ export function watch(sid, onEvent) {
     const aiLive = $('#aiLive');
     if (aiLive) aiLive.textContent = liveText();
     else if (r.running && shown && !$('.ai-busy')) renderAiNext(sessionOf(state.aiScope) || curSession());
-    if (r.running) { w.timer = setTimeout(tick, 1500); return; }
+    if (r.running) { await pollApprovals(sid); w.timer = setTimeout(tick, 1500); return; }
+    state.approvals[sid] = [];
     w.timer = null; w.onEvent = null;
     await refreshSessions();
     if (!$('#aiDrawer').hidden) renderAi();
@@ -292,13 +339,14 @@ export function showEvent(ev) {
   else if (ev.kind === 'text' && ev.sub) addStep(log, `<div class="sub-text">${inline(ev.text)}</div>`, '子代理');
   else if (ev.kind === 'text') { log.insertAdjacentHTML('beforeend', `<div class="t md">${md(ev.text)}</div>`); state.lastText = ev.text; }
   else if (ev.kind === 'tool') addStep(log, `<b>${esc(TOOL_NAME[ev.name] || ev.name)}</b> <code>${esc(ev.brief || '')}</code>`, ev.sub ? '子代理' : (TOOL_NAME[ev.name] || ev.name));
+  else if (ev.kind === 'approval') log.insertAdjacentHTML('beforeend', `<div class="${ev.allow ? 'ok-line' : 'deny'} small">${ev.allow ? '✓ 放行' : '✗ 不放行'}（${esc(ev.by || '')}）：<code>${esc(ev.brief || '')}</code>${ev.message ? `　${esc(ev.message)}` : ''}</div>`);
   else if (ev.kind === 'compacted') log.insertAdjacentHTML('beforeend', '<div class="deny">這個 session 剛經過摘要壓縮，建議做完這一段就開新的 session。</div>');
   else if (ev.kind === 'error') log.insertAdjacentHTML('beforeend', `<div class="err">${esc(ev.text)}</div>`);
   else if (ev.kind === 'result') {
     // 被擋下的指令收成一塊：AI 多半會改用別的方法繼續，結果真的缺東西才要處理
     const dn = ev.denials || [];
     if (dn.length) log.insertAdjacentHTML('beforeend', `<details class="deny"><summary>這一輪有 ${dn.length} 個指令被網頁的權限擋下</summary>
-      <p class="small" style="margin:6px 0">AI 通常會改用別的方法繼續。只有它最後說缺了什麼、做不完時才需要處理：到 terminal 用 <code>claude --resume ${esc((curSession() || {}).id || '<session id>')}</code> 接著做並核准。</p>
+      <p class="small" style="margin:6px 0">包括你在核准卡片上選「不放行」的，和網頁一定擋的（自己寫的 python）。AI 通常會改用別的方法繼續；只有它最後說缺了什麼、做不完時才需要處理。</p>
       <ul class="small">${dn.map(d => `<li><code>${esc(d.tool)}</code> ${esc(((d.input || {}).command || JSON.stringify(d.input || '')).slice(0, 200))}</li>`).join('')}</ul></details>`);
     if (!ev.ok) log.insertAdjacentHTML('beforeend', `<div class="err">${esc(ev.text)}</div>`);
     else if (ev.text && ev.text.trim() !== (state.lastText || '').trim()) log.insertAdjacentHTML('beforeend', `<div class="t md">${md(ev.text)}</div>`);
