@@ -17,6 +17,7 @@ export async function renderFinish(path, focus) {
   const spotRow = r.spot.find(s => s.items.trim()) || r.spot[0];
   const name = remember('reviewer');
   const signed = c.conclusion_done;
+  const exec_ = r.conclusion.some(x => '執行者' in x.cells);   // ⑥ 的結論表多一欄執行者
 
   // 抽查一次看一條：清單挑一條 → 這一條的完成標準、AI 說、證據（AI 寫的編號與行號已換成內容）、判斷按鈕放在同一張卡
   // 審查頁的寫法是「① 第 1、4 條；③ 第 2 條」；畫面上一條的代號是「①1」（步驟＋第幾條）
@@ -83,6 +84,8 @@ export async function renderFinish(path, focus) {
       ${cur ? '' : `      <section class="card lift" style="display:flex;flex-direction:column;gap:12px">
         <div><span class="chip">簽名過關</span><h2 style="margin:8px 0 0">你是審查者（不是產出這一步的人）</h2></div>
         <input type="text" id="who" value="${esc(name)}" placeholder="你的名字">
+        ${exec_ ? `<label class="label" for="execBy" style="margin:0">執行者（在核准卡片上放行測試指令、看著它跑的人；不能和你同一人）</label>
+        <input type="text" id="execBy" value="${esc(r.conclusion.map(x => x.cells['執行者']).find(Boolean) || '')}" placeholder="執行者的名字">` : ''}
         ${r.conclusion.map(x => `
           <div><div class="label">步驟 ${esc(x.cells['步驟'])}${x.cells['結論'] ? `　已簽：${esc(x.cells['結論'])}（${esc(x.cells['日期'])}）` : ''}</div>
           <div class="verdict">
@@ -141,10 +144,17 @@ export async function renderFinish(path, focus) {
   $$('[data-verdict]').forEach(b => b.onclick = async () => {
     const who = $('#who').value.trim();
     if (!who) { toast('先寫你的名字'); return; }
-    remember('reviewer', who);
     const x = r.conclusion.find(y => y.line === +b.dataset.verdict);
     const key = Object.keys(x.cells).find(k => k.startsWith('審查者'));
-    if (await write('/api/review/cells', { line: x.line, cells: { [key]: who, '日期': today(), '結論': b.dataset.v } })) renderFinish(path);
+    const cells = { [key]: who, '日期': today(), '結論': b.dataset.v };
+    if ('執行者' in x.cells) {   // ⑥：審查者就是簽核者，不能和執行者同一人（docs/02「第 ⑥ 步的審查頁」）
+      const ex = $('#execBy').value.trim();
+      if (!ex) { toast('先寫執行者'); $('#execBy').focus(); return; }
+      if (ex === who) { toast('執行者和簽核者不能是同一人'); return; }
+      cells['執行者'] = ex;
+    }
+    remember('reviewer', who);
+    if (await write('/api/review/cells', { line: x.line, cells })) renderFinish(path);
   });
   const ho = $('#handover');
   const step = (path.match(/_([\d-]+)\.md$/) || [])[1] || '';

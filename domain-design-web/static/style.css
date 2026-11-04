@@ -44,6 +44,7 @@ body.drawer-push .page { margin-right: var(--drawer-w); }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); }
 .dot.on { background: var(--done); }
 .dot.busy { background: var(--hint); animation: blink 1s infinite; }
+.dot.ask { background: var(--turn); animation: blink .6s infinite; }
 @keyframes blink { 50% { opacity: .3; } }
 .segs { flex: 1; display: grid; gap: 4px; }
 .segs span { height: 10px; border-radius: 999px; background: var(--dark2); cursor: pointer; }
@@ -579,3 +580,7 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
 .case-tabs a.ok:not(.on) .st { color: var(--done); }
 .case-pager .btn { text-decoration: none; }
 .hand-back { margin-top: 14px; border-color: var(--turn); }
+/* AI 等人核准的指令（docs/01 ⑥） */
+.approve-card { border: 2px solid var(--turn); background: #FFF1E6; border-radius: 14px; padding: 12px 14px; }
+.approve-card pre.cmd { margin: 0; background: var(--ink); color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 13px; white-space: pre-wrap; word-break: break-all; max-height: 240px; overflow: auto; }
+.ok-line { color: var(--done); margin: 4px 0; }

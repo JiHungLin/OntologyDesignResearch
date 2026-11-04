@@ -118,8 +118,8 @@ def _open_eqs(path):
 
 # ---- 呼叫 claude -p（在背景跑，事件寫進 .domain-web/logs/<id>.jsonl，網頁輪詢） ----
 
-# 網頁沒有選項介面也不能互動核准：檔案修改自動接受（只限切片 repo），常用指令先允許；
-# 其他會被擋下、顯示在網頁上，請人到 terminal 用 --resume 處理。可用環境變數 DOMAIN_WEB_ALLOWED（以逗號分隔）覆寫。
+# 檔案修改自動接受（只限切片 repo），常用指令先允許；清單之外、hook 沒有直接拒絕的指令
+# （例：第 ⑥ 步的 docker、pytest、tools/run_evidence.py），由 approve_mcp.py 交給網頁上的人逐條核准。可用環境變數 DOMAIN_WEB_ALLOWED（以逗號分隔）覆寫。
 FETCH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fetch_text.py')
 ALLOWED = os.environ.get('DOMAIN_WEB_ALLOWED', ','.join([
     'Read', 'Edit', 'Write', 'Glob', 'Grep', 'Agent', 'Skill', 'WebSearch', 'WebFetch',
@@ -147,9 +147,59 @@ SETTINGS = json.dumps({'hooks': {'PreToolUse': [{'matcher': 'Bash', 'hooks': [
     {'type': 'command', 'command': f'{sys.executable} {HOOK}'}]}]}})
 
 
+APPROVE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'approve_mcp.py')
+
+
+def approvals_dir(sid):
+    return os.path.join(kit.repo(), '.domain-web', 'approvals', sid)
+
+
+def _mcp(sid):
+    return json.dumps({'mcpServers': {'web': {'command': sys.executable, 'args': [APPROVE],
+                                              'env': {'DOMAIN_WEB_APPROVALS': approvals_dir(sid)}}}})
+
+
+def pending_approvals(sid):
+    """還沒決定的核准請求（舊到新）。"""
+    d = approvals_dir(sid)
+    if not os.path.isdir(d):
+        return []
+    out = []
+    for n in sorted(os.listdir(d)):
+        if n.endswith('.json') and not n.endswith('.decision.json') and not os.path.exists(os.path.join(d, n[:-5] + '.decision.json')):
+            try:
+                with open(os.path.join(d, n), encoding='utf-8') as f:
+                    out.append(json.load(f))
+            except (OSError, ValueError):
+                continue
+    return out
+
+
+def decide_approval(sid, rid, allow, message='', by=''):
+    """人在網頁上按了放行或不放行：寫回決定，approve_mcp.py 讀到就回給 claude；也記進對話紀錄。"""
+    d = approvals_dir(sid)
+    req = os.path.join(d, rid + '.json')
+    if not re.fullmatch(r'[\w-]+', rid) or not os.path.exists(req):
+        raise KeyError(rid)
+    dec = os.path.join(d, rid + '.decision.json')
+    if os.path.exists(dec):
+        raise RuntimeError('這個請求已經決定過了')
+    with open(req, encoding='utf-8') as f:
+        r = json.load(f)
+    body = {'behavior': 'allow' if allow else 'deny', 'message': message, 'by': by, 'at': _now()}
+    with open(dec + '.tmp', 'w', encoding='utf-8') as f:
+        json.dump(body, f, ensure_ascii=False)
+    os.replace(dec + '.tmp', dec)
+    inp = r.get('input', {})
+    _append(sid, {'kind': 'approval', 'allow': allow, 'tool': r.get('tool'), 'by': by,
+                  'brief': str(inp.get('command') or inp.get('file_path') or inp)[:300], 'message': message})
+    return body
+
+
 def _command(s, message):
     cmd = [CLAUDE, '-p', message, '--output-format', 'stream-json', '--verbose', '--settings', SETTINGS,
-           '--permission-mode', 'acceptEdits', '--append-system-prompt', web_prompt(), '--allowedTools', *ALLOWED]
+           '--permission-mode', 'acceptEdits', '--append-system-prompt', web_prompt(),
+           '--mcp-config', _mcp(s['id']), '--permission-prompt-tool', 'mcp__web__approve', '--allowedTools', *ALLOWED]
     if s['turns'] == 0:
         cmd += ['--session-id', s['id'], '-n', s['name']]
     else:
@@ -234,7 +284,7 @@ async def _run(sid, message):
     s = get(sid)
     try:
         proc = await asyncio.create_subprocess_exec(
-            *_command(s, message), cwd=kit.repo(),
+            *_command(s, message), cwd=kit.repo(), env=dict(os.environ, MCP_TOOL_TIMEOUT=str(40 * 60 * 1000)),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, limit=2 ** 24)
     except OSError as e:
         _append(sid, {'kind': 'error', 'text': f'無法執行 {CLAUDE}：{e}'})

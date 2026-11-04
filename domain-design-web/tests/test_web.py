@@ -442,3 +442,43 @@ def test_review_steps():
     assert server._review_steps('05-2') == {5}
     assert server._review_steps('03-04') == {3, 4}
     assert server._review_steps('02-05') == {2, 3, 4, 5}
+
+
+def test_approvals(repo, client, tmp_path):
+    # 第 ⑥ 步的實作指令由網頁上的人逐條核准：approve_mcp.py 寫請求、等決定；網頁列出、寫回決定（docs/01 ⑥）
+    import json as _json
+    import threading
+    s = sessions.create('leave-backfill', '第 6 步', '交接')
+    d = sessions.approvals_dir(s['id'])
+    env = dict(os.environ, DOMAIN_WEB_APPROVALS=d, DOMAIN_WEB_APPROVAL_WAIT='20')
+    p = subprocess.Popen([sys.executable, os.path.join(HERE, '..', 'approve_mcp.py')], stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE, text=True, env=env)
+    p.stdin.write(_json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}}) + '\n')
+    p.stdin.write(_json.dumps({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'}) + '\n')
+    p.stdin.write(_json.dumps({'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call', 'params': {'name': 'approve', 'arguments': {
+        'tool_name': 'Bash', 'input': {'command': 'docker run postgres:15', 'description': '起資料庫'}}}}) + '\n')
+    p.stdin.flush()
+    assert _json.loads(p.stdout.readline())['id'] == 1
+    assert _json.loads(p.stdout.readline())['result']['tools'][0]['name'] == 'approve'
+    import time
+    for _ in range(40):
+        pend = client.get(f"/api/sessions/{s['id']}/approvals").json()['pending']
+        if pend: break
+        time.sleep(0.1)
+    assert pend and pend[0]['input']['command'] == 'docker run postgres:15'
+    r = client.post(f"/api/sessions/{s['id']}/approvals/{pend[0]['id']}", json={'allow': False, 'message': '先不要用 docker', 'by': '甲'})
+    assert r.status_code == 200
+    out = _json.loads(_json.loads(p.stdout.readline())['result']['content'][0]['text'])
+    assert out == {'behavior': 'deny', 'message': '先不要用 docker'}
+    assert client.post(f"/api/sessions/{s['id']}/approvals/{pend[0]['id']}", json={'allow': True}).status_code == 409
+    assert client.get(f"/api/sessions/{s['id']}/approvals").json()['pending'] == []
+    ev = sessions.events(s['id'])['events']
+    assert ev[-1]['kind'] == 'approval' and ev[-1]['by'] == '甲' and not ev[-1]['allow']
+    p.stdin.close(); p.wait(timeout=5)
+    # tools/run_evidence.py 在 tools/ 底下，但會執行實作指令：hook 一律交給人核准
+    hp = subprocess.run([sys.executable, os.path.join(HERE, '..', 'readonly_hook.py')], capture_output=True, text=True,
+                        input=_json.dumps({'tool_name': 'Bash', 'cwd': str(repo),
+                                           'tool_input': {'command': 'python3 tools/run_evidence.py x golden -- pytest'}}))
+    assert _json.loads(hp.stdout)['hookSpecificOutput']['permissionDecision'] == 'ask'
+    cmd = sessions._command(dict(s, turns=0, name='n'), 'hi')
+    assert cmd[cmd.index('--permission-prompt-tool') + 1] == 'mcp__web__approve'
