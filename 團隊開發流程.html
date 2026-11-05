@@ -236,7 +236,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
     <div class="row" role="row">
       <div class="name"><span>⑥</span>跑起來驗證</div>
       <div><div class="lbl">交付物</div><span class="ex">黃金案例</span>（獨立於系統算出，3～5 筆）、合成資料（AI 產生）、實際執行結果、驗收問題回答表、簽核紀錄<div class="files"><span class="file">06_evidence/</span><span class="file">golden_cases.md</span><span class="file">signoff.md</span></div></div>
-      <div><div class="lbl">關卡</div><ul><li>黃金案例結果與人工預期一致，專家看過</li><li>P0 驗收問題 100% 可回答；未執行 ≠ 通過</li><li>實作指令每條由人核准；測試用 <code>tools/run_evidence.py</code> 存 log，結果寫出 log 位置（不是 AI 自己回報）</li><li>被測系統跑在 Docker Compose 定義的沙盒：版本固定、和主機隔開、只放測試資料（<code>tools/check_env.py</code> 檢查），log 記下環境指紋</li><li>和 ①～⑤ 一樣用審查頁：黃金案例三欄對照（你算的、設計推的、系統跑的）、抽查打開 log；執行者與簽核者不同人</li><li>實作時發現的設計問題不在程式裡自己補：列在簽核紀錄，回頭修改設計</li><li>守恆式、黃金案例等檢查交給平台 CI 自動重跑</li></ul></div>
+      <div><div class="lbl">關卡</div><ul><li>黃金案例結果與人工預期一致，專家看過</li><li>P0 驗收問題 100% 可回答；未執行 ≠ 通過</li><li>實作指令每條由人核准；測試用 <code>tools/run_evidence.py</code> 存 log，結果寫出 log 位置（不是 AI 自己回報）</li><li>被測系統跑在 Docker Compose 定義的沙盒：版本固定、和主機隔開、只放測試資料（<code>tools/check_env.py</code> 檢查），log 記下環境指紋</li><li>和 ①～⑤ 一樣用審查頁：黃金案例三欄對照（你算的、設計推的、系統跑的）、抽查打開 log；執行者與簽核者不同人</li><li>實作時發現的設計問題不在程式裡自己補：列在簽核紀錄，回頭修改設計</li><li>守恆式、黃金案例等檢查交給平台 P9 在每次修改時自動重跑；自動執行（CI）不取代簽核，簽核只看 run_evidence 的 log</li></ul></div>
     </div>
   </div>
   <p class="note">01～05 每份交付物末尾都有「決定與理由」區：重要判斷、沒採用的做法、處理過的反例；每個決定標出誰提出、誰同意，AI 提出、還沒有人同意的不能凍結。每個產出都用編號（Qnn、UC-nn、Rnn、GCnn）指回上游，檢查會沿著編號確認沒有漏。</p>
@@ -349,7 +349,7 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
         <tr><td>P6 規則落實位置</td><td>資料庫 constraint／trigger 或 service 層；需人工判斷的只產生建議</td></tr>
         <tr><td>P7 個人資料</td><td>依個資法刪除或遮蔽並留紀錄；業務事實保留</td></tr>
         <tr><td>P8 追溯</td><td>每張表、每支 API 指回概念的統一格式</td></tr>
-        <tr><td>P9 自動化檢查</td><td>守恆、重算、權限、追溯、黃金案例放進 CI</td></tr>
+        <tr><td>P9 自動化檢查</td><td>守恆式（全部測試資料）、快取重算、決策表逐列、黃金案例、權限、追溯每次修改自動重跑，併入主幹前與 ⑥ 簽核前跑；讀程式的三項（「今天」單一入口、只由動作或遷移寫入、程式指回決策表）先試用；失敗依原因分工，環境壞了由平台負責人；不取代 ⑥ 簽核</td></tr>
         <tr><td>P10 名稱與多語</td><td>英文識別名稱、分類值穩定代碼；各語言名稱另存，依使用者語言顯示</td></tr>
         <tr><td>P11 識別範圍與存放</td><td>在什麼範圍內認「同一個」、資料放哪裡，由平台決定一次；處理個資的平台，② 每個屬性標資料性質（不含個資／可識別個人／特種個資）</td></tr>
         <tr><td>P12 模型演進與既有資料</td><td>新屬性在舊資料上是「未知」，不當成「否」；規則遇到未知判「資料不足」；補值與遷移都要留事件</td></tr>
