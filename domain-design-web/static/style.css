@@ -355,7 +355,7 @@ main.wide { max-width: 1640px; }
 .file-body .ln.hit { background: var(--hint); }
 .ai-session { padding: 12px 16px; border-bottom: 2px solid var(--line); font-size: 14px; display: flex; flex-direction: column; gap: 8px; }
 .ai-session textarea { min-height: 140px; font-size: 13px; }
-.ai-log { flex: 1; overflow: auto; padding: 16px 18px; font-size: 14.5px; line-height: 1.7; display: flex; flex-direction: column; gap: 12px; }
+.ai-log { flex: 1; min-height: 140px; overflow: auto; padding: 16px 18px; font-size: 14.5px; line-height: 1.7; display: flex; flex-direction: column; gap: 12px; }
 .ai-log .me { align-self: flex-end; max-width: 88%; background: #ECEAFB; border-radius: 16px 16px 4px 16px; padding: 10px 14px; word-break: break-word; }
 .ai-log .me details { margin-top: 6px; color: var(--muted); }
 .ai-log .me details summary { cursor: pointer; }
@@ -382,7 +382,7 @@ main.wide { max-width: 1640px; }
 .spinner { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 3px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--primary); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .ai-form textarea:disabled { background: var(--bg); cursor: not-allowed; }
-.ai-next:not(:empty) { padding: 12px 16px; border-top: 2px solid var(--line); background: #F7F6FF; display: flex; flex-direction: column; gap: 8px; }
+.ai-next:not(:empty) { padding: 12px 16px; border-top: 2px solid var(--line); background: #F7F6FF; display: flex; flex-direction: column; gap: 8px; flex: 0 1 auto; min-height: 0; max-height: 55vh; overflow-y: auto; }
 .ai-next .label { margin: 0; }
 .ai-next .btn { align-self: flex-start; }
 .ai-opts { display: flex; flex-direction: column; gap: 8px; }
