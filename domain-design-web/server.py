@@ -208,19 +208,12 @@ def post_accept(a: Accept):
 
 
 def _criteria(f):
-    """某個交付物的「完成標準（AI 自評）」表：[(行號, [完成標準, 類, AI 自評])]。
-    也認得 2026-10-19 以前的舊格式（「## 檢查紀錄」底下「完成標準｜AI 自評｜審查者確認」，沒有「類」欄）：
-    已凍結的切片回頭修改時，表還是舊的。"""
+    """某個交付物的「完成標準（AI 自評）」表：[(行號, [完成標準, 類, AI 自評])]。"""
     mb = kit.md2build()
     rows = []
     for _, h3, header, trs in mb.Doc(f).tables():
-        head = [h.strip() for h in header or []]
-        if not head or head[0] != '完成標準' or 'AI 自評' not in head:
-            continue
-        if (h3 or '').startswith('完成標準') or '審查者確認' in head:
-            k, a = (head.index('類') if '類' in head else None), head.index('AI 自評')
-            rows = [(ln, [c[0], c[k] if k is not None and k < len(c) else '', c[a] if a < len(c) else ''])
-                    for ln, c in trs]
+        if header and header[0].strip() == '完成標準' and (h3 or '').startswith('完成標準'):
+            rows = trs
     mb.problems.clear()
     return rows
 
@@ -260,7 +253,7 @@ def _spot_items(r, p):
             if 0 < i <= len(rows):
                 cells = rows[i - 1][1]
                 out.append({'id': f'{step}{i}', 'step': step, 'n': i, 'text': cells[0],
-                            'kind': cells[1], 'self': cells[2],
+                            'kind': cells[1] if len(cells) > 2 else '', 'self': cells[-1],
                             'line': rows[i - 1][0], 'file': kit.rel(f),
                             'evidence': evidence.find(cells[-1], kit.rel(f), cells[0])})
     return out
