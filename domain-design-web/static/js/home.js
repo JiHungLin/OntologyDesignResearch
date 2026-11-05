@@ -96,6 +96,9 @@ export async function renderHome(slice) {
     const lr = last ? await loadReview(last.path) : null;
     // 回頭修改的 session 做完也算處理過（它的回覆會說接下來要重做這一步，或還要改什麼）
     const handled = s && !s.running && (s.purpose === `審查 ${step}` || s.purpose === '回頭修改') && !!s.last_reply;
+    // 依這份審查頁重做這一步、做到一半停下（等核准逾時、session 太長）：下一步是繼續做，不是再把審查頁交給 AI
+    const nStep = Math.max(0, ...stepNums(stepOf));
+    const redoing = s && !s.running && s.purpose === `第 ${nStep} 步` && !!s.last_reply && (!last || !s.started || s.started.slice(0, 10) >= last.date);
     const off = lr ? lr.cases.map((c, k) => ({ c, k })).filter(x => /^不一致/.test(((x.c.paper || {})['紙上判定'] || '').trim())) : [];
     if (off.length) {
       const p = enc(last.path);
@@ -108,6 +111,20 @@ export async function renderHome(slice) {
           <p class="muted small">${off.map(x => `<a href="#/r/${p}/golden/${x.k}">${esc(x.c.id)}</a>`).join('　')}</p>
         </div>
         <div class="row"><a class="btn big yellow" href="#/r/${p}/golden/${off[0].k}">去對答案 ›</a><button class="btn big" id="handover">對完了，交給 AI</button></div>
+      </section>`;
+    } else if (redoing) {
+      const said = s.last_reply || '';
+      const nextLine = ((said.match(/下一步[：:]\s*([^\n]+)/g) || []).pop() || '').replace(/^下一步[：:]\s*/, '');
+      hero = `
+      <section class="hero">
+        <div style="flex:999 1 480px;min-width:0">
+          <span class="chip">輪到你</span>
+          <h1>第 ${CIRCLED[nStep]} 步重做到一半，AI 停下來了</h1>
+          <p>AI 依審查頁重做第 ${CIRCLED[nStep]} 步，還沒做完（例：等你核准的指令逾時、session 太長）。請 AI 繼續做；做完會產生新的審查頁，那時再審查。</p>
+          ${nextLine ? `<div class="hero-next"><b>AI 說下一步：</b>${esc(plain(nextLine))}</div>` : ''}
+          <p class="muted small">按下面的按鈕時，網頁會問你要不要開新的 session（AI 建議開新的話就開）。</p>
+        </div>
+        <div class="row"><button class="btn big yellow" id="contStep">請 AI 繼續第 ${CIRCLED[nStep]} 步 ›</button><button class="btn big" id="showAi">看 AI 怎麼說</button></div>
       </section>`;
     } else if (handled) {
       // AI 已經處理過這份審查頁的答案：下一步是繼續這一步（還要送下一份審查頁）或凍結，不是再交一次
