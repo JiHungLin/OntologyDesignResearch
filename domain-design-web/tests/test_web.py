@@ -492,3 +492,13 @@ def test_executor_cell(tmp_path):
     assert '| ⑥ | 甲 | 乙 | 2026-11-05 | 通過 |' in p.read_text(encoding='utf-8')
     with pytest.raises(ValueError):
         review.set_cells(str(p), 7, {'步驟': '⑤'})
+
+
+def test_criteria_old_format(repo, tmp_path):
+    # 2026-10-19 以前凍結的切片：「## 檢查紀錄」底下「完成標準｜AI 自評｜審查者確認」，沒有「類」欄
+    import server
+    f = tmp_path / '02_entities.md'
+    f.write_text('# x\n\n## 檢查紀錄\n\n| 完成標準 | AI 自評 | 審查者確認 |\n|---|---|---|\n'
+                 '| 每張卡都有主要屬性 | ✓ 3 張 | ✓（甲） |\n| 每個屬性都標資料性質 | ✓ 重評 | |\n', encoding='utf-8')
+    rows = server._criteria(str(f))
+    assert [c for _, c in rows] == [['每張卡都有主要屬性', '', '✓ 3 張'], ['每個屬性都標資料性質', '', '✓ 重評']]
