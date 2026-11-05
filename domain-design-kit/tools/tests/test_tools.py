@@ -615,7 +615,7 @@ class TestLint(Base):
         self.assertIn('執行者和審查者（簽核者）是同一人「甲」', out)
 
     def test_spot_hint_format(self):
-        # 2026-11-04 起的審查頁：可挑的條目寫「③ 第 1、4 條」，不寫完成標準的文字（網頁對不回是哪幾條）
+        # 2026-11-05 起的審查頁：可挑的條目寫「③ 第 1、4 條」，不寫完成標準的文字（網頁對不回是哪幾條）
         self.setup_review()
         old = os.path.join(self.dir, self.slice_file('reviews/2026-10-27_03.md'))
         text = open(old, encoding='utf-8').read()
