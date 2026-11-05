@@ -17,7 +17,8 @@ export function sliceState(f, row) {
   if (f.session && f.session.running) return { text: 'AI 進行中', cls: 'busy' };
   if (f.review) return { text: '輪到你審查', cls: 'turn' };
   if (!f.next) return { text: '完成', cls: 'ok' };
-  if (f.next.n === 6) return { text: '設計完成', cls: 'ok' };
+  // ⑥ 還沒開始才算「設計完成」；已經開始（有簽核紀錄）就是還在驗證，不是完成
+  if (f.next.n === 6) return f.next.status === '未開始' ? { text: '設計完成', cls: 'ok' } : { text: f.next.status === '凍結中' ? '⑥ 凍結中' : '⑥ 驗證中', cls: '' };
   if (f.next.status === '凍結中') return { text: `${CIRCLED[f.next.n]} 凍結中`, cls: '' };
   return { text: `下一關 ${CIRCLED[f.next.n]}`, cls: '' };
 }

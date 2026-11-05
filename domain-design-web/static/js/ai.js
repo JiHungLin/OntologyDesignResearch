@@ -1,7 +1,7 @@
 // AI 對話：session、右側抽屜、等待與進行中的卡片
 import { $, $$, api, CIRCLED, enc, esc, go, inline, LEVEL_NAME, md, plain, remember, state, stepName, toast } from './core.js';
 import { showDrawer } from './files.js';
-import { markNav } from './nav.js';
+import { markNav, refreshNav } from './nav.js';
 import { loadProject, nextOfProject } from './overview.js';
 import { route } from './main.js';
 
@@ -291,6 +291,7 @@ export function watch(sid, onEvent) {
     w.quietDone = false;
   };
   w.timer = setTimeout(tick, 300);
+  refreshNav();   // 左側切片的狀態改成「AI 進行中」；做完時 route() 會再更新一次
 }
 
 // 行內問 AI：答案顯示在題目旁邊；用這條切片目前的 session，只解釋不改檔

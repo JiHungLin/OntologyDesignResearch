@@ -114,7 +114,7 @@ export async function renderHub() {
     ${list.length ? `<section><div class="row spread"><h2 style="margin:0">切片</h2>${plan ? `<a href="#/plan">切片地圖${plan.agreed ? '（已同意）' : '（討論中）'}</a>` : ''}</div>
       ${started.length ? `<div class="slices">${started.map(x => {
         const r = x.row || {};
-        const st = x.f.review ? '輪到你審查' : x.f.session && x.f.session.running ? 'AI 進行中' : !x.f.next ? '完成' : x.f.next.n === 6 ? '設計完成（待驗證）' : x.f.next.status === '凍結中' ? `${CIRCLED[x.f.next.n]} 凍結中` : `下一關 ${CIRCLED[x.f.next.n]}`;
+        const st = x.f.review ? '輪到你審查' : x.f.session && x.f.session.running ? 'AI 進行中' : !x.f.next ? '完成' : x.f.next.n === 6 ? (x.f.next.status === '未開始' ? '設計完成（待驗證）' : '⑥ 驗證中') : x.f.next.status === '凍結中' ? `${CIRCLED[x.f.next.n]} 凍結中` : `下一關 ${CIRCLED[x.f.next.n]}`;
         const sc = r['情境（起點 → 可驗證的結果）'] || '';
         return `<a class="slice ${x.f.review ? 'turn' : ''}" href="#/s/${enc(x.code)}" title="${esc(sc)}">
           <span class="row spread"><b>${esc(x.code)}</b><span class="chip ${x.f.review ? 'turn' : ''}">${esc(st)}</span></span>

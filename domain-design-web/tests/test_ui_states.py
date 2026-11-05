@@ -300,3 +300,25 @@ def test_approval_card_keeps_typing(browser, repo):
         srv.terminate(); srv.wait()
     # 卡片沒被換掉（同一個輸入框）就不會失去焦點；無頭 Chrome 的分頁有時拿不到焦點，拿得到時再比一次
     assert r['same'] and r['value'] == '乙' and r['focused'] == r['f0'] and '還有 1 條' in r['label'], r
+
+
+def test_nav_step6_in_progress(browser, repo):
+    # HR hire-employee：⑥ 已經開始（簽核紀錄是草稿），左側不能顯示「設計完成」
+    repo.frozen_until('demo', 5)
+    os.remove(repo.path(REVIEW))
+    port = _port()
+    srv = subprocess.Popen([sys.executable, 'server.py', '--repo', repo.root, '--port', str(port)], cwd=WEB,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    nav = "return [...document.querySelectorAll('#navTree summary')].map(x=>x.innerText).find(t=>t.includes('demo'))"
+    try:
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f'http://127.0.0.1:{port}/api/project'); break
+            except Exception:
+                time.sleep(0.1)
+        before = browser.run(f'http://127.0.0.1:{port}/#/s/demo', nav, wait='#navTree summary')
+        repo.step('demo', '06_evidence/signoff.md', '草稿')
+        after = browser.run(f'http://127.0.0.1:{port}/#/s/demo', nav, wait='#navTree summary')
+    finally:
+        srv.terminate(); srv.wait()
+    assert '設計完成' in before and '⑥ 驗證中' in after and '設計完成' not in after, (before, after)
