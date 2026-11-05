@@ -172,7 +172,6 @@ details.tech summary { cursor: pointer; }
 .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 16px; }
 .opt { text-align: left; background: var(--card); color: var(--ink); border: 3px solid var(--ink); border-radius: var(--r); padding: 22px 24px; box-shadow: 5px 5px 0 var(--ink); font: inherit; display: flex; flex-direction: column; gap: 8px; cursor: pointer; }
 .opt:hover { transform: translate(-1px, -1px); box-shadow: 6px 6px 0 var(--ink); }
-.opt.picked { background: var(--turn); outline: 3px solid var(--ink); }
 .ask-q + .ask-q { margin-top: 18px; }
 .opt .k { font-size: 28px; font-weight: 900; line-height: 1; }
 .opt .sum { font-size: 20px; font-weight: 900; }
@@ -180,6 +179,13 @@ details.tech summary { cursor: pointer; }
 .opt.rec { background: #F1EDFF; }
 .opt.on { background: var(--primary); color: #fff; }
 .opt.on .out { color: #E6E0FF; }
+/* 多題作答：選中的那個要一眼看得出來（放在 .opt.rec 後面，建議選項被選中時也會變色） */
+.opt.picked, .opt.rec.picked { background: var(--primary); color: #fff; outline: 3px solid var(--ink); outline-offset: 0; transform: translate(2px, 2px); box-shadow: none; }
+.opt.picked .out { color: #E6E0FF; }
+.opt.picked .badge-rec { background: #fff; }
+.opt.picked .row::after { content: '✓ 已選'; margin-left: auto; font-size: 13px; font-weight: 900; background: #fff; color: var(--primary); border-radius: 999px; padding: 1px 10px; }
+.ask-q:has(.picked) .opt:not(.picked) { opacity: .55; }
+.ask-q:has(.picked) .opt:not(.picked):hover { opacity: 1; }
 .badge-rec { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 900; padding: 2px 10px; border-radius: 999px; background: var(--hint); color: var(--ink); }
 .ask-answer { white-space: pre-wrap; font-size: 15px; background: var(--bg); border-radius: 14px; padding: 12px 14px; max-height: 320px; overflow: auto; }
 .ask-answer .tool { color: var(--muted); font-size: 13px; }
