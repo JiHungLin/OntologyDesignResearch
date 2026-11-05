@@ -88,10 +88,10 @@ export function setAiBusy(busy) {
 
 export async function renderAiNext(s) {
   const box = $('#aiNext');
-  box.innerHTML = '';
   setAiBusy(s && s.running);
   const aps = s && s.running ? state.approvals[s.id] || [] : [];
-  if (aps.length) { approvalCards(box, s, aps); return; }
+  if (aps.length) { approvalCards(box, s, aps); return; }   // 卡片自己決定要不要重畫（同一個請求保留輸入中的文字）
+  box.innerHTML = '';
   if (s && s.running) {
     box.innerHTML = `<div class="ai-busy"><span class="spinner"></span><div><b>AI 正在處理</b>，做完會在這裡通知你，畫面也會自動更新。
       <div class="small muted" id="aiLive">${esc(liveText())}</div></div></div>`;
@@ -214,10 +214,15 @@ export function whereRuns(cmd) {
 function approvalCards(box, s, aps) {
   setAiBusy(true);
   const a = aps[0];
+  const old = $('.approve-card', box);
+  if (old && old.dataset.rid === a.id) {      // 同一個請求：只更新排隊數，不動輸入框
+    $('.label', old).textContent = `AI 要執行這條指令，等你核准${aps.length > 1 ? `（還有 ${aps.length - 1} 條在排隊）` : ''}`;
+    return;
+  }
   const inp = a.input || {};
   const cmd = inp.command || inp.file_path || JSON.stringify(inp, null, 2);
   const who = remember('reviewer') || '';
-  box.innerHTML = `<div class="approve-card">
+  box.innerHTML = `<div class="approve-card" data-rid="${esc(a.id)}">
     <div class="label">AI 要執行這條指令，等你核准${aps.length > 1 ? `（還有 ${aps.length - 1} 條在排隊）` : ''}</div>
     ${inp.description ? `<p style="margin:4px 0 6px"><b>用途：</b>${esc(inp.description)}</p>` : ''}
     <div class="where ${whereRuns(cmd)[0]}">${esc(whereRuns(cmd)[1])}</div>
@@ -274,7 +279,8 @@ export function watch(sid, onEvent) {
     if (live && state.lastTool) live.textContent = state.lastTool;
     const aiLive = $('#aiLive');
     if (aiLive) aiLive.textContent = liveText();
-    else if (r.running && shown && !$('.ai-busy')) renderAiNext(sessionOf(state.aiScope) || curSession());
+    // 核准卡片顯示中不重畫：重畫會讓正在打字的核准人、原因輸入框失去焦點並清空（新的請求由 pollApprovals 換卡片）
+    else if (r.running && shown && !$('.ai-busy') && !$('.approve-card')) renderAiNext(sessionOf(state.aiScope) || curSession());
     if (r.running) { await pollApprovals(sid); w.timer = setTimeout(tick, 1500); return; }
     state.approvals[sid] = [];
     w.timer = null; w.onEvent = null;
