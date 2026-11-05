@@ -208,6 +208,7 @@ export function whereRuns(cmd) {
   if (/\bdocker[ -]compose\b[^\n;&|]*\b(exec|run)\b/.test(c)) return ['sandbox', '只在沙盒內執行（docker compose）'];
   if (/\bdocker[ -]compose\b/.test(c)) return ['manage', '建立或管理沙盒（docker compose）：會在主機上起、停容器或下載 image'];
   if (/\bdocker\b/.test(c)) return ['host', '直接用 docker，不在 compose 沙盒裡：版本、網路、資料都沒有管控'];
+  if (/\bgit\s+(add|commit)\b/.test(c)) return ['manage', '把實作程式記進版本（git add／commit）：只改這台電腦上的 repo，不會 push；看清楚包含哪些檔案'];
   return ['host', '在主機上執行（不在沙盒裡）'];
 }
 

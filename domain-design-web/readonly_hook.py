@@ -29,6 +29,34 @@ PY_REASON = ('網頁裡不能跑自己寫的 python（python3 - <<EOF、python3 
              '要驗算取位、比例分攤這類數字時，在檔案裡寫出算式與步驟，標 [未執行] 交給人核對（黃金案例的預期結果本來就由人算）。'
              '能跑的 python 只有 python3 tools/*。')
 EVIDENCE = re.compile(r'\brun_evidence\.py\b')
+DESIGN_DIRS = ('slices/', 'core/', 'architecture/', 'inputs/')   # 設計交付物：凍結、/domain-arch 照允許清單 commit
+GIT_STAGE = re.compile(r'\bgit\s+(add|commit)\b([^;&|\n]*)')
+
+
+def impl_commit(cmd):
+    """git add／commit 帶到設計資料夾以外的檔案（實作程式）或整個工作區（-A、.、commit -a）：要人在卡片上核准。
+    實作程式碼何時 commit 由人決定（docs/01 ⑥）；網頁沒有終端機，人用核准卡片決定。"""
+    for m in GIT_STAGE.finditer(cmd):
+        sub, rest = m.group(1), m.group(2)
+        try:
+            toks = shlex.split(rest)
+        except ValueError:
+            return True
+        skip = False
+        for t in toks:
+            if skip:
+                skip = False
+                continue
+            if sub == 'commit' and t in ('-m', '-F', '--message', '--author', '-C', '-c'):
+                skip = True
+                continue
+            if t in ('-A', '--all', '.', ':/', '-a') or (sub == 'commit' and re.match(r'^-[A-Za-z]*a[A-Za-z]*$', t)):
+                return True
+            if t.startswith('-'):
+                continue
+            if not t.lstrip('./').startswith(DESIGN_DIRS) and t not in ('--',):
+                return True
+    return False
 REDIRECT_OK = re.compile(r'\d?>&\d|&>\s*/dev/null')   # 2>&1、&>/dev/null：只改輸出去向，不寫檔
 SED_WRITE = re.compile(r'(^|[;\d$/,\s])\s*[weW](\s|$)')   # sed 的 w（寫檔）、e（執行）指令，前面可以有位址
 
@@ -151,6 +179,10 @@ def main():
     if EVIDENCE.search(cmd):   # 在 tools/ 底下，但會執行它包住的實作指令：一律交給人核准（docs/01 ⑥）
         json.dump({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'ask',
                                           'permissionDecisionReason': 'tools/run_evidence.py 會執行實作指令，要人逐條核准'}}, sys.stdout)
+        return
+    if impl_commit(cmd):
+        json.dump({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'ask',
+                                          'permissionDecisionReason': '把設計資料夾以外的檔案（實作程式）commit 進版本：由人決定，請在核准卡片上放行'}}, sys.stdout)
         return
     roots = [os.path.realpath(data.get('cwd') or os.getcwd()), os.path.dirname(os.path.realpath(__file__))]
     if read_only(cmd, roots):
