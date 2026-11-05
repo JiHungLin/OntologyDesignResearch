@@ -91,7 +91,7 @@ export async function renderHub() {
   } else if (N.kind === 'slice') {
     const f = N.item.f;
     hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">進行中</span>
-      <h1>${esc(f.slice)}：${f.next.status === '凍結中' ? `${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}的凍結還沒做完` : f.next.status === '待檢查' ? `${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}審查填好了，看下一步（凍結或回頭修改）` : `下一關 ${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}`}</h1><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p></div>
+      <h1>${esc(f.slice)}：${f.next.status === '凍結中' ? `${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}的凍結還沒做完` : f.next.status === '待檢查' ? `${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}審查填好了，看下一步（凍結、重做或回頭修改）` : `下一關 ${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}`}</h1><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p></div>
       <a class="btn big primary" href="#/s/${enc(f.slice)}">打開 ›</a></section>`;
   } else if (N.kind === 'pick') {
     const r = N.item.row;
