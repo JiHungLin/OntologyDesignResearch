@@ -94,7 +94,8 @@ export async function renderHome(slice) {
     const stepOf = last || step;
     // 交回後 AI 做了紙上推演、和你的答案對不上：先回黃金案例頁對答案（改你的答案，或留著讓 AI 說明）
     const lr = last ? await loadReview(last.path) : null;
-    const handled = s && !s.running && s.purpose === `審查 ${step}` && !!s.last_reply;
+    // 回頭修改的 session 做完也算處理過（它的回覆會說接下來要重做這一步，或還要改什麼）
+    const handled = s && !s.running && (s.purpose === `審查 ${step}` || s.purpose === '回頭修改') && !!s.last_reply;
     const off = lr ? lr.cases.map((c, k) => ({ c, k })).filter(x => /^不一致/.test(((x.c.paper || {})['紙上判定'] || '').trim())) : [];
     if (off.length) {
       const p = enc(last.path);
@@ -114,7 +115,9 @@ export async function renderHome(slice) {
       const more = /再送一份審查頁|再送審/.test(((lr && lr.meta.find(m => /填完之後/.test(m.key))) || {}).value || '');
       // AI 處理答案時發現要回頭改設計（審查頁選了要改設計的選項、凍結條件不滿足）：主按鈕改成回頭修改，不是凍結
       const said = s.last_reply || '';
-      const back = /不能凍結|才能凍結|這一輪不凍結|先不凍結|回頭修改/.test(said);
+      // 設計已經改好、要重新產出這一步（例：⑥ 程式要對應新 tag、重跑測試）：主按鈕是重做這一步，不是再回頭修改
+      const redo = new RegExp(`重做(?:第\\s*)?[${CIRCLED[n]}${n}]\\s*步|繼續做(?:第\\s*)?[${CIRCLED[n]}${n}]|[${CIRCLED[n]}]\\s*按「開始」|繼續第\\s*[${CIRCLED[n]}${n}]\\s*步`).test(said);
+      const back = redo || /不能凍結|才能凍結|這一輪不凍結|先不凍結|回頭修改/.test(said);
       const nextLine = ((said.match(/下一步[：:]\s*([^\n]+)/g) || []).pop() || '').replace(/^下一步[：:]\s*/, '');
       const said_ = nextLine ? `<div class="hero-next"><b>AI 說下一步：</b>${esc(plain(nextLine))}</div>` : '';
       if (back) hero = `
@@ -122,11 +125,13 @@ export async function renderHome(slice) {
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>
           <h1>AI 處理完了：${esc(stepName(stepOf))} 還不能凍結</h1>
-          <p>AI 依你的答案判斷，要先回頭修改設計（或補人才能填的欄位），這一輪才能凍結。詳細在右邊的 AI 對話。</p>
+          <p>${redo ? `你的答案要改的設計已經處理了，但第 ${CIRCLED[n]} 步的產出還是舊的：請 AI 重做第 ${CIRCLED[n]} 步，做完會產生新的審查頁。要你填的欄位（AI 對話裡列的）可以同時做。`
+            : 'AI 依你的答案判斷，要先回頭修改設計（或補人才能填的欄位），這一輪才能凍結。'}詳細在右邊的 AI 對話。</p>
           ${said_}
           <p class="muted small">按下面的按鈕時，網頁會問你要不要開新的 session。</p>
         </div>
-        <div class="row"><button class="btn big yellow" id="goBack">請 AI 依審查頁回頭修改 ›</button><button class="btn big" id="showAi">看 AI 怎麼說</button>
+        <div class="row">${redo ? `<button class="btn big yellow" id="contStep">請 AI 重做第 ${CIRCLED[n]} 步 ›</button><button class="btn big" id="showAi">看 AI 怎麼說</button><button class="btn big" id="goBack">還要回頭改設計</button>`
+          : `<button class="btn big yellow" id="goBack">請 AI 依審查頁回頭修改 ›</button><button class="btn big" id="showAi">看 AI 怎麼說</button>`}
           <button class="btn big" id="freeze">仍然請 AI 凍結</button></div>
       </section>`;
       else hero = `
