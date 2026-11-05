@@ -44,12 +44,15 @@ def git(*args):
 
 
 def version():
-    """執行目錄的實作版本：<branch> @ <短 commit>（有未 commit 的修改：是／否）；不是 git repo 時寫明。"""
+    """執行目錄的實作版本：<branch> @ <短 commit>（有未 commit 的修改：是／否）；不是 git repo 時寫明。
+    設計和實作在同一個 repo 時，⑥ 自己的產出（06_evidence/ 的簽核紀錄、回答表、log，reviews/ 的審查頁）
+    不算：它們是執行之後才寫的、不是被測的東西，否則每次正式跑都要先把它們收起來。"""
     commit = git('rev-parse', '--short', 'HEAD')
     if not commit:
         return '（執行目錄不是 git repo，沒有實作版本）'
     branch = git('rev-parse', '--abbrev-ref', 'HEAD') or '?'
-    dirty = '是' if git('status', '--porcelain', '--untracked-files=no') else '否'
+    dirty = '是' if git('status', '--porcelain', '--untracked-files=no', '--', ':(top)',
+                       ':(top,exclude,glob)slices/*/06_evidence/**', ':(top,exclude,glob)slices/*/reviews/**') else '否'
     return f'{branch} @ {commit}（有未 commit 的修改：{dirty}）'
 
 

@@ -914,7 +914,7 @@ python3 tools/run_evidence.py electricity-emission golden -- docker compose exec
 
 - 檔名 `<日期>_<時分秒>_<名稱>.log`；名稱用英文小寫與 `-`（例：`golden`、`answers`、`synthetic`）。
 - 系統結果、回答表的「結果」寫 `results/<檔名>.log:行號`，行號指到結果那一行；`lint.py` 檢查檔案存在、檔頭是工具產生的、實作版本和 `signoff.md` 相同。
-- 有未 commit 的修改時跑出的 log 只能當除錯參考，不能當簽核依據；改了程式就重跑。
+- 有未 commit 的修改時跑出的 log 只能當除錯參考，不能當簽核依據；改了程式就重跑。設計和實作在同一個 repo 時，`slices/*/06_evidence/`、`slices/*/reviews/` 的修改不算（⑥ 進行中本來就會改簽核紀錄與審查頁，它們不是被測的東西）；其他設計檔（例：測試讀的 `schema.sql`）照算。
 - 截圖等工具存不了的，放在 `results/` 並在 `signoff.md` 寫明是什麼、誰截的。
 - 自動執行（《平台架構約定》P9，例：CI）的輸出不放進 `results/`、不當簽核依據；它不是 `run_evidence.py` 產生的，指令也沒有逐條核准。
 

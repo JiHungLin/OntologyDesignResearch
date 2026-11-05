@@ -529,6 +529,21 @@ class TestLint(Base):
         self.assertNotEqual(code, 0)
         self.assertIn('名稱只用英文小寫', out)
 
+    def test_run_evidence_dirty_ignores_step6_outputs(self):
+        # 設計和實作同一個 repo：改 06_evidence/、reviews/ 不算未 commit 的修改，改其他檔案才算
+        g = lambda *a: subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t', *a], cwd=self.dir, capture_output=True)
+        self.write(self.slice_file('06_evidence/signoff.md'), '# 簽核\n')
+        self.write(self.slice_file('reviews/2026-11-05_06.md'), '# 審查頁\n')
+        g('init', '-q'); g('add', '-A'); g('commit', '-qm', 'init')
+        ver = lambda: re.search(r'- 實作版本：(.*)', open(os.path.join(self.dir, self.slice_file(
+            re.search(r'執行紀錄：(06_evidence/results/\S+\.log)', self.run_evidence('t', 'true')[1]).group(1))), encoding='utf-8').read()).group(1)
+        self.assertIn('有未 commit 的修改：否', ver())
+        self.edit(self.slice_file('06_evidence/signoff.md'), '簽核', '簽核 改')
+        self.edit(self.slice_file('reviews/2026-11-05_06.md'), '審查頁', '審查頁 改')
+        self.assertIn('有未 commit 的修改：否', ver())
+        self.edit(self.slice_file('04_rules.md'), '|', '| ')
+        self.assertIn('有未 commit 的修改：是', ver())
+
     def setup_evidence(self, header='# 執行紀錄（tools/run_evidence.py 產生，不手改）', ver='impl @ abc1234（有未 commit 的修改：否）',
                        want='abc1234', cite='（results/2026-11-05_101500_golden.log:12）',
                        env='compose.yaml：compose.yaml sha256:aaaa', chk='通過', env2=None):

@@ -1149,7 +1149,7 @@ Sean 的 User Story 文件（「將已凍結的 UML 投影為 User Story」）�
 
 **實作指令與執行紀錄**（先試用）
 - AI 要執行的實作指令（建環境、起資料庫、裝套件、跑測試、跑實作程式）**每一條由人看過再核准**，不放進自動放行清單；在終端機是 Claude Code 的權限提示，在網頁是核准卡片。核准的人就是「執行者」。只讀檔與 `tools/` 的檢查不在此限，但 `tools/run_evidence.py` 會執行它包住的指令，同樣逐條核准。
-- 測試由 AI 執行，但一律透過 `python3 tools/run_evidence.py <切片> <名稱> -- <指令>`：工具執行指令，把輸出連同指令、執行目錄、實作版本（commit、有沒有未 commit 的修改）、開始與結束時間、結束碼存成 `results/<日期>_<時間>_<名稱>.log`。log 由工具產生，AI 不手寫、不修改；數字由 log 讀出來，不憑 AI 回報。
+- 測試由 AI 執行，但一律透過 `python3 tools/run_evidence.py <切片> <名稱> -- <指令>`：工具執行指令，把輸出連同指令、執行目錄、實作版本（commit、有沒有未 commit 的修改；⑥ 自己的產出 `06_evidence/`、`reviews/` 不算）、開始與結束時間、結束碼存成 `results/<日期>_<時間>_<名稱>.log`。log 由工具產生，AI 不手寫、不修改；數字由 log 讀出來，不憑 AI 回報。
 - 黃金案例的「系統結果」、`answers.md` 的「結果」寫出依據的 log 位置（`results/<檔名>.log:行號`）；log 的實作版本要和 `signoff.md` 的實作版本相同，改了程式就重跑。
 
 **驗證環境**（先試用）：被測系統與資料庫跑在一個隔離、可重建、用完可丟的沙盒裡，用 Docker Compose 定義（實作附 `compose.yaml`，`docs/02` ⑥「驗證環境」）：
