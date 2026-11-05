@@ -401,6 +401,19 @@ class TestLint(Base):
         v.update(kw)
         self.write(self.slice_file('reviews/2026-10-27_03.md'), self.REVIEW.format(**v))
 
+    def test_old_checklist_while_submitted(self):
+        # 送審中（待檢查）的交付物還是舊格式的檢查紀錄：紅燈；已凍結的不管
+        old = '\n## 檢查紀錄\n\n| 完成標準 | AI 自評 | 審查者確認 |\n|---|---|---|\n| 每個事件都有觸發者 | ✓ | ✓（甲） |\n'
+        self.edit(self.slice_file('03_flows.md'), '# leave-backfill ③ 流程與狀態\n',
+                  '# leave-backfill ③ 流程與狀態\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 待檢查 |\n')
+        with open(os.path.join(self.dir, self.slice_file('03_flows.md')), 'a', encoding='utf-8') as f:
+            f.write(old)
+        code, out = self.lint()
+        self.assertIn('檢查紀錄還是舊格式', out)
+        self.edit(self.slice_file('03_flows.md'), '| 狀態 | 待檢查 |', '| 狀態 | 已凍結 |')
+        code, out = self.lint()
+        self.assertNotIn('檢查紀錄還是舊格式', out)
+
     def test_review_page_answered_before_freeze(self):
         self.setup_review()
         code, out = self.lint()

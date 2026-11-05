@@ -934,6 +934,13 @@ class Lint:
     def check_reviews(self):
         print("\n[審查頁] 送審的步驟有審查頁；問題附選項、原文對得上行號、自評部分與 ✗ 都在頁上" +
               ("（準備凍結：每一列都要已作答）" if self.freeze else "；列出還沒作答的"))
+        # 送審中的交付物還是舊格式的檢查紀錄（「完成標準｜AI 自評｜審查者確認」）：先照範本換成新格式，網頁與審查頁才讀得到
+        docs = list(self.docs.items()) + ([(SIGNOFF, self.signoff)] if self.signoff else [])
+        for f, d in docs:
+            if f not in self.STEP_OF or self.doc_status(d) != '待檢查': continue
+            for h2, h3, header, rows in d.tables():
+                if (h2 or '') == '檢查紀錄' and header[:1] == ['完成標準'] and '審查者確認' in header:
+                    self.red('審查頁', f"{f}:{rows[0][0] - 2 if rows else '?'} 檢查紀錄還是舊格式（有「審查者確認」欄）：送審前照範本換成「完成標準（AI 自評）」表（domain-step 第 7 點）")
         refs = self.review_refs()
         if not refs:
             return self.done('審查頁', 0, '', skipped='沒有新格式（檢查紀錄有「審查頁」行）的交付物')
