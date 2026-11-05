@@ -16,7 +16,7 @@ repo/
 ├── CLAUDE.md                 給 LLM 的工作規則（自動載入）
 ├── docs/                     規範文件（唯讀）
 ├── templates/                交付物範本（唯讀）
-├── tools/                    md2build.py、check.py、lint.py、table.py、derive.py、impact.py、tests/
+├── tools/                    md2build.py、check.py、lint.py、table.py、sync_core.py、run_evidence.py、check_env.py、derive.py、impact.py、tests/
 ├── inputs/                   原始輸入（既有檔案不修改，例外見各小節；AI 可新增使用者在對話中提供的資料）
 │   ├── shared/               跨切片共用：法規與政策原文、既有系統資料
 │   ├── research/             AI 從公開來源蒐集的資料（公開來源）
@@ -43,7 +43,7 @@ repo/
 │       ├── 03_use_cases.md
 │       ├── 04_rules.md
 │       ├── 05_mapping.md
-│       ├── schema.sql、api.yaml
+│       ├── schema、api.yaml    schema 的檔名依架構決定紀錄的資料庫（例：schema.sql、schema.mongo.js）
 │       ├── questions.md
 │       ├── reviews/          審查頁：每次送審一份（<日期>_<步驟>.md）
 │       ├── CHANGELOG.md
