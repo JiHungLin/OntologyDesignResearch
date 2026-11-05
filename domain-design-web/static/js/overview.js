@@ -38,7 +38,9 @@ export function nextOfProject(P) {
   if (!plan.agreed) return { kind: 'plan' };
   const list = planSlices(P);
   // ①～⑤ 還沒做完的；或 ⑥ 已經開始（有進度或有審查頁）的——⑥ 開始後也是「現在在做的切片」
-  const active = list.find(x => x.f && x.f.next && (x.f.next.n <= 5 || x.f.review || x.f.next.status !== '未開始'));
+  // 好幾條同時在做時：AI 正在跑的 → 有審查頁等人作答的（輪到你）→ 地圖上的順序
+  const going = list.filter(x => x.f && x.f.next && (x.f.next.n <= 5 || x.f.review || x.f.next.status !== '未開始'));
+  const active = going.find(x => x.f.session && x.f.session.running) || going.find(x => x.f.review) || going[0];
   if (active) {
     const f = active.f;
     if (f.session && f.session.running) return { kind: 'running', scope: f.slice, item: active };

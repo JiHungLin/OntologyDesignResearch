@@ -177,6 +177,8 @@ export async function renderHome(slice) {
     const n = h.next.n;
     const info = STEP_INFO[n];
     const going = h.next.status !== '未開始';
+    // 這條切片最後一個 session 做完時說的下一步（例：凍結 ② 後提醒 ⑥ 的黃金案例要補），讓人知道按下去之後 AI 會處理什麼
+    const lastSaid = s && !s.running && s.last_reply ? ((s.last_reply.match(/下一步[：:]\s*([^\n]+)/g) || []).pop() || '').replace(/^下一步[：:]\s*/, '') : '';
     hero = h.next.status === '凍結中' ? `
       <section class="hero idle">
         <div style="flex:999 1 480px;min-width:0">
@@ -191,6 +193,8 @@ export async function renderHome(slice) {
           <span class="chip">輪到 AI</span>
           <h1>${going ? `第 ${CIRCLED[n]} 步還沒做完` : `下一關：${CIRCLED[n]} ${esc(info[0])}`}</h1>
           <p>AI 會整理：${esc(info[1])}。做完後另開 AI 挑錯、核對，產生一份審查頁，這裡就會出現新的關卡。</p>
+          ${lastSaid ? `<div class="hero-next"><b>AI 上次說：</b>${esc(plain(lastSaid))}</div>` : ''}
+          ${going && n === 6 ? '<p class="small">AI 提到的問題（例：黃金案例的內容要補、系統結果和你算的不一致、缺 API）都在這一步裡處理：AI 能改的（案例情境、程式、測試）自己改，要你決定的（你的答案要不要改、要不要回頭改設計）會列在 ⑥ 的審查頁問你。</p>' : ''}
           <p class="muted small">之後輪到你：${esc(info[2])}。${n === 6 ? '第 ⑥ 步要有實作好的系統才做。' : ''}</p>
         </div>
         <button class="btn big primary" id="doStep">${going ? `請 AI 繼續第 ${CIRCLED[n]} 步` : `請 AI 開始第 ${CIRCLED[n]} 步`} ›</button>
