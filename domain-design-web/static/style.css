@@ -616,3 +616,5 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
 @media (max-width: 760px) { .gc-table { font-size: 13px; } .gc-table th, .gc-table td { padding: 6px; } }
 .gc-off { background: #FFD7CF; padding: 0 3px; border-radius: 4px; }
 .gc-table tr.gc-off-row td, .gc-table tr.gc-off-row th { background: #FFF1EE; }
+/* 黃金案例那一列要逐項對照，不跟其他確認列擠成兩欄：整排 */
+.group .list > .crow:has(.gc-table, .gc-col) { grid-column: 1 / -1; }
