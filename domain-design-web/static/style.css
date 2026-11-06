@@ -183,10 +183,11 @@ details.tech summary { cursor: pointer; }
 .opt.on { background: var(--primary); color: #fff; }
 .opt.on .out { color: #E6E0FF; }
 /* 多題作答：選中的那個要一眼看得出來（放在 .opt.rec 後面，建議選項被選中時也會變色） */
-.opt.picked, .opt.rec.picked { background: var(--primary); color: #fff; outline: 3px solid var(--ink); outline-offset: 0; transform: translate(2px, 2px); box-shadow: none; }
-.opt.picked .out { color: #E6E0FF; }
-.opt.picked .badge-rec { background: #fff; }
-.opt.picked .row::after { content: '✓ 已選'; margin-left: auto; font-size: 13px; font-weight: 900; background: #fff; color: var(--primary); border-radius: 999px; padding: 1px 10px; }
+/* 底色維持淺色、字維持深色：選項文字裡的連結（檔名:行號，紫色）和 code（淺底）在深紫底上會看不到 */
+.opt.picked, .opt.rec.picked { background: #DCD3FF; color: var(--ink); border-color: var(--primary); outline: 3px solid var(--primary); outline-offset: 0; transform: translate(2px, 2px); box-shadow: none; }
+.opt.picked .out { color: var(--ink); }
+.opt.picked code { background: #fff; }
+.opt.picked .row::after { content: '✓ 已選'; margin-left: auto; font-size: 13px; font-weight: 900; background: var(--primary); color: #fff; border-radius: 999px; padding: 1px 10px; }
 .ask-q:has(.picked) .opt:not(.picked) { opacity: .55; }
 .ask-q:has(.picked) .opt:not(.picked):hover { opacity: 1; }
 .badge-rec { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 900; padding: 2px 10px; border-radius: 999px; background: var(--hint); color: var(--ink); }
