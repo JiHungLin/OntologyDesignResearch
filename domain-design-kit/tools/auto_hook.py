@@ -30,6 +30,11 @@ def inside(path, roots):
     return any(p == r or p.startswith(r.rstrip('/') + '/') for r in roots)
 
 
+def session_dir(repo):
+    """Claude Code 為這個 repo 存的 session 資料（太長的工具輸出存成 tool-results/*.txt 再讓 AI 讀）：~/.claude/projects/<repo 路徑把 / 換成 ->。只能讀。"""
+    return os.path.join(os.path.realpath(os.path.expanduser('~')), '.claude', 'projects', re.sub(r'[^A-Za-z0-9]', '-', repo))
+
+
 def bash_reason(cmd, repo):
     """違反禁止清單時回傳理由，沒有就回傳 None。"""
     ok_roots = [repo, '/tmp']
@@ -53,7 +58,7 @@ def bash_reason(cmd, repo):
         tokens = cmd.split()
     for t in tokens:
         for p in re.findall(r'(?:^|=)((?:~|\$HOME|/home)[^\s:;|&>]*)', t):
-            if not inside(p.replace('$HOME', '~'), [repo]):
+            if not inside(p.replace('$HOME', '~'), [repo, session_dir(repo)]):
                 return f'{p}：全自動模式不碰新專案 repo 以外的家目錄（其他 repo、設定檔、機密）'
     # 寫入或刪除 repo 與 /tmp 以外的絕對路徑（含 > 重新導向）
     for seg in re.split(r'[;&|\n]+', cmd):
@@ -80,7 +85,7 @@ def decide(data, repo):
     if tool in READ_TOOLS:
         path = ti.get('file_path') or ti.get('path') or ''
         home = os.path.realpath(os.path.expanduser('~'))
-        if path and inside(path, [home]) and not inside(path, [repo]):
+        if path and inside(path, [home]) and not inside(path, [repo, session_dir(repo)]):
             return f'{tool} {path}：全自動模式不讀新專案 repo 以外的家目錄', path
         return None, path
     return None, json.dumps(ti, ensure_ascii=False)[:200]

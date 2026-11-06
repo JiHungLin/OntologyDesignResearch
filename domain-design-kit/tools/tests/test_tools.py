@@ -972,6 +972,12 @@ class TestAuto(Base):
             self.assertEqual(self.hook('Bash', ti), 'deny', ti)
         self.assertEqual(self.hook('Edit', {'file_path': os.path.expanduser('~/.bashrc')}), 'deny')
         self.assertEqual(self.hook('Read', {'file_path': os.path.expanduser('~/.ssh/config')}), 'deny')
+        # Claude Code 把太長的工具輸出存在 ~/.claude/projects/<repo>/…/tool-results/，可以讀、不能寫
+        import re as _re
+        sd = os.path.join(os.path.expanduser('~/.claude/projects'), _re.sub(r'[^A-Za-z0-9]', '-', os.path.realpath(self.dir)), 's', 'tool-results', 'x.txt')
+        self.assertEqual(self.hook('Read', {'file_path': sd}), 'allow')
+        self.assertEqual(self.hook('Write', {'file_path': sd}), 'deny')
+        self.assertEqual(self.hook('Read', {'file_path': os.path.expanduser('~/.claude/projects/other-repo/s/x.txt')}), 'deny')
         log = open(os.path.join(self.dir, '.domain-auto', 'commands.jsonl'), encoding='utf-8').read()
         self.assertIn('"allow": false', log)
         self.assertIsNone(self.hook('Bash', {'command': 'git push'}, auto=''))   # 不是全自動：不表示意見
