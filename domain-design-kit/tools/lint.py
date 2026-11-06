@@ -1338,6 +1338,25 @@ class Lint:
             self.red('執行紀錄', "簽核用的 log 不是在同一個驗證環境跑的：" + '、'.join(f"{r}（{e[:60]}）" for e, r in envs.items()))
         self.done('執行紀錄', n, '個引用 log 的結果')
 
+    def check_known_limits(self):
+        """⑥ 設計問題處理成「已知限制」（2026-11-06 起，先試用）：要有重現測試、寫出程式暫時的做法。"""
+        print("\n[已知限制] signoff.md 設計問題處理為「已知限制」的，牽涉或處理寫出重現測試（test_…），實作暫時的做法不空白")
+        if not self.signoff:
+            return self.done('已知限制', 0, '', skipped='沒有 signoff.md')
+        n = 0
+        for h2, h3, header, rows in self.signoff.tables():
+            k = mb.col(header, '處理')
+            if k is None or h2 != '實作時發現的設計問題': continue
+            j, t = mb.col(header, '牽涉'), mb.col(header, '實作暫時的做法')
+            for no, c in rows:
+                if '已知限制' not in c[k]: continue
+                n += 1
+                if not re.search(r'\btest_\w+', c[k] + (c[j] if j is not None else '')):
+                    self.red('已知限制', f"{SIGNOFF}:{no} #{c[0]} 處理為已知限制，但牽涉與處理都沒有重現測試（test_…）")
+                if t is not None and not c[t].strip():
+                    self.red('已知限制', f"{SIGNOFF}:{no} #{c[0]} 處理為已知限制，「實作暫時的做法」沒寫（程式現在怎麼做）")
+        self.done('已知限制', n, '個已知限制')
+
     def check_api(self):
         """⑤ 的 api.yaml：讀得進來，$ref 都指得到（AI 不必自己寫 python 驗證，網頁也會擋）。"""
         print("\n[API] api.yaml 讀得進來；每個 $ref 都指得到（同檔的 #/…，或同資料夾的其他檔案）")
@@ -1537,7 +1556,7 @@ class Lint:
         self.check_tables(); self.check_placeholders(); self.check_eq_impact(); self.check_out_of_scope()
         self.check_golden(); self.check_late_inputs(); self.check_param_storage(); self.check_chain(); self.check_core_prefix(); self.check_referenced_by()
         self.check_reviews(); self.check_challenge(); self.check_golden_selfcontained(); self.check_user_agreement()
-        self.check_cross_refs(); self.check_requests(); self.check_architecture(); self.check_data_nature(); self.check_api(); self.check_evidence()
+        self.check_cross_refs(); self.check_requests(); self.check_architecture(); self.check_data_nature(); self.check_api(); self.check_evidence(); self.check_known_limits()
         self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")

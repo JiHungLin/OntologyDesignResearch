@@ -641,6 +641,18 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertIn('執行者和審查者（簽核者）是同一人「甲」', out)
 
+    def test_known_limit_needs_repro_test(self):
+        # ⑥ 設計問題處理成「已知限制」（不擋簽核）：要有重現測試、寫出程式暫時的做法
+        head = '# signoff\n\n## 實作時發現的設計問題\n\n| # | 問題 | 牽涉 | 實作暫時的做法 | 處理 |\n|---|---|---|---|---|\n'
+        self.write(self.slice_file('06_evidence/signoff.md'), head + '| 1 | 兩人同時決定 | R25 |  | 已知限制（審查頁問題 1 選 C） |\n')
+        code, out = self.lint()
+        part = out.split('[已知限制]')[1].split('\n[')[0]
+        self.assertIn('#1 處理為已知限制，但牽涉與處理都沒有重現測試', part)
+        self.assertIn('「實作暫時的做法」沒寫', part)
+        self.write(self.slice_file('06_evidence/signoff.md'), head + '| 1 | 兩人同時決定 | R25；tests/test_x.py test_dismiss_after_adopt | 照設計字面 | 已知限制（審查頁問題 1 選 C） |\n')
+        code, out = self.lint()
+        self.assertIn('✓ 通過（檢查了 1 個已知限制）', out.split('[已知限制]')[1].split('\n[')[0])
+
     def test_spot_hint_format(self):
         # 2026-11-05 起的審查頁：可挑的條目寫「③ 第 1、4 條」，不寫完成標準的文字（網頁對不回是哪幾條）
         self.setup_review()
