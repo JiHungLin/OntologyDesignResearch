@@ -6,6 +6,9 @@ import { flowsHtml } from './flows.js';
 // ---------- 看圖確認 ----------
 
 export function groupOf(what) {
+  // ⑥：「黃金案例 GCnn（…：…）」「P0 Qnn：<題目>」括號或題目裡也有「：」，固定歸成一組
+  if (/^黃金案例\s*GC\d+/.test(what)) return '黃金案例';
+  if (/^P0\s*Q\d+/.test(what)) return 'P0 驗收問題';
   const g = what.split('：')[0].replace(/（[^）]*\d+\/\d+[^）]*）/, '').trim();
   // 「AI 提出、有依據的決定 D-01（哪些有狀態）」這種一個編號一列的，同一類放一組
   const m = g.match(/^(.+?)\s*(?:[A-Z]+-\d+|[A-Z]\d+)(?:（[^）]*）)?$/);
@@ -18,6 +21,8 @@ export const ASK = [
   [/只需現況/, '這些資料只記目前的值，改了之後舊的值就不留。想一下：以後會不會有人要查「當時是什麼」（例：報表要印當時的名稱、對帳要看改之前的數字）？不會就按 ✓；會的話寫一句，這筆就要留歷史。'],
   [/有依據的決定/, 'AI 自己做的決定（有依據，所以沒寫成選擇題）。照你對業務的了解看每一條：這樣做可以嗎？可以就按 ✓，不同意就寫一句。'],
   [/^自評/, 'AI 自評這條完成標準只做到一部分（或沒做到）。看它說缺了什麼：可以先這樣就按 ✓，要補就寫一句。'],
+  [/^黃金案例/, '你算的、設計推出的、系統跑出的並排在下面。通過的：三邊一致就按 ✓。失敗的：看差在哪一項、AI 寫的原因對不對（怎麼處理在第一節的問題裡回答），寫得對就按 ✓。'],
+  [/^P0/, '驗收問題（P0）和系統的回答。看回答有沒有答到這一題（問的是什麼、答的是不是那個），有就按 ✓；答非所問或缺了一部分就寫一句。'],
   [/幾對幾/, '兩個東西之間是一對一、一對多還是多對多。錯了之後要改資料表、搬資料，很貴；照實際業務想一個反例看看。'],
   [/Entity/, '哪些要當成一個「東西」單獨記（有自己的身分、會被指到），哪些不用。'],
   [/推導值/, '這些不另外存，要用的時候從其他資料算出來。想一下：算得出來嗎？資料後來改了，當時的值還算得回來嗎？'],
@@ -32,6 +37,9 @@ export const askOf = g => (ASK.find(([re]) => re.test(g)) || [null, ''])[1];
 export function rowTitle(what, group) {
   let t = group && what.startsWith(group) && what.length > group.length ? what.slice(group.length).trim() : what;
   t = t.replace(/^[：:]\s*/, '');
+  if (group === 'P0 驗收問題') t = t.replace(/^P0\s*/, '');
+  const q = t.match(/^((?:GC|Q)\d+)\s*(?:[：:]\s*(.+)|（(.+)）)$/);   // ⑥：「GC01（失敗：…）」「Q01：題目」
+  if (q) return `<span class="rid">${esc(q[1])}</span> ${inline(q[2] || q[3])}`;
   const m = t.match(/^((?:[A-Z]+-\d+|[A-Z]\d+)(?:[、,，]\s*(?:[A-Z]+-\d+|[A-Z]\d+))*)\s*(?:（(.+)）)?$/);
   return m ? `<span class="rid">${esc(m[1])}</span>${m[2] ? ` ${inline(m[2])}` : ''}` : inline(t);
 }
@@ -77,6 +85,41 @@ export function ctxHtml(c, frags) {
   }).join('');
 }
 
+// ⑥ 的黃金案例：一列並排三欄（你算的、設計推出的、系統跑出的），內容從 golden_cases.md 來
+function goldenOf(what) {
+  const m = what.match(/^(?:黃金案例\s*)?(GC\d+)/);
+  const g = m && state.review && state.review.golden && state.review.golden[m[1]];
+  if (!g) return '';
+  const col = (t, v) => `<div class="gc-col"><div class="label">${t}</div><div class="md">${md(v || '（沒有）').replace(/不一致/g, '<b class="gc-off">不一致</b>')}</div></div>`;
+  const pass = /^通過/.test((g['判定'] || '').trim());
+  return `${g['判定'] ? `<div class="gc-verdict ${pass ? 'ok' : 'bad'}">判定：${inline(g['判定'])}</div>` : ''}
+    <div class="gc-cols">${col('你算的（預期結果）', g['預期結果'])}${col('設計推出的（紙上判定）', g['紙上判定'])}${col('系統跑出的（系統結果）', g['系統結果'])}</div>`;
+}
+
+function rowShell(c, ans, what, group, body) {
+  return `<div class="crow ${!ans ? '' : ans === '✓' ? 'done' : 'noted'}">
+    <div class="what">${rowTitle(what, group)}</div>
+    ${body}
+    ${c.cells['在哪裡'] ? `<div class="where">${inline(c.cells['在哪裡'])}</div>` : ''}
+    <div class="acts">${actsHtml(c, ans)}</div>
+  </div>`;
+}
+
+function actsHtml(c, ans) {
+  return !ans ? `
+      <button class="btn go" data-ok="${c.line}">✓ 合理</button>
+      <button class="btn" data-note="${c.line}">寫意見</button>`
+    : ans === '✓' ? `
+      <span class="val">✓ 合理</span>
+      <button class="btn ghost" data-clear="${c.line}">撤回</button>
+      <button class="btn" data-note="${c.line}">改成寫意見</button>`
+    : `
+      <span class="val note">意見：${esc(ans)}</span>
+      <button class="btn" data-note="${c.line}" data-prev="${esc(ans)}">改意見</button>
+      <button class="btn" data-ok="${c.line}">改成合理</button>
+      <button class="btn ghost" data-clear="${c.line}">撤回</button>`;
+}
+
 export function confirmRow(c, group = '') {
   const ans = (c.answer || '').trim();
   const what = c.cells['要看的'] || '';
@@ -88,25 +131,15 @@ export function confirmRow(c, group = '') {
   // 「要確認」只放句子：標題（### …）不算；指到決定這種有主要欄位的表格列時，主要欄位本身就是要確認的，不重複
   const hasMain = (c.context || []).some(x => x.fields && x.fields.some(([h]) => CTX_MAIN.includes(h)));
   const claim = hasMain ? [] : raw.filter(s => !s.startsWith('#'));
+  const gc = goldenOf(what);
+  if (gc) return rowShell(c, ans, what, group, gc);
   return `<div class="crow ${!ans ? '' : ans === '✓' ? 'done' : 'noted'}${(c.context || []).length ? ' has-ctx' : ''}">
     <div class="what">${rowTitle(what, group)}</div>
     ${claim.length ? `<div class="claim"><span class="muted small">要確認</span>${claim.length > 1 ? `<ul>${claim.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : `<div>${esc(claim[0])}</div>`}</div>` : ''}
     ${(c.context || []).length ? ctxHtml(c, frags) : ''}
     ${c.cells['原文'] && !covered && !frags.length ? `<div class="orig">${inline(c.cells['原文'])}</div>` : ''}
     ${c.cells['在哪裡'] && !(c.context || []).length ? `<div class="where">${inline(c.cells['在哪裡'])}</div>` : ''}
-    <div class="acts">${!ans ? `
-      <button class="btn go" data-ok="${c.line}">✓ 合理</button>
-      <button class="btn" data-note="${c.line}">寫意見</button>`
-    : ans === '✓' ? `
-      <span class="val">✓ 合理</span>
-      <button class="btn ghost" data-clear="${c.line}">撤回</button>
-      <button class="btn" data-note="${c.line}">改成寫意見</button>`
-    : `
-      <span class="val note">意見：${esc(ans)}</span>
-      <button class="btn" data-note="${c.line}" data-prev="${esc(ans)}">改意見</button>
-      <button class="btn" data-ok="${c.line}">改成合理</button>
-      <button class="btn ghost" data-clear="${c.line}">撤回</button>`}
-    </div>
+    <div class="acts">${actsHtml(c, ans)}</div>
   </div>`;
 }
 

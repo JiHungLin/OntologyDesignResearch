@@ -264,10 +264,12 @@ def _spot_items(r, p):
 
 
 PAPER_KEYS = ('紙上推演', '紙上判定')
+GOLDEN_KEYS = ('預期結果', '紙上判定', '系統結果', '判定')
 
 
-def _paper(slice_name):
-    """06_evidence/golden_cases.md 每個案例的「紙上推演」「紙上判定」（AI 依設計推的，人填完審查頁之後才有），給「對答案」用。"""
+def _paper(slice_name, keys=PAPER_KEYS):
+    """06_evidence/golden_cases.md 每個案例的「紙上推演」「紙上判定」（AI 依設計推的，人填完審查頁之後才有），給「對答案」用。
+    ⑥ 的審查頁另外拿「預期結果」「系統結果」「判定」，三欄並排（keys）。"""
     path = os.path.join(kit.repo(), 'slices', slice_name, '06_evidence', 'golden_cases.md')
     if not os.path.isfile(path):
         return {}
@@ -285,10 +287,10 @@ def _paper(slice_name):
                 continue
             m = re.match(r'^- ([^：]+)：\s*(.*)$', line)
             if m:
-                key = m.group(1) if m.group(1) in PAPER_KEYS else None
+                key = m.group(1) if m.group(1) in keys else None
                 if key:
                     cur[key] = m.group(2).strip()
-            elif key and line.startswith('  ') and line.strip():
+            elif key and line.startswith('  ') and line.strip():   # 續行（含 1. 2. 這種逐項）
                 cur[key] = (cur[key] + '\n' + line.strip()).strip()
     return {k: v for k, v in out.items() if any(x and not x.startswith(('[未執行]', '（')) for x in v.values())}
 
@@ -312,6 +314,8 @@ def get_review(path: str):
         m = model.load(r['slice'])
         if m:
             r['model'] = model.mark_changed(m, r)
+    # ⑥：黃金案例一列，網頁從 golden_cases.md 拿你算的、設計推出的、系統跑出的並排（docs/02「第 ⑥ 步的審查頁」）
+    r['golden'] = _paper(r['slice'], GOLDEN_KEYS) if r['slice'] and 6 in steps else {}
     if r['slice'] and 3 in steps:
         f = flows.load(r['slice'])
         if f and f['machines']:

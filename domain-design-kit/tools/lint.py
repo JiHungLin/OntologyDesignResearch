@@ -984,6 +984,14 @@ class Lint:
                 if not c.get('確認', '').strip():
                     unanswered.append(f"{rel}:{no} 確認第 {c.get('#', '?')} 列")
                 self.check_excerpt(rel, no, c)
+            # ⑥ 每個黃金案例只有一列：拆成「你算的／設計推出的／系統跑出的」三列，人看不出要確認什麼（HR hire-employee ⑥）
+            per_gc = {}
+            for no, c in r['confirms']:
+                m = re.match(r'^(?:黃金案例\s*)?(GC\d+)', c.get('要看的', '').strip())
+                if m: per_gc.setdefault(m.group(1), []).append((no, c))
+            for gc, rows in per_gc.items():
+                if len(rows) > 1 and any(not c.get('確認', '').strip() for no, c in rows):
+                    self.red('審查頁', f"{rel}:{rows[0][0]} {gc} 拆成 {len(rows)} 列：每個黃金案例只寫一列（要看的「黃金案例 {gc}（通過）」或「（失敗：差在哪一項；處理見問題 n）」，docs/02「第 ⑥ 步的審查頁」）")
             if r['spot'] is None:
                 self.red('審查頁', f"{rel} 沒有「抽查」表")
             hint = next(((i, l) for i, l in enumerate(r['lines'], 1) if l.startswith('可挑的條目')), None)

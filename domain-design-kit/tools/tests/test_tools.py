@@ -414,6 +414,20 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertNotIn('檢查紀錄還是舊格式', out)
 
+    def test_review_golden_case_one_row(self):
+        # ⑥ 一個黃金案例拆成「你算的／設計推出的／系統跑出的」三列：沒作答時紅燈，作答完的舊頁不管
+        self.setup_review()
+        rp = os.path.join(self.dir, self.slice_file('reviews/2026-10-27_03.md'))
+        lines = open(rp, encoding='utf-8').read().split('\n')
+        k = next(i for i, l in enumerate(lines) if l.startswith('| 1 |'))
+        rows = [f'| {n} | ⑥ | GC01 {w} | 「x」 | `03_flows.md:1` | {{ok}} |' for n, w in ((2, '你算的'), (3, '設計推出的'), (4, '系統跑出的'))]
+        self.write(self.slice_file('reviews/2026-10-27_03.md'), '\n'.join(lines[:k + 1] + [r.format(ok='') for r in rows] + lines[k + 1:]))
+        code, out = self.lint()
+        self.assertIn('GC01 拆成 3 列', out)
+        self.write(self.slice_file('reviews/2026-10-27_03.md'), '\n'.join(lines[:k + 1] + [r.format(ok='✓') for r in rows] + lines[k + 1:]))
+        code, out = self.lint()
+        self.assertNotIn('拆成', out)
+
     def test_review_page_answered_before_freeze(self):
         self.setup_review()
         code, out = self.lint()

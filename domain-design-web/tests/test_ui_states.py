@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 
 import pytest
@@ -401,3 +402,33 @@ def test_answered_review_still_reachable(browser, repo):
         srv.terminate(); srv.wait()
     assert any('審查頁' in t and '已作答' in t for t in before['nav']) and before['reopen'].startswith('#/r/'), before
     assert not any('已作答' in t for t in after['nav']) and not after['reopen'], after
+
+
+def test_step6_golden_row_side_by_side(browser, repo):
+    # HR hire-employee ⑥：黃金案例拆成「你算的／設計推出的／系統跑出的」三張卡片，第一張等於問你自己的答案合不合理；
+    # 改成一列，網頁從 golden_cases.md 拿三段並排
+    repo.write('slices/demo/06_evidence/golden_cases.md', '# demo 黃金案例\n\n## GC01 下單後取消\n- 預期結果：① 已取消；② 100 元\n'
+               '- 紙上判定：一致\n- 系統結果：依據 results/x.log\n  1. 已取消——一致\n  2. 0 元——不一致\n- 判定：失敗（第 2 項）\n')
+    rv = open(repo.path(REVIEW), encoding='utf-8').read().split('## 二、要你確認的內容')[0]
+    repo.write('slices/demo/reviews/2026-11-06_06.md', rv.replace('② 02_entities.md', '⑥ 06_evidence/golden_cases.md') +
+               '## 二、要你確認的內容\n\n| # | 步驟 | 要看的 | 原文 | 在哪裡 | 確認 |\n|---|---|---|---|---|---|\n'
+               '| 1 | ⑥ | 黃金案例 GC01（失敗：差在退款金額；處理見問題 1） | 「判定：失敗（第 2 項）」 | `06_evidence/golden_cases.md:8` | |\n\n'
+               '## 四、抽查\n\n| 抽查了哪幾條 | 結果 |\n|---|---|\n| | |\n\n## 結論\n\n| 步驟 | 執行者 | 審查者（非產出者） | 日期 | 結論 |\n|---|---|---|---|---|\n| ⑥ | | | | |\n')
+    port = _port()
+    srv = subprocess.Popen([sys.executable, 'server.py', '--repo', repo.root, '--port', str(port)], cwd=WEB,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f'http://127.0.0.1:{port}/api/project'); break
+            except Exception:
+                time.sleep(0.1)
+        p = urllib.parse.quote('slices/demo/reviews/2026-11-06_06.md', safe='')
+        r = browser.run(f'http://127.0.0.1:{port}/#/r/{p}/confirm', """
+          return {cols:[...document.querySelectorAll('.gc-col')].map(x=>x.innerText), verdict:(document.querySelector('.gc-verdict')||{}).innerText,
+                  rows:document.querySelectorAll('.crow').length, ask:(document.querySelector('.group .ask')||{}).innerText||''}""", wait='.crow')
+    finally:
+        srv.terminate(); srv.wait()
+    assert r['rows'] == 1 and len(r['cols']) == 3, r
+    assert '100 元' in r['cols'][0] and '一致' in r['cols'][1] and '0 元' in r['cols'][2] and '失敗' in r['verdict'], r
+    assert '並排' in r['ask'], r
