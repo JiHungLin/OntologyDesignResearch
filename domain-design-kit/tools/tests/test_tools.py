@@ -893,6 +893,12 @@ class TestLint(Base):
         self.assertNotIn('✗', sec, out)
         self.assertIn('✓ 通過（檢查了 5 個屬性）', sec)
 
+    def test_data_nature_needs_decisions_before_step2(self):
+        # 還沒凍結的 ② 卻沒有 architecture/DECISIONS.md：② 開始前要先做 /domain-arch 初判（P11 資料性質）
+        self.edit(self.slice_file('02_entities.md'), '# leave-backfill ② 名詞盤點\n', '# leave-backfill ② 名詞盤點\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 草稿 |\n')
+        code, out = self.lint()
+        self.assertIn('沒有 architecture/DECISIONS.md：② 開始前先做 /domain-arch 初判', out)
+
     def test_data_nature_frozen_entities_only_remind(self):
         self.write_decisions(plat=self.PLAT + '| P11 資料性質 | 已採用 | 處理員工個資 |\n')
         f = self.slice_file('02_entities.md')

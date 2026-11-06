@@ -940,7 +940,7 @@ class Lint:
             if f not in self.STEP_OF or self.doc_status(d) != '待檢查': continue
             for h2, h3, header, rows in d.tables():
                 if (h2 or '') == '檢查紀錄' and header[:1] == ['完成標準'] and '審查者確認' in header:
-                    self.red('審查頁', f"{f}:{rows[0][0] - 2 if rows else '?'} 檢查紀錄還是舊格式（有「審查者確認」欄）：送審前照範本換成「完成標準（AI 自評）」表（domain-step 第 7 點）")
+                    self.red('審查頁', f"{f}:{rows[0][0] - 2 if rows else '?'} 檢查紀錄還是舊格式（有「審查者確認」欄）：送審前照範本換成「完成標準（AI 自評）」表（docs/08《舊專案相容》第一節）")
         refs = self.review_refs()
         if not refs:
             return self.done('審查頁', 0, '', skipped='沒有新格式（檢查紀錄有「審查頁」行）的交付物')
@@ -1545,7 +1545,12 @@ class Lint:
         d = self.docs.get('02_entities.md')
         if not d: return self.done('資料性質', 0, '', skipped='沒有 02_entities.md')
         policy = self.data_nature_policy()
-        if policy is None: return self.done('資料性質', 0, '', skipped='沒有 architecture/DECISIONS.md')
+        if policy is None:
+            status, _ = self.header_of(d)
+            if status and not status.startswith('已凍結'):   # ② 開始前要有初判（docs/01 0.5、/domain-arch 初判第 5 點）；已凍結的舊切片只提醒
+                self.red('資料性質', "沒有 architecture/DECISIONS.md：② 開始前先做 /domain-arch 初判，決定 P11 資料性質")
+                return self.done('資料性質', 1, '份 ②')
+            return self.done('資料性質', 0, '', skipped='沒有 architecture/DECISIONS.md')
         if policy == '不處理': return self.done('資料性質', 0, '', skipped='P11 資料性質：不處理個資')
         status, _ = self.header_of(d)
         frozen = bool(status and status.startswith('已凍結'))

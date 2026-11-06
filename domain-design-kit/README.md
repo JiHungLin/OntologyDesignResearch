@@ -119,4 +119,4 @@ AI 會先和你一起整理切片地圖；同意後說「開始做第一條」�
 python3 build_kit.py
 ```
 
-它會把七份規範複製到 `docs/`，並把《團隊開發流程_精簡版》各步驟的完成標準重新寫進範本的「檢查紀錄」。已經開始跑的設計 repo 不會自動更新；要更新時，把工具包檔案（`CLAUDE.md`、`README.md`、`.gitignore`、`docs/`、`templates/`、`tools/`、`.claude/`）一起複製過去，先確認那邊的這些檔案沒被改過，只 commit 這些檔案（訊息「更新設計工具包：…」），不動 `slices/`、`inputs/`、`core/`。
+它會把八份規範複製到 `docs/`（正本中 `<!-- kit:omit -->` 包起來的修改經過與背景不複製），並把《團隊開發流程_精簡版》各步驟的完成標準重新寫進範本的「檢查紀錄」。已經開始跑的設計 repo 不會自動更新；要更新時，把工具包檔案（`CLAUDE.md`、`README.md`、`.gitignore`、`docs/`、`templates/`、`tools/`、`.claude/`）一起複製過去，先確認那邊的這些檔案沒被改過，只 commit 這些檔案（訊息「更新設計工具包：…」），不動 `slices/`、`inputs/`、`core/`。
