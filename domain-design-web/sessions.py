@@ -196,8 +196,22 @@ def decide_approval(sid, rid, allow, message='', by=''):
     return body
 
 
+def auto_mode():
+    """slices/PLAN.md 的「執行模式」是全自動（docs/01 0.2）：網頁的 session 也帶工具包的 tools/auto_hook.py，放行並記錄、碰到禁止清單擋下。"""
+    import project
+    p = project.plan()
+    return bool(p and p.get('auto')) and os.path.exists(os.path.join(kit.repo(), 'tools', 'auto_hook.py'))
+
+
+def _settings():
+    if not auto_mode():
+        return SETTINGS
+    hook = {'type': 'command', 'command': f"{sys.executable} {os.path.join(kit.repo(), 'tools', 'auto_hook.py')}"}
+    return json.dumps({'hooks': {'PreToolUse': [{'matcher': '*', 'hooks': [hook]}]}})
+
+
 def _command(s, message):
-    cmd = [CLAUDE, '-p', message, '--output-format', 'stream-json', '--verbose', '--settings', SETTINGS,
+    cmd = [CLAUDE, '-p', message, '--output-format', 'stream-json', '--verbose', '--settings', _settings(),
            '--permission-mode', 'acceptEdits', '--append-system-prompt', web_prompt(),
            '--mcp-config', _mcp(s['id']), '--permission-prompt-tool', 'mcp__web__approve', '--allowedTools', *ALLOWED]
     if s['turns'] == 0:
@@ -284,7 +298,7 @@ async def _run(sid, message):
     s = get(sid)
     try:
         proc = await asyncio.create_subprocess_exec(
-            *_command(s, message), cwd=kit.repo(), env=dict(os.environ, MCP_TOOL_TIMEOUT=str(40 * 60 * 1000)),
+            *_command(s, message), cwd=kit.repo(), env=dict(os.environ, MCP_TOOL_TIMEOUT=str(40 * 60 * 1000), **({'DOMAIN_AUTO': '1', 'DOMAIN_AUTO_REPO': kit.repo()} if auto_mode() else {})),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, limit=2 ** 24)
     except OSError as e:
         _append(sid, {'kind': 'error', 'text': f'無法執行 {CLAUDE}：{e}'})

@@ -49,3 +49,6 @@ architecture/：ADR 採用 5、暫定 2、待確認 0；未定的約定 P7、P13
 先試用到期：挑錯的「實作者」角度（leave-backfill 已實作）
 下一步：在審查頁 reviews/2026-10-08_02.md 作答後執行 /domain-freeze 2
 ```
+
+## 全自動模式
+`slices/PLAN.md` 的「執行模式」是 `全自動` 時，下一步照上面判斷，但「等人審查」改成 `/domain-freeze <步驟>`（它會另開子代理作答，`docs/01` 0.2「全自動模式」）；「人說要開始驗證」改成地圖上沒有候選切片時做 ⑥。回報另列 `.domain-auto/runs.md` 最後幾圈、`.domain-auto/commands.jsonl` 被擋下的次數，以及要人事後做的事（`AI（自動）` 作答的審查頁、`AI 獨立計算（待人確認）` 的黃金案例、`完成（AI 自審）` 的切片）。

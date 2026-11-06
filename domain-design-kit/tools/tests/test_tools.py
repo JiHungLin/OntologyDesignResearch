@@ -640,6 +640,10 @@ class TestLint(Base):
         self.write(rv, text)
         code, out = self.lint()
         self.assertIn('執行者和審查者（簽核者）是同一人「甲」', out)
+        self.write(rv, text.replace('| ③ | 甲 | 甲 |', '| ③ | 甲（一人團隊） | 甲 |'))
+        code, out = self.lint()
+        self.assertNotIn('的執行者和審查者（簽核者）是同一人', out)
+        self.assertIn('執行者和簽核者是同一人「甲」（一人團隊）', out)
 
     def test_known_limit_needs_repro_test(self):
         # ⑥ 設計問題處理成「已知限制」（不擋簽核）：要有重現測試、寫出程式暫時的做法
@@ -711,6 +715,15 @@ class TestLint(Base):
         self.write(self.slice_file('reviews/2026-11-07_05.md'), page.format(stage='⑤ 第二段'))
         code, out = self.lint('--freeze')
         self.assertNotIn('第一段的審查頁', out)
+
+    def test_ai_reviewer_only_in_auto_mode(self):
+        # 審查者寫 AI（自動）：手動模式紅燈；切片地圖的執行模式改成全自動就可以
+        self.setup_review(rev='AI（自動）', date='2026-11-07', verdict='通過')
+        code, out = self.lint()
+        self.assertIn('審查者是「AI（自動）」：手動模式的審查者是人', out)
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 已同意 |\n| 執行模式 | 全自動 |\n')
+        code, out = self.lint()
+        self.assertNotIn('審查者是「AI（自動）」', out)
 
     def test_challenge_angle_required(self):
         """這輪新增、來源是 AI 挑錯的反例要寫角度（2026-11-04 T27）"""
@@ -934,6 +947,69 @@ class TestTable(Base):
         self.assertIn('答覆：（空）', out)
         self.assertIn('答覆日：2026-10-21', out)
         self.assertIn('影響：01_scope Q02', out)
+
+class TestAuto(Base):
+    """全自動模式（docs/01 0.2「全自動模式」）：auto_hook.py 放行並記錄、碰到禁止清單擋下；auto_run.py 一圈一個 session，照回報停下來。"""
+    def hook(self, tool, ti, auto='1'):
+        import json
+        env = dict(os.environ, DOMAIN_AUTO=auto, DOMAIN_AUTO_REPO=self.dir)
+        p = subprocess.run([sys.executable, os.path.join(TOOLS, 'auto_hook.py')], input=json.dumps({'tool_name': tool, 'tool_input': ti, 'cwd': self.dir}),
+                           capture_output=True, text=True, env=env)
+        return json.loads(p.stdout)['hookSpecificOutput']['permissionDecision'] if p.stdout.strip() else None
+
+    def test_hook_allows_and_blocks(self):
+        self.assertEqual(self.hook('Bash', {'command': 'docker compose up -d && python3 tools/run_evidence.py s n -- pytest'}), 'allow')
+        self.assertEqual(self.hook('Write', {'file_path': os.path.join(self.dir, 'slices/a.md')}), 'allow')
+        for ti in ({'command': 'git push origin main'}, {'command': 'sudo apt install x'}, {'command': 'cat ~/.ssh/id_rsa'},
+                   {'command': 'docker run -v /var/run/docker.sock:/s img'}, {'command': 'docker run --privileged img'},
+                   {'command': 'rm -rf /etc/x'}, {'command': 'echo x > /etc/hosts'}):
+            self.assertEqual(self.hook('Bash', ti), 'deny', ti)
+        self.assertEqual(self.hook('Edit', {'file_path': os.path.expanduser('~/.bashrc')}), 'deny')
+        self.assertEqual(self.hook('Read', {'file_path': os.path.expanduser('~/.ssh/config')}), 'deny')
+        log = open(os.path.join(self.dir, '.domain-auto', 'commands.jsonl'), encoding='utf-8').read()
+        self.assertIn('"allow": false', log)
+        self.assertIsNone(self.hook('Bash', {'command': 'git push'}, auto=''))   # 不是全自動：不表示意見
+
+    def fake_claude(self, replies):
+        """假的 claude：每次被呼叫依序回一個 result，並在 repo 裡改一個檔（模擬有進展）。"""
+        import json
+        state = os.path.join(self.dir, '.fake_n')
+        script = os.path.join(self.dir, 'fake_claude.py')
+        with open(script, 'w', encoding='utf-8') as f:
+            f.write('import json, os, sys\n'
+                    f'replies = {json.dumps(replies, ensure_ascii=False)}\n'
+                    f'st = {state!r}\n'
+                    'n = int(open(st).read()) if os.path.exists(st) else 0\n'
+                    'open(st, "w").write(str(n + 1))\n'
+                    'open("progress.txt", "a").write(str(n))\n'
+                    'assert os.environ.get("DOMAIN_AUTO") == "1" and "--settings" in sys.argv\n'
+                    'print(json.dumps({"type": "result", "result": replies[min(n, len(replies) - 1)]}, ensure_ascii=False))\n')
+        wrapper = os.path.join(self.dir, 'claude')
+        with open(wrapper, 'w') as f:
+            f.write(f'#!/bin/sh\nexec {sys.executable} {script} "$@"\n')
+        os.chmod(wrapper, 0o755)
+        subprocess.run(['git', 'init', '-q'], cwd=self.dir)
+        return wrapper
+
+    def test_runner_needs_auto_mode(self):
+        code, out = run('auto_run.py', cwd=self.dir)
+        self.assertNotEqual(code, 0)
+        self.assertIn('不是「全自動」', out)
+
+    def test_runner_stops_on_report(self):
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 已同意 |\n| 執行模式 | 全自動 |\n')
+        claude = self.fake_claude(['做完 ①\n全自動：繼續', '凍結 ①\n全自動：需要人（docker 起不來）'])
+        code, out = run('auto_run.py', '--claude', claude, cwd=self.dir)
+        self.assertEqual(code, 1, out)
+        self.assertIn('第 1 圈：繼續', out)
+        self.assertIn('第 2 圈：需要人（docker 起不來）', out)
+        self.assertIn('第 2 圈：需要人', open(os.path.join(self.dir, '.domain-auto', 'runs.md'), encoding='utf-8').read())
+
+    def write(self, rel, text):
+        p = os.path.join(self.dir, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, 'w', encoding='utf-8') as f:
+            f.write(text)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

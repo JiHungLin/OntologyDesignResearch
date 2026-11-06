@@ -72,6 +72,7 @@ def plan():
     st = h.get('狀態', {}).get('value', '')
     return {
         'path': 'slices/PLAN.md', 'status': st, 'agreed': st.startswith('已同意'),
+        'auto': h.get('執行模式', {}).get('value', '').startswith('全自動'),   # docs/01 0.2「全自動模式」
         'basis': h.get('依據', {}).get('value', ''),
         'inventory': _rows(path, '現實資料盤點', '資料'),
         'goals': _bullets(path, '整體目標'),

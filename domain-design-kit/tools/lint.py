@@ -475,7 +475,7 @@ class Lint:
         ('questions.md', None, '狀態'): ['待問', '已問', '暫依整理', '已回覆'],
         ('PLAN.md', '現實資料盤點', '狀態'): ['已有', '已蒐集', '推想草稿', '待提供', '找不到'],
         ('PLAN.md', '切片', '大小估計'): ['太小', '剛好', '太大'],
-        ('PLAN.md', '切片', '狀態'): ['候選', '進行中', '設計完成（待驗證）', '完成', '擱置', '已拆分', '已合併'],
+        ('PLAN.md', '切片', '狀態'): ['候選', '進行中', '設計完成（待驗證）', '完成（AI 自審）', '完成', '擱置', '已拆分', '已合併'],
         ('ENTITY_SKETCH.md', '名詞', '層'): ['core', 'shared', 'domain'],
         ('ENTITY_SKETCH.md', '名詞', '狀態'): ['草圖', '已定義', '已取消'],
     }
@@ -1002,8 +1002,13 @@ class Lint:
                 unanswered.append(f"{rel} 抽查")
             for no, c in r['verdicts']:
                 who = next((c[k].strip() for k in c if k.startswith('審查者')), '')
-                if c.get('執行者', '').strip() and who and c['執行者'].strip() == who:
-                    self.red('審查頁', f"{rel}:{no} {c['步驟']} 的執行者和審查者（簽核者）是同一人「{who}」")
+                ex = c.get('執行者', '').strip()
+                solo = '一人團隊' in ex                            # 一人團隊可以同一人（docs/01 0.5），只提醒
+                if ex and who and re.sub(r'（一人團隊）$', '', ex).strip() == who:
+                    if solo:
+                        print(f"    • {rel}:{no} {c['步驟']} 執行者和簽核者是同一人「{who}」（一人團隊）：有第二個人時要分開")
+                    else:
+                        self.red('審查頁', f"{rel}:{no} {c['步驟']} 的執行者和審查者（簽核者）是同一人「{who}」（一人團隊時執行者寫「{who}（一人團隊）」，docs/01 0.5）")
                 miss = [k for k in c if k != '步驟' and not c[k].strip()]
                 if miss: unanswered.append(f"{rel}:{no} 結論（{c['步驟']}）")
                 elif self.freeze and not c.get('結論', '').strip().startswith('通過'):
@@ -1342,6 +1347,45 @@ class Lint:
             self.red('執行紀錄', "簽核用的 log 不是在同一個驗證環境跑的：" + '、'.join(f"{r}（{e[:60]}）" for e, r in envs.items()))
         self.done('執行紀錄', n, '個引用 log 的結果')
 
+    def run_mode(self):
+        """slices/PLAN.md 開頭區的「執行模式」（手動／全自動）；沒有這一列＝手動。"""
+        path = os.path.join(self.root, 'slices', 'PLAN.md')
+        if os.path.exists(path):
+            for h2, h3, header, rows in mb.Doc(path).tables():
+                if header[:2] == ['項目', '內容']:
+                    return next((c[1].strip() for no, c in rows if c[0].strip() == '執行模式'), '手動') or '手動'
+        return '手動'
+
+    def check_auto_marks(self):
+        """全自動模式的標記（審查者 AI（自動）、計算者 AI 獨立計算）只能出現在執行模式是全自動的 repo；手動時審查者、計算者不能是 AI。"""
+        print("\n[執行模式] 審查頁的審查者、黃金案例的計算者：手動模式不能是 AI；全自動模式寫 AI（自動）、AI 獨立計算（待人確認）")
+        auto = self.run_mode().startswith('全自動')
+        n = 0
+        rdir = os.path.join(self.dir, 'reviews')
+        for name in sorted(os.listdir(rdir)) if os.path.isdir(rdir) else []:
+            if not name.endswith('.md'): continue
+            rel = f'reviews/{name}'
+            r = self.parse_review(os.path.join(rdir, name))
+            for no, c in r['verdicts']:
+                who = next((c[k].strip() for k in c if k.startswith('審查者')), '')
+                if not who: continue
+                n += 1
+                if who.startswith('AI') and not (auto and who == 'AI（自動）'):
+                    self.red('執行模式', f"{rel}:{no} 審查者是「{who}」：" + ('全自動模式寫「AI（自動）」' if auto else '手動模式的審查者是人（全自動要先在 slices/PLAN.md 改執行模式）'))
+            for gc in r['cases']:
+                who = self.case_value(gc, '計算者') or ''
+                if who.strip().startswith('AI') and not (auto and who.strip().startswith('AI 獨立計算')):
+                    n += 1
+                    self.red('執行模式', f"{rel}:{gc['no']} {gc['id']} 的計算者是「{who.strip()}」：手動模式的預期結果由人算（docs/01 ⑥）")
+        gpath = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
+        if os.path.exists(gpath):
+            for no, h2, h3, line in mb.Doc(gpath).items:
+                m = re.match(r'^- 計算者[：:]\s*(AI.*)$', line or '')
+                if m and not (auto and m.group(1).startswith('AI 獨立計算')):
+                    n += 1
+                    self.red('執行模式', f"06_evidence/golden_cases.md:{no} 計算者是「{m.group(1)}」：手動模式的預期結果由人算")
+        self.done('執行模式', n, '個審查者與計算者', skipped=None if n else '沒有已填的審查者或計算者')
+
     def check_known_limits(self):
         """⑥ 設計問題處理成「已知限制」（2026-11-06 起，先試用）：要有重現測試、寫出程式暫時的做法。"""
         print("\n[已知限制] signoff.md 設計問題處理為「已知限制」的，牽涉或處理寫出重現測試（test_…），實作暫時的做法不空白")
@@ -1564,7 +1608,7 @@ class Lint:
         self.check_tables(); self.check_placeholders(); self.check_eq_impact(); self.check_out_of_scope()
         self.check_golden(); self.check_late_inputs(); self.check_param_storage(); self.check_chain(); self.check_core_prefix(); self.check_referenced_by()
         self.check_reviews(); self.check_challenge(); self.check_golden_selfcontained(); self.check_user_agreement()
-        self.check_cross_refs(); self.check_requests(); self.check_architecture(); self.check_data_nature(); self.check_api(); self.check_evidence(); self.check_known_limits()
+        self.check_cross_refs(); self.check_requests(); self.check_architecture(); self.check_data_nature(); self.check_api(); self.check_evidence(); self.check_known_limits(); self.check_auto_marks()
         self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")

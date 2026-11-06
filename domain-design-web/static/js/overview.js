@@ -18,7 +18,9 @@ export function topicName(P) {
 function showTopic(P) {
   const name = topicName(P);
   const b = $('.brand');
-  if (b) b.innerHTML = name ? `${esc(name)}<span class="brand-sub">DOMAIN 設計</span>` : 'DOMAIN 設計';
+  // 全自動模式（docs/01 0.2）：標在頂列，人一眼知道這裡的審查頁、黃金案例是 AI 代答的，要事後看
+  const auto = P.plan && P.plan.auto ? '<span class="brand-sub" title="人的關卡由 AI 代答並標記 AI（自動），事後再看、再改">全自動</span>' : '';
+  if (b) b.innerHTML = (name ? `${esc(name)}<span class="brand-sub">DOMAIN 設計</span>` : 'DOMAIN 設計') + auto;
   document.title = name ? `${name}｜Domain 設計` : 'Domain 設計';
 }
 

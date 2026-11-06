@@ -354,12 +354,17 @@ def test_topic_in_header(browser, repo):
             except Exception:
                 time.sleep(0.1)
         with_plan = browser.run(f'http://127.0.0.1:{port}/#/', head, wait='#navTree summary')
+        plan = repo.path('slices/PLAN.md')
+        t = open(plan, encoding='utf-8').read()
+        repo.write('slices/PLAN.md', t.replace('| 狀態 | ', '| 執行模式 | 全自動 |\n| 狀態 | ', 1))
+        auto = browser.run(f'http://127.0.0.1:{port}/#/', head, wait='#navTree summary')
         os.remove(repo.path('slices/PLAN.md'))
         no_plan = browser.run(f'http://127.0.0.1:{port}/#/', head, wait='.hero, .celebrate, main section')
     finally:
         srv.terminate(); srv.wait()
     assert with_plan['brand'].startswith('銷售') and with_plan['title'] == '銷售｜Domain 設計', with_plan
     assert no_plan['brand'] == 'DOMAIN 設計' and no_plan['title'] == 'Domain 設計', no_plan
+    assert '全自動' in auto['brand'] and '全自動' not in with_plan['brand'], auto
 
 
 def test_background_results_keep_last_reply(browser, repo):

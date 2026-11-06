@@ -154,8 +154,9 @@ export async function renderFinish(path, focus) {
     if ('執行者' in x.cells) {   // ⑥：審查者就是簽核者，不能和執行者同一人（docs/02「第 ⑥ 步的審查頁」）
       const ex = $('#execBy').value.trim();
       if (!ex) { toast('先寫執行者'); $('#execBy').focus(); return; }
-      if (ex === who) { toast('執行者和簽核者不能是同一人'); return; }
-      cells['執行者'] = ex;
+      // 一人團隊可以同一人，執行者加註「（一人團隊）」，之後的人看得出這次沒有分開（docs/01 0.5）
+      cells['執行者'] = ex === who ? `${ex}（一人團隊）` : ex;
+      if (ex === who) toast('執行者和簽核者是同一人：記成「一人團隊」');
     }
     remember('reviewer', who);
     if (await write('/api/review/cells', { line: x.line, cells })) renderFinish(path);

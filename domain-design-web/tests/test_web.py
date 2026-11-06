@@ -511,3 +511,15 @@ def test_executor_cell(tmp_path):
     assert '| ⑥ | 甲 | 乙 | 2026-11-05 | 通過 |' in p.read_text(encoding='utf-8')
     with pytest.raises(ValueError):
         review.set_cells(str(p), 7, {'步驟': '⑤'})
+
+
+def test_auto_mode_session_settings(repo):
+    # 切片地圖「執行模式」是全自動（docs/01 0.2）：網頁的 session 改帶工具包的 tools/auto_hook.py，並設 DOMAIN_AUTO
+    import sessions
+    plan = os.path.join(str(repo), 'slices', 'PLAN.md')
+    os.makedirs(os.path.join(str(repo), 'tools'), exist_ok=True)
+    open(os.path.join(str(repo), 'tools', 'auto_hook.py'), 'w').close()
+    assert not sessions.auto_mode() and 'readonly_hook' in sessions._settings()
+    t = open(plan, encoding='utf-8').read().replace('| 狀態 | 討論中 |', '| 狀態 | 討論中 |\n| 執行模式 | 全自動 |', 1)
+    open(plan, 'w', encoding='utf-8').write(t)
+    assert sessions.auto_mode() and 'auto_hook.py' in sessions._settings() and '"matcher": "*"' in sessions._settings()
