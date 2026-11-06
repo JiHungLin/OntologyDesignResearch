@@ -18,6 +18,7 @@ export async function renderFinish(path, focus) {
   const name = remember('reviewer');
   const signed = c.conclusion_done;
   const exec_ = r.conclusion.some(x => '執行者' in x.cells);   // ⑥ 的結論表多一欄執行者
+  const stage1 = /⑤\s*第一段/.test(((r.meta || []).find(m => m.key === '這輪審查的步驟') || {}).value || '');   // ⑤ 分兩段：第一段答完不凍結（docs/01 ⑤「兩段審查」）
 
   // 抽查一次看一條：清單挑一條 → 這一條的完成標準、AI 說、證據（AI 寫的編號與行號已換成內容）、判斷按鈕放在同一張卡
   // 審查頁的寫法是「① 第 1、4 條；③ 第 2 條」；畫面上一條的代號是「①1」（步驟＋第幾條）
@@ -97,11 +98,14 @@ export async function renderFinish(path, focus) {
       ${signed ? `
       <section class="card lift celebrate pop">
         <div class="stars">★ ★ ★</div><h1>關卡完成！</h1>
-        <p class="muted">審查頁都填好了。交給 AI：它會依你的答案修改設計；全部通過的話，再請它凍結。</p>
+        ${stage1 ? `<p class="muted">⑤ 第一段答完了。交給 AI 做第二段：抄回你算的結果、產生 schema 與 API、做紙上推演，再送一份審查頁給你。</p>
+        <div class="row" style="justify-content:center">
+          <button class="btn big primary" id="stage2">交給 AI 做第二段</button>
+        </div>` : `<p class="muted">審查頁都填好了。交給 AI：它會依你的答案修改設計；全部通過的話，再請它凍結。</p>
         <div class="row" style="justify-content:center">
           <button class="btn big primary" id="handover">審查好了，交給 AI</button>
           <button class="btn big" id="freeze">請 AI 凍結</button>
-        </div>
+        </div>`}
       </section>` : ''}
 `}
     </div>`;
@@ -159,6 +163,8 @@ export async function renderFinish(path, focus) {
   const ho = $('#handover');
   const step = (path.match(/_([\d-]+)\.md$/) || [])[1] || '';
   if (ho) ho.onclick = () => runAi(r.slice, `審查 ${step}`, `審查好了。審查頁：${path}`, { review: path });
+  const s2 = $('#stage2');
+  if (s2) s2.onclick = () => runAi(r.slice, '⑤ 第二段', `/domain-step 5 ${r.slice}（⑤ 第一段已作答：${path}）`, { review: path });
   const fz = $('#freeze');
   if (fz) fz.onclick = () => runAi(r.slice, `凍結 ${step}`, `/domain-freeze ${stepNums(r.steps ? r : step).join(',')} ${r.slice}`, { review: path });
 }

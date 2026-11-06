@@ -1010,6 +1010,10 @@ class Lint:
                     self.red('審查頁', f"{rel}:{no} {c['步驟']} 的結論是「{c.get('結論')}」，不是「通過」")
             if not r['verdicts']:
                 self.red('審查頁', f"{rel} 沒有「結論」表")
+            # ⑤ 分兩段（docs/01 ⑤「兩段審查」）：第一段答完不凍結，第二段才凍結
+            stage = next((l for l in r['lines'] if re.match(r'^\|\s*這輪審查的步驟\s*\|', l)), '')
+            if self.freeze and '05_mapping.md' in files and re.search(r'⑤\s*第一段', stage):
+                self.red('審查頁', f"{rel} 是 ⑤ 第一段的審查頁：答完不凍結，接著做第二段（/domain-step 5：抄回預期結果、schema、API、紙上推演）")
             if os.path.basename(rel)[:10] >= GOLDEN_ASK_SINCE:     # 逐項的「要得出」：2026-11-04 起的審查頁（先試用）
                 for gc in r['cases']:
                     self.check_golden_ask(rel, gc)
@@ -1101,12 +1105,12 @@ class Lint:
                     self.red('審查頁', f"{rel} {gc['id']} 的「{k}」和 golden_cases.md 不同（人填在審查頁的要逐字抄回）")
 
     def check_challenge(self):
-        print("\n[挑錯] 送審的 ①～⑤ 有「AI 挑錯」的反例；審查頁「這輪的挑錯」列的 X-nn 存在")
+        print("\n[挑錯] 送審的 ①～⑥ 有「AI 挑錯」的反例（⑥ 只看有「反例處理」表的新範本）；審查頁「這輪的挑錯」列的 X-nn 存在")
         refs = self.review_refs()
         n = 0
         for f, (no, paths) in refs.items():
-            if f == SIGNOFF: continue                      # ⑥ 沒有挑錯
-            d = self.docs[f]
+            d = self.step_doc(f)
+            if f == SIGNOFF and not any(h3 == '反例處理' for _, h3, _, _ in d.tables()): continue   # 舊的 signoff 沒有反例處理表
             if self.doc_status(d) != '待檢查': continue
             n += 1
             xs, ai, src = set(), 0, {}
@@ -1123,7 +1127,7 @@ class Lint:
             if paths and os.path.exists(os.path.join(self.dir, paths[-1])):
                 review = self.parse_review(os.path.join(self.dir, paths[-1]))
                 for x in review['x_ids']:
-                    if not any(x in self.x_ids(g) for g in self.docs if g in self.STEP_OF):
+                    if not any(x in self.x_ids(g) for g in list(self.docs) + ([SIGNOFF] if self.signoff else []) if g in self.STEP_OF):
                         self.red('挑錯', f"{paths[-1]}「這輪的挑錯」的 {x} 不在任何一步的「反例處理」"); break
                 # 這輪新增、來源是 AI 挑錯的反例要寫角度（2026-11-04 T27：成效要分角度數；舊反例不檢查）
                 for x in review['x_by_step'].get(self.STEP_OF[f], []):
@@ -1136,7 +1140,7 @@ class Lint:
 
     def x_ids(self, f):
         out = set()
-        for h2, h3, header, rows in self.docs[f].tables():
+        for h2, h3, header, rows in self.step_doc(f).tables():
             if h3 == '反例處理' and header[:2] == ['#', '反例']:
                 out |= {c[0].strip() for no, c in rows}
         return out
@@ -1454,7 +1458,7 @@ class Lint:
             if bg and '沒有訊號，用預設' not in bg and not re.search(r'\.md\b|PLAN|D-\d+', bg):
                 self.red('架構決定', f"{rel}:{no} {aid} 的「背景與訊號」沒有寫交付物的檔名與編號，也沒寫「沒有訊號，用預設」")
             no, who = f.get('提出／同意', (0, ''))
-            if '待確認' in who: pending.append(f"{rel}:{no} {aid}")
+            if '待確認' in who: pending.append((f"{rel}:{no} {aid}", aid, f.get('判斷', (0, ''))[1]))
         for no, r in refs:
             if r not in adrs: self.red('架構決定', f"{rel}:{no} 引用的 {r} 不存在")
         d5 = self.docs.get('05_mapping.md')
@@ -1464,10 +1468,14 @@ class Lint:
             if status and not status.startswith('已凍結') and (not inputs or 'architecture/DECISIONS.md' not in inputs[1]):
                 self.red('架構決定', f"05_mapping.md:{inputs[0] if inputs else 1} 「讀取的輸入」沒有 architecture/DECISIONS.md @ <commit>")
             if pending:
-                if self.freeze and status == '待檢查':
-                    for p in pending: self.red('架構決定', f"{p} 還是待確認：⑤ 要凍結，ADR 要先由架構負責人同意")
-                else:
-                    for p in pending: print(f"    • {p} 待確認")
+                # ⑤ 要用的 ADR（docs/01 ⑤）：⑤ 有引用的，以及判斷 S1～S5（資料庫、交易、同步、讀模型、時點）的；其他的不擋本切片
+                text5 = '\n'.join(l or '' for _, _, _, l in d5.items)
+                for where, aid, judge in pending:
+                    used = aid in text5 or re.match(r'^S[1-5]\b', judge)
+                    if self.freeze and status == '待檢查' and used:
+                        self.red('架構決定', f"{where} 還是待確認：⑤ 要凍結，⑤ 用到的 ADR 要先由架構負責人同意")
+                    else:
+                        print(f"    • {where} 待確認")
             if status and not status.startswith('已凍結'):
                 n += self.check_s1_mapping(adrs, d5)
         self.done('架構決定', n, '個 ADR、約定與 ⑤ 檔頭')

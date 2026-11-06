@@ -94,6 +94,8 @@ export async function renderHome(slice) {
     const stepOf = last || step;
     // 交回後 AI 做了紙上推演、和你的答案對不上：先回黃金案例頁對答案（改你的答案，或留著讓 AI 說明）
     const lr = last ? await loadReview(last.path) : null;
+    // ⑤ 分兩段：第一段答完是繼續 ⑤（第二段），不是凍結（docs/01 ⑤「兩段審查」）
+    const stage1 = /⑤\s*第一段/.test(((lr && lr.meta.find(m => m.key === '這輪審查的步驟')) || {}).value || '');
     // 回頭修改的 session 做完也算處理過（它的回覆會說接下來要重做這一步，或還要改什麼）
     const handled = s && !s.running && (s.purpose === `審查 ${step}` || s.purpose === '回頭修改') && !!s.last_reply;
     // 依這份審查頁重做這一步、做到一半停下（等核准逾時、session 太長）：下一步是繼續做，不是再把審查頁交給 AI
@@ -129,7 +131,7 @@ export async function renderHome(slice) {
     } else if (handled) {
       // AI 已經處理過這份審查頁的答案：下一步是繼續這一步（還要送下一份審查頁）或凍結，不是再交一次
       const n = Math.max(0, ...stepNums(stepOf));
-      const more = /再送一份審查頁|再送審/.test(((lr && lr.meta.find(m => /填完之後/.test(m.key))) || {}).value || '');
+      const more = stage1 || /再送一份審查頁|再送審/.test(((lr && lr.meta.find(m => /填完之後/.test(m.key))) || {}).value || '');
       // AI 處理答案時發現要回頭改設計（審查頁選了要改設計的選項、凍結條件不滿足）：主按鈕改成回頭修改，不是凍結
       const said = s.last_reply || '';
       // 設計已經改好、要重新產出這一步（例：⑥ 程式要對應新 tag、重跑測試）：主按鈕是重做這一步，不是再回頭修改
@@ -164,7 +166,16 @@ export async function renderHome(slice) {
           : `<button class="btn big yellow" id="freeze">請 AI 凍結<span class="arr">›</span></button><button class="btn big" id="contStep">還要改，請 AI 繼續第 ${CIRCLED[n]} 步</button>`}
           <button class="btn big" id="handover">再交一次審查頁</button></div>
       </section>`;
-    } else hero = `
+    } else if (stage1) hero = `
+      <section class="hero">
+        <div style="flex:999 1 480px;min-width:0">
+          <span class="chip">輪到你</span>
+          <h1>⑤ 第一段填好了</h1>
+          <p>交給 AI 做第二段：處理你的答案、抄回你算的結果、產生 schema 與 API、做紙上推演，再送一份審查頁給你。第二段答完才凍結。</p>
+        </div>
+        <div class="row"><button class="btn big yellow" id="contStep">請 AI 做 ⑤ 第二段<span class="arr">›</span></button></div>
+      </section>`;
+    else hero = `
       <section class="hero">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>

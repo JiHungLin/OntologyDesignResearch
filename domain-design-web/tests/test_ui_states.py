@@ -189,6 +189,22 @@ def test_review_answered_hand_to_ai(browser, repo):
     assert '審查填好了' in h['title'] and '交給 AI 處理答案' in h['buttons'], h
 
 
+def test_step5_stage1_answered_continues(browser, repo):
+    # ⑤ 分兩段：第一段的審查頁答完，首頁主按鈕是做第二段，不是凍結
+    repo.frozen_until('demo', 4)
+    repo.step('demo', '05_mapping.md', '待檢查')
+    t = open(repo.path(REVIEW), encoding='utf-8').read().replace('| 這輪審查的步驟 | ② 02_entities.md |', '| 這輪審查的步驟 | ⑤ 第一段 05_mapping.md |').replace('| ② |', '| ⑤ |')
+    repo.write('slices/demo/reviews/2026-10-27_05.md', t)
+    os.remove(repo.path(REVIEW))
+    t = open(repo.path('slices/demo/reviews/2026-10-27_05.md'), encoding='utf-8').read()
+    t = (t.replace('- 你的回答：\n', '- 你的回答：A\n').replace('` | |\n', '` | ✓ |\n').replace('| | |\n', '| 第 1 條 | 屬實 |\n')
+         .replace('| ⑤ | | | |', '| ⑤ | 審查者甲 | 2026-10-27 | 通過 |').replace('- 預期結果：（由人填）', '- 預期結果：① 已取消；② 100 元')
+         .replace('- 計算過程：（由人填，附檔案位置）', '- 計算過程：100 全退').replace('- 計算者：（不得是 AI 或被測系統）', '- 計算者：審查者甲'))
+    repo.write('slices/demo/reviews/2026-10-27_05.md', t)
+    h = home(browser, repo)
+    assert '⑤ 第一段填好了' in h['title'] and h['buttons'][0].startswith('請 AI 做 ⑤ 第二段') and not any('凍結' in b for b in h['buttons']), h
+
+
 def test_handled_can_freeze(browser, repo):
     repo.frozen_until('demo', 1)
     repo.step('demo', '02_entities.md', '待檢查')

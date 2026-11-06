@@ -683,6 +683,35 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertIn('X-09 不在任何一步的「反例處理」', out)
 
+    def test_step6_challenge_rows(self):
+        # ⑥ 新範本有「反例處理」表：送審中要有 AI 挑錯的反例；舊的 signoff（沒有這張表）不檢查
+        base = ('# signoff\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 待檢查 |\n\n## 決定與理由\n\n### 反例處理\n\n'
+                '| # | 反例 | 來源 | 處理 | 理由或去向 |\n|---|---|---|---|---|\n{row}\n## 檢查紀錄\n\n- 審查頁：reviews/2026-11-07_06.md\n')
+        so = self.slice_file('06_evidence/signoff.md')
+        self.write(so, base.format(row=''))
+        code, out = self.lint()
+        self.assertIn('06_evidence/signoff.md 送審了，「反例處理」沒有來源為「AI 挑錯」的反例', out)
+        self.write(so, base.format(row='| X-01 | 同一次公告分次登錄 | AI 挑錯（領域實務） | 轉為設計問題 | 設計問題 #1 |\n'))
+        code, out = self.lint()
+        self.assertNotIn('沒有來源為「AI 挑錯」的反例', out)
+        self.write(so, base.format(row='').replace('## 決定與理由\n\n### 反例處理\n\n| # | 反例 | 來源 | 處理 | 理由或去向 |\n|---|---|---|---|---|\n', ''))
+        code, out = self.lint()
+        self.assertNotIn('signoff.md 送審了', out)
+
+    def test_step5_stage1_review_does_not_freeze(self):
+        # ⑤ 分兩段：頁首寫「⑤ 第一段」的審查頁答完也不能凍結；第二段才可以
+        self.write(self.slice_file('05_mapping.md'), '# leave-backfill ⑤\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 待檢查 |\n\n'
+                   '## 檢查紀錄\n\n- 審查頁：reviews/2026-11-07_05.md\n')
+        page = ('# 審查頁\n\n| 項目 | 內容 |\n|---|---|\n| 這輪審查的步驟 | {stage} |\n\n## 一、要你回答的問題\n\n（這輪沒有問題）\n\n'
+                '## 四、抽查\n\n| 抽查了哪幾條 | 結果 |\n|---|---|\n| ⑤ 第 1 條 | 符合 |\n\n'
+                '## 結論\n\n| 步驟 | 審查者（非產出者） | 日期 | 結論 |\n|---|---|---|---|\n| ⑤ | 甲 | 2026-11-07 | 通過 |\n')
+        self.write(self.slice_file('reviews/2026-11-07_05.md'), page.format(stage='⑤ 第一段'))
+        code, out = self.lint('--freeze')
+        self.assertIn('是 ⑤ 第一段的審查頁：答完不凍結', out)
+        self.write(self.slice_file('reviews/2026-11-07_05.md'), page.format(stage='⑤ 第二段'))
+        code, out = self.lint('--freeze')
+        self.assertNotIn('第一段的審查頁', out)
+
     def test_challenge_angle_required(self):
         """這輪新增、來源是 AI 挑錯的反例要寫角度（2026-11-04 T27）"""
         self.setup_review()
