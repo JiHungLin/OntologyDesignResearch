@@ -601,13 +601,18 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
 .approve-card .where.host { color: #C2410C; border-color: var(--turn); background: var(--card); }
 .hero-next { background: var(--card); color: var(--ink); border: 2px solid var(--ink); border-radius: 12px; padding: 8px 12px; margin: 8px 0; font-size: 15px; }
 
-/* ⑥ 的黃金案例：你算的、設計推出的、系統跑出的並排（窄螢幕疊起來） */
-.gc-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 8px 0; }
-.gc-col { background: var(--bg); border-radius: 10px; padding: 10px 12px; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+/* ⑥ 的黃金案例：紙上判定整行；你算的、系統跑出的逐項兩欄對齊（窄螢幕也是兩欄，字小一點） */
+.gc-col { background: var(--bg); border-radius: 10px; padding: 10px 14px; margin: 8px 0; font-size: 15px; overflow-wrap: anywhere; }
 .gc-col .label { margin-bottom: 4px; }
 .gc-col .md p, .gc-col .md ol, .gc-col .md ul { margin: 0 0 4px; }
+.gc-table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 8px 0; font-size: 15px; table-layout: fixed; }
+.gc-table th, .gc-table td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--faint); overflow-wrap: anywhere; line-height: 1.7; }
+.gc-table thead th { background: var(--bg); font-size: 13px; color: var(--muted); }
+.gc-table thead th:first-child, .gc-table tbody th { width: 2.2em; color: var(--muted); font-weight: 900; }
+.gc-table .gc-head td { color: var(--muted); font-size: 13px; }
 .gc-verdict { font-weight: 900; font-size: 14px; padding: 4px 10px; border-radius: 8px; display: inline-block; }
 .gc-verdict.ok { background: var(--done); }
 .gc-verdict.bad { background: #FFD7CF; }
-@media (max-width: 760px) { .gc-cols { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .gc-table { font-size: 13px; } .gc-table th, .gc-table td { padding: 6px; } }
 .gc-off { background: #FFD7CF; padding: 0 3px; border-radius: 4px; }
+.gc-table tr.gc-off-row td, .gc-table tr.gc-off-row th { background: #FFF1EE; }

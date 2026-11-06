@@ -429,6 +429,23 @@ def test_step6_golden_row_side_by_side(browser, repo):
                   rows:document.querySelectorAll('.crow').length, ask:(document.querySelector('.group .ask')||{}).innerText||''}""", wait='.crow')
     finally:
         srv.terminate(); srv.wait()
+    col = lambda t: next((x for x in r['cols'] if x.startswith(t)), '')
     assert r['rows'] == 1 and len(r['cols']) == 3, r
-    assert '100 元' in r['cols'][0] and '一致' in r['cols'][1] and '0 元' in r['cols'][2] and '失敗' in r['verdict'], r
+    assert '100 元' in col('你算的') and '一致' in col('設計推出的') and '0 元' in col('系統跑出的') and '失敗' in r['verdict'], r
     assert '並排' in r['ask'], r
+    repo.write('slices/demo/06_evidence/golden_cases.md', '# demo 黃金案例\n\n## GC01 下單後取消\n- 預期結果：\n  1. 已取消\n  2. 100 元\n'
+               '- 紙上判定：一致\n- 系統結果：依據 results/x.log\n  1. 已取消——一致\n  2. 0 元——不一致\n- 判定：失敗（第 2 項）\n')
+    port = _port()
+    srv = subprocess.Popen([sys.executable, 'server.py', '--repo', repo.root, '--port', str(port)], cwd=WEB,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f'http://127.0.0.1:{port}/api/project'); break
+            except Exception:
+                time.sleep(0.1)
+        t = browser.run(f'http://127.0.0.1:{port}/#/r/{p}/confirm', """
+          return [...document.querySelectorAll('.gc-table tbody tr')].map(tr=>[...tr.children].map(x=>x.innerText.trim()))""", wait='.crow')
+    finally:
+        srv.terminate(); srv.wait()
+    assert ['1', '已取消', '已取消——一致'] in t and ['2', '100 元', '0 元——不一致'] in t, t

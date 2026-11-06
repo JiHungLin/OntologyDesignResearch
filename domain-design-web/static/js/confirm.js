@@ -85,15 +85,39 @@ export function ctxHtml(c, frags) {
   }).join('');
 }
 
-// ⑥ 的黃金案例：一列並排三欄（你算的、設計推出的、系統跑出的），內容從 golden_cases.md 來
+// ⑥ 的黃金案例：一列看完你算的、設計推出的、系統跑出的（內容從 golden_cases.md 來）。
+// 三欄並排太窄：紙上判定通常一句，放上面整行；你算的和系統跑出的照「1. 2. …」逐項對齊成兩欄，對不上編號時上下疊
+function items(v) {
+  const head = [], its = new Map();
+  let cur = null;
+  for (const l of String(v || '').split('\n')) {
+    const m = l.match(/^(\d+)[.、]\s*(.*)$/);
+    if (m) { cur = m[1]; its.set(cur, m[2]); }
+    else if (cur) its.set(cur, its.get(cur) + '\n' + l);
+    else head.push(l);
+  }
+  return { head: head.join('\n').trim(), its };
+}
+
 function goldenOf(what) {
   const m = what.match(/^(?:黃金案例\s*)?(GC\d+)/);
   const g = m && state.review && state.review.golden && state.review.golden[m[1]];
   if (!g) return '';
-  const col = (t, v) => `<div class="gc-col"><div class="label">${t}</div><div class="md">${md(v || '（沒有）').replace(/不一致/g, '<b class="gc-off">不一致</b>')}</div></div>`;
+  const hl = h => h.replace(/不一致/g, '<b class="gc-off">不一致</b>');
+  const box = (t, v) => `<div class="gc-col"><div class="label">${t}</div><div class="md">${hl(md(v || '（沒有）'))}</div></div>`;
   const pass = /^通過/.test((g['判定'] || '').trim());
+  const ex = items(g['預期結果']), sy = items(g['系統結果']);
+  const keys = [...new Set([...ex.its.keys(), ...sy.its.keys()])];
+  const paired = keys.length && ex.its.size && sy.its.size;
+  const body = paired ? `
+    <table class="gc-table"><thead><tr><th></th><th>你算的（預期結果）</th><th>系統跑出的（系統結果）</th></tr></thead><tbody>
+      ${ex.head || sy.head ? `<tr class="gc-head"><td></td><td>${inline(ex.head)}</td><td>${inline(sy.head)}</td></tr>` : ''}
+      ${keys.map(k => `<tr class="${/不一致/.test(sy.its.get(k) || '') ? 'gc-off-row' : ''}"><th>${k}</th><td>${inline(ex.its.get(k) || '')}</td><td>${hl(inline(sy.its.get(k) || ''))}</td></tr>`).join('')}
+    </tbody></table>`
+    : box('你算的（預期結果）', g['預期結果']) + box('系統跑出的（系統結果）', g['系統結果']);
   return `${g['判定'] ? `<div class="gc-verdict ${pass ? 'ok' : 'bad'}">判定：${inline(g['判定'])}</div>` : ''}
-    <div class="gc-cols">${col('你算的（預期結果）', g['預期結果'])}${col('設計推出的（紙上判定）', g['紙上判定'])}${col('系統跑出的（系統結果）', g['系統結果'])}</div>`;
+    ${box('設計推出的（紙上判定）', g['紙上判定'])}
+    ${body}`;
 }
 
 function rowShell(c, ans, what, group, body) {
