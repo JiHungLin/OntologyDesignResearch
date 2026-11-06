@@ -322,3 +322,24 @@ def test_nav_step6_in_progress(browser, repo):
     finally:
         srv.terminate(); srv.wait()
     assert '設計完成' in before and '⑥ 驗證中' in after and '設計完成' not in after, (before, after)
+
+
+def test_topic_in_header(browser, repo):
+    # 主題決定後（切片地圖有領域）頂列與分頁標題用主題名稱，HR 與碳管理同時開兩個分頁才分得出來
+    port = _port()
+    srv = subprocess.Popen([sys.executable, 'server.py', '--repo', repo.root, '--port', str(port)], cwd=WEB,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    head = "return {brand:document.querySelector('.brand').innerText, title:document.title}"
+    try:
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f'http://127.0.0.1:{port}/api/project'); break
+            except Exception:
+                time.sleep(0.1)
+        with_plan = browser.run(f'http://127.0.0.1:{port}/#/', head, wait='#navTree summary')
+        os.remove(repo.path('slices/PLAN.md'))
+        no_plan = browser.run(f'http://127.0.0.1:{port}/#/', head, wait='.hero, .celebrate, main section')
+    finally:
+        srv.terminate(); srv.wait()
+    assert with_plan['brand'].startswith('銷售') and with_plan['title'] == '銷售｜Domain 設計', with_plan
+    assert no_plan['brand'] == 'DOMAIN 設計' and no_plan['title'] == 'Domain 設計', no_plan

@@ -7,7 +7,20 @@ import { inputDialog, needFetch } from './plan.js';
 
 // ---------- 總覽：整個 domain 走到哪 ----------
 
-export async function loadProject() { state.project = await api('/api/project'); return state.project; }
+export async function loadProject() { state.project = await api('/api/project'); showTopic(state.project); return state.project; }
+
+// 主題名稱：切片地圖「領域」的第一段（人資／人事 → 人資）；還沒有切片地圖時照舊「Domain 設計」
+export function topicName(P) {
+  const ds = (P.plan ? P.plan.domains : []).map(d => (d['領域'] || '').split('／')[0].trim()).filter(Boolean);
+  return [...new Set(ds)].join('、');
+}
+
+function showTopic(P) {
+  const name = topicName(P);
+  const b = $('.brand');
+  if (b) b.innerHTML = name ? `${esc(name)}<span class="brand-sub">DOMAIN 設計</span>` : 'DOMAIN 設計';
+  document.title = name ? `${name}｜Domain 設計` : 'Domain 設計';
+}
 
 export function planSlices(P) {
   // 地圖上的切片，依建議順序；加上資料夾裡的進度
