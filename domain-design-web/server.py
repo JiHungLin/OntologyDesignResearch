@@ -146,7 +146,11 @@ def get_project():
         st = next((x for x in status()['slices'] if x['slice'] == sl), {})
         cur = next((r for r in st.get('reviews', []) if r.get('counts') and r['counts']['open']), None)
         eqs = project.eqs(sl)
-        slices.append({'slice': sl, 'steps': steps, 'next': project.next_step(steps), 'review': cur,
+        # 全部作答完、這幾步還沒凍結：左側仍留審查頁的入口，想改答案回得去
+        last = (st.get('reviews') or [None])[0]
+        answered = last if last and not cur and last.get('counts') and any(
+            not x['status'].startswith('已凍結') for x in steps if x['n'] in last.get('steps', [])) else None
+        slices.append({'slice': sl, 'steps': steps, 'next': project.next_step(steps), 'review': cur, 'answered': answered,
                        'eq_open': len([e for e in eqs if e.get('狀態') != '已回覆']),
                        'eq_answered': len([e for e in eqs if e.get('狀態') == '已回覆' and not e.get('處理')]),
                        'session': sessions.active(sl), 'files': project.slice_files(sl)})

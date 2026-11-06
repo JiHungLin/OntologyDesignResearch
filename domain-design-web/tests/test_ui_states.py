@@ -376,3 +376,28 @@ def test_background_results_keep_last_reply(browser, repo):
         srv.terminate(); srv.wait()
     assert r['texts'][-1].startswith('做完了'), r
     assert r['ends'] == 1 and r['denies'] == 1 and r['denyItems'] == 1, r
+
+
+def test_answered_review_still_reachable(browser, repo):
+    # HR：「挑 1～2 條核對」和其他項目都作答完，左側「審查（輪到你）」消失，想反悔回不到審查頁
+    repo.frozen_until('demo', 1)
+    repo.step('demo', '02_entities.md', '待檢查')
+    repo.answer_review()
+    port = _port()
+    srv = subprocess.Popen([sys.executable, 'server.py', '--repo', repo.root, '--port', str(port)], cwd=WEB,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    js = ("return {nav:[...document.querySelectorAll('#navTree a')].filter(x=>x.getAttribute('href').startsWith('#/r/')).map(x=>x.innerText),"
+          "reopen:(document.querySelector('.reopen a')||{}).getAttribute ? document.querySelector('.reopen a').getAttribute('href') : ''}")
+    try:
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f'http://127.0.0.1:{port}/api/project'); break
+            except Exception:
+                time.sleep(0.1)
+        before = browser.run(f'http://127.0.0.1:{port}/#/s/demo', js, wait='#navTree summary')
+        repo.step('demo', '02_entities.md', '已凍結')   # 凍結之後就不再留入口
+        after = browser.run(f'http://127.0.0.1:{port}/#/s/demo', js, wait='#navTree summary')
+    finally:
+        srv.terminate(); srv.wait()
+    assert any('審查頁' in t and '已作答' in t for t in before['nav']) and before['reopen'].startswith('#/r/'), before
+    assert not any('已作答' in t for t in after['nav']) and not after['reopen'], after

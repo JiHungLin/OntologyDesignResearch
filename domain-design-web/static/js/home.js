@@ -214,10 +214,14 @@ export async function renderHome(slice) {
   const eqOpen = h.eqs.filter(e => e['狀態'] !== '已回覆');
   const eqTodo = h.eqs.filter(e => e['狀態'] === '已回覆' && !e['處理']);
   const past = h.reviews.filter(x => !cur || x.path !== cur.path);
+  // 審查頁都作答了、還沒凍結：留一個回去改答案的入口（左側的「審查（輪到你）」這時已經不見）
+  const reopen = !cur && wait.length && h.reviews[0] && !h.reviews[0].error
+    ? `<p class="small reopen"><a href="#/r/${enc(h.reviews[0].path)}">想改答案？回到審查頁（${esc(stepName(h.reviews[0]))}）<span class="arr">›</span></a></p>` : '';
   app.innerHTML = `
     ${levelStrip(h.levels)}
     ${asking ? '' : waitingCard(slice)}
     ${hero}
+    ${reopen}
     <div class="cols">
       ${tasks}
       <section class="wide">
