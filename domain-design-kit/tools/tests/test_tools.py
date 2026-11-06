@@ -1011,12 +1011,24 @@ class TestAuto(Base):
         self.assertIn('第 2 圈：需要人（docker 起不來）', out)
         self.assertIn('第 2 圈：需要人', open(os.path.join(self.dir, '.domain-auto', 'runs.md'), encoding='utf-8').read())
 
+    def test_runner_until_design_done(self):
+        # --until-design-done：地圖上出現新的「設計完成（待驗證）」切片就停
+        plan = '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n\n## 切片\n\n| 切片 | 狀態 |\n|---|---|\n| a | 進行中 |\n'
+        self.write('slices/PLAN.md', plan)
+        claude = self.fake_claude(['全自動：繼續'] * 5)
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('if n == 1:\n    p = "slices/PLAN.md"; t = open(p).read(); open(p, "w").write(t.replace("| a | 進行中 |", "| a | 設計完成（待驗證） |"))\n')
+        code, out = run('auto_run.py', '--claude', claude, '--until-design-done', cwd=self.dir)
+        self.assertIn('第 2 圈：繼續', out)
+        self.assertNotIn('第 3 圈', out)
+        self.assertIn('a 設計完成（⑤ 凍結），照 --until-design-done 停下來', out)
+
     def test_runner_stops_when_switched_to_manual(self):
         # 跑到一半改回手動：下一圈開始前檢查，停下來
         self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n')
         claude = self.fake_claude(['全自動：繼續'] * 5)
         with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
-            f.write('p = "slices/PLAN.md"\nopen(p, "w").write(open(p).read().replace("全自動 |", "手動 |"))\n')
+            f.write('p = "slices/PLAN.md"\nt = open(p).read()\nopen(p, "w").write(t.replace("全自動 |", "手動 |"))\n')
         code, out = run('auto_run.py', '--claude', claude, cwd=self.dir)
         self.assertIn('第 1 圈：繼續', out)
         self.assertNotIn('第 2 圈', out)
