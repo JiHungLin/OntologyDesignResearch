@@ -426,12 +426,16 @@ def test_step6_golden_row_side_by_side(browser, repo):
         p = urllib.parse.quote('slices/demo/reviews/2026-11-06_06.md', safe='')
         r = browser.run(f'http://127.0.0.1:{port}/#/r/{p}/confirm', """
           return {cols:[...document.querySelectorAll('.gc-col')].map(x=>x.innerText), verdict:(document.querySelector('.gc-verdict')||{}).innerText,
+                  paper:(document.querySelector('.gc-paper')||{}).innerText||'', rowAsk:(document.querySelector('.row-ask')||{}).innerText||'',
+                  ok:(document.querySelector('.crow [data-ok]')||{}).innerText||'',
                   rows:document.querySelectorAll('.crow').length, ask:(document.querySelector('.group .ask')||{}).innerText||''}""", wait='.crow')
     finally:
         srv.terminate(); srv.wait()
     col = lambda t: next((x for x in r['cols'] if x.startswith(t)), '')
-    assert r['rows'] == 1 and len(r['cols']) == 3, r
-    assert '100 元' in col('你算的') and '一致' in col('設計推出的') and '0 元' in col('系統跑出的') and '失敗' in r['verdict'], r
+    # 「判定」寫明是系統跑出的 vs 你算的，⑤ 的紙上判定另外標，不然一個失敗一個一致看起來矛盾；按鈕寫成要回答的話
+    assert r['rows'] == 1 and len(r['cols']) == 2, r
+    assert '100 元' in col('你算的') and '0 元' in col('系統跑出的') and '系統跑出的 vs 你算的' in r['verdict'] and '失敗' in r['verdict'], r
+    assert '紙上' in r['paper'] and '一致' in r['paper'] and '原因對嗎' in r['rowAsk'] and r['ok'] == '✓ 差異寫得對', r
     assert '並排' in r['ask'], r
     repo.write('slices/demo/06_evidence/golden_cases.md', '# demo 黃金案例\n\n## GC01 下單後取消\n- 預期結果：\n  1. 已取消\n  2. 100 元\n'
                '- 紙上判定：一致\n- 系統結果：依據 results/x.log\n  1. 已取消——一致\n  2. 0 元——不一致\n- 判定：失敗（第 2 項）\n')

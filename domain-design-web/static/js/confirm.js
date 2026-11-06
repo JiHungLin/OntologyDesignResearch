@@ -21,7 +21,7 @@ export const ASK = [
   [/只需現況/, '這些資料只記目前的值，改了之後舊的值就不留。想一下：以後會不會有人要查「當時是什麼」（例：報表要印當時的名稱、對帳要看改之前的數字）？不會就按 ✓；會的話寫一句，這筆就要留歷史。'],
   [/有依據的決定/, 'AI 自己做的決定（有依據，所以沒寫成選擇題）。照你對業務的了解看每一條：這樣做可以嗎？可以就按 ✓，不同意就寫一句。'],
   [/^自評/, 'AI 自評這條完成標準只做到一部分（或沒做到）。看它說缺了什麼：可以先這樣就按 ✓，要補就寫一句。'],
-  [/^黃金案例/, '你算的、設計推出的、系統跑出的並排在下面。通過的：三邊一致就按 ✓。失敗的：看差在哪一項、AI 寫的原因對不對（怎麼處理在第一節的問題裡回答），寫得對就按 ✓。'],
+  [/^黃金案例/, '每個案例把你算的和系統跑出的逐項並排，標紅的是不一樣的地方。通過的：確認一致。失敗的：確認差在哪裡、原因寫得對；要不要改設計、怎麼改，在第一節的問題回答，不在這裡。'],
   [/^P0/, '驗收問題（P0）和系統的回答。看回答有沒有答到這一題（問的是什麼、答的是不是那個），有就按 ✓；答非所問或缺了一部分就寫一句。'],
   [/幾對幾/, '兩個東西之間是一對一、一對多還是多對多。錯了之後要改資料表、搬資料，很貴；照實際業務想一個反例看看。'],
   [/Entity/, '哪些要當成一個「東西」單獨記（有自己的身分、會被指到），哪些不用。'],
@@ -99,10 +99,24 @@ function items(v) {
   return { head: head.join('\n').trim(), its };
 }
 
-function goldenOf(what) {
-  const m = what.match(/^(?:黃金案例\s*)?(GC\d+)/);
-  const g = m && state.review && state.review.golden && state.review.golden[m[1]];
-  if (!g) return '';
+// 每一類確認列打 ✓ 回答的是什麼（docs/02「審查頁」）：卡片上寫出那一句、按鈕寫成回答，不再一律「合理」
+export function verbOf(what, g) {
+  if (g) return /^通過/.test((g['判定'] || '').trim())
+    ? { ask: '系統跑出的和你算的一致嗎？', ok: '✓ 一致' }
+    : { ask: '下面標紅的就是系統和你算的不一樣的地方。AI 寫的差異和原因對嗎？（要不要改、怎麼改，在第一節的問題回答）', ok: '✓ 差異寫得對' };
+  if (/^P0\s*Q\d+/.test(what)) return { ask: '這個回答有答到題目嗎？', ok: '✓ 有答到' };
+  if (/^自評/.test(what)) return { ask: 'AI 說缺的東西屬實、這輪可以先這樣嗎？', ok: '✓ 屬實' };
+  if (/有依據的決定|D-\d+/.test(what)) return { ask: '', ok: '✓ 可以' };
+  return { ask: '', ok: '✓ 合理' };
+}
+
+// 只認新格式「黃金案例 GCnn（…）」：舊頁拆成「GCnn 你算的／設計推出的／系統跑出的」三列的，照一般列顯示（不然同一個比對出現三次）
+function goldenData(what) {
+  const m = what.match(/^黃金案例\s*(GC\d+)/);
+  return (m && state.review && state.review.golden && state.review.golden[m[1]]) || null;
+}
+
+function goldenOf(g) {
   const hl = h => h.replace(/不一致/g, '<b class="gc-off">不一致</b>');
   const box = (t, v) => `<div class="gc-col"><div class="label">${t}</div><div class="md">${hl(md(v || '（沒有）'))}</div></div>`;
   const pass = /^通過/.test((g['判定'] || '').trim());
@@ -115,32 +129,34 @@ function goldenOf(what) {
       ${keys.map(k => `<tr class="${/不一致/.test(sy.its.get(k) || '') ? 'gc-off-row' : ''}"><th>${k}</th><td>${inline(ex.its.get(k) || '')}</td><td>${hl(inline(sy.its.get(k) || ''))}</td></tr>`).join('')}
     </tbody></table>`
     : box('你算的（預期結果）', g['預期結果']) + box('系統跑出的（系統結果）', g['系統結果']);
-  return `${g['判定'] ? `<div class="gc-verdict ${pass ? 'ok' : 'bad'}">判定：${inline(g['判定'])}</div>` : ''}
-    ${box('設計推出的（紙上判定）', g['紙上判定'])}
-    ${body}`;
+  // 「判定」是系統跑出的和你算的比；「紙上判定」是 ⑤ 時設計在紙上推的和你算的比——分開標，不然一個失敗一個一致看起來矛盾
+  return `${body}
+    ${g['判定'] ? `<div class="gc-verdict ${pass ? 'ok' : 'bad'}">系統跑出的 vs 你算的：${inline(g['判定'])}</div>` : ''}
+    ${g['紙上判定'] ? `<details class="gc-paper"><summary>⑤ 紙上驗證時，設計推出的 vs 你算的：${esc((g['紙上判定'].match(/^[^。（(]*/) || [''])[0])}</summary><div class="md">${hl(md(g['紙上判定']))}</div></details>` : ''}`;
 }
 
-function rowShell(c, ans, what, group, body) {
+function rowShell(c, ans, what, group, body, v) {
   return `<div class="crow ${!ans ? '' : ans === '✓' ? 'done' : 'noted'}">
     <div class="what">${rowTitle(what, group)}</div>
+    ${v.ask ? `<div class="row-ask">${esc(v.ask)}</div>` : ''}
     ${body}
     ${c.cells['在哪裡'] ? `<div class="where">${inline(c.cells['在哪裡'])}</div>` : ''}
-    <div class="acts">${actsHtml(c, ans)}</div>
+    <div class="acts">${actsHtml(c, ans, v.ok)}</div>
   </div>`;
 }
 
-function actsHtml(c, ans) {
+function actsHtml(c, ans, ok = '✓ 合理') {
   return !ans ? `
-      <button class="btn go" data-ok="${c.line}">✓ 合理</button>
-      <button class="btn" data-note="${c.line}">寫意見</button>`
+      <button class="btn go" data-ok="${c.line}">${ok}</button>
+      <button class="btn" data-note="${c.line}">不對，寫意見</button>`
     : ans === '✓' ? `
-      <span class="val">✓ 合理</span>
+      <span class="val">${ok}</span>
       <button class="btn ghost" data-clear="${c.line}">撤回</button>
       <button class="btn" data-note="${c.line}">改成寫意見</button>`
     : `
       <span class="val note">意見：${esc(ans)}</span>
       <button class="btn" data-note="${c.line}" data-prev="${esc(ans)}">改意見</button>
-      <button class="btn" data-ok="${c.line}">改成合理</button>
+      <button class="btn" data-ok="${c.line}">改成「${ok.replace(/^✓\s*/, '')}」</button>
       <button class="btn ghost" data-clear="${c.line}">撤回</button>`;
 }
 
@@ -155,15 +171,17 @@ export function confirmRow(c, group = '') {
   // 「要確認」只放句子：標題（### …）不算；指到決定這種有主要欄位的表格列時，主要欄位本身就是要確認的，不重複
   const hasMain = (c.context || []).some(x => x.fields && x.fields.some(([h]) => CTX_MAIN.includes(h)));
   const claim = hasMain ? [] : raw.filter(s => !s.startsWith('#'));
-  const gc = goldenOf(what);
-  if (gc) return rowShell(c, ans, what, group, gc);
+  const g = goldenData(what);
+  const v = verbOf(what, g);
+  if (g) return rowShell(c, ans, what, group, goldenOf(g), v);
   return `<div class="crow ${!ans ? '' : ans === '✓' ? 'done' : 'noted'}${(c.context || []).length ? ' has-ctx' : ''}">
     <div class="what">${rowTitle(what, group)}</div>
+    ${v.ask ? `<div class="row-ask">${esc(v.ask)}</div>` : ''}
     ${claim.length ? `<div class="claim"><span class="muted small">要確認</span>${claim.length > 1 ? `<ul>${claim.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : `<div>${esc(claim[0])}</div>`}</div>` : ''}
     ${(c.context || []).length ? ctxHtml(c, frags) : ''}
     ${c.cells['原文'] && !covered && !frags.length ? `<div class="orig">${inline(c.cells['原文'])}</div>` : ''}
     ${c.cells['在哪裡'] && !(c.context || []).length ? `<div class="where">${inline(c.cells['在哪裡'])}</div>` : ''}
-    <div class="acts">${actsHtml(c, ans)}</div>
+    <div class="acts">${actsHtml(c, ans, v.ok)}</div>
   </div>`;
 }
 
