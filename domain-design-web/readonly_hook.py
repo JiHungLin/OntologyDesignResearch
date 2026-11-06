@@ -82,6 +82,10 @@ def read_only(cmd, roots):
     if re.search(r'\$\(|`|<<|>\s*[^&/]|>>|>\s*/(?!dev/null)', cmd):   # 指令替換、heredoc、寫檔（2>/dev/null 可以）
         return False
     cmd = REDIRECT_OK.sub(' ', cmd)
+    cmd = cmd.replace('\n', ' ; ')   # 多行指令：換行和 ; 一樣分開指令（shlex 不會拆換行）
+    # 小函式 c(){ …; }（核對時一次查好幾處）：函式本體照樣逐一檢查，呼叫函式就等於執行本體
+    funcs = set(re.findall(r'(?:^|[;&|{(]|\bfunction)\s*([A-Za-z_]\w*)\s*\(\)\s*(?=\{)', cmd))
+    cmd = re.sub(r'(?:\bfunction\s+)?\b([A-Za-z_]\w*)\s*\(\)\s*(?=\{)', lambda m: ' ' if m.group(1) in funcs else m.group(0), cmd)
     cmd = cmd.replace('<(', ' ( ')   # diff <(sed …) <(sed …)：括號裡的指令照樣逐一檢查
     cmd = re.sub(r"'[|;&()]'|\"[|;&()]\"", 'SEP', cmd)   # tr '|' '\n' 的 '|' 是參數，不是管線（shlex 拆完分不出有沒有引號）
     try:
@@ -118,6 +122,9 @@ def read_only(cmd, roots):
                 continue
             if t in ('python3', 'python'):   # 只放行 python3 [-I] tools/<工具>.py
                 cur, head = 'py', False
+                continue
+            if t in funcs:   # 呼叫上面定義的小函式：參數照路徑檢查
+                cur, head = t, False
                 continue
             if t not in READ_ONLY:
                 return False

@@ -412,6 +412,12 @@ def test_readonly_hook():
     assert h.read_only("grep -no 'EQ-0[0-9]' 03_flows.md | sort -t: -k3 | awk -F: '{print $3\" \"$1}'; git diff --stat; git log --oneline -- a.md", root)
     # domain-trial ④ 被擋的兩種：迴圈後的 2>/dev/null、串在後面的 python3 tools/lint.py
     assert h.read_only('ls inputs/shared; for f in inputs/shared/範圍釐清_*.md; do echo "== $f"; cat "$f"; done 2>/dev/null | head -80', root)
+    # 碳管理送審前核對：多行、定義小函式一次查好幾處（本體照樣逐一檢查）
+    assert h.read_only('cd /repo/slices/x && c(){ echo "== $1"; grep -nF -- "$3" "$1" | cut -d: -f1 | tr \'\\n\' \' \'; echo; }\nc 04_rules.md 38 \'(b) 還沒決定時\'\nc 05_mapping.md 224 \'R25\'', root)
+    assert h.read_only('for f in a b\ndo cat $f; done', root)
+    assert not h.read_only('c(){ rm -rf x; }; c', root)
+    assert not h.read_only('c(){ echo hi; }; c /etc/passwd', root)
+    assert not h.read_only('cat a\nrm x', root)
     assert h.read_only("grep -n -o 'EQ-[0-9]*' slices/x/04_rules.md | awk -F: '{print $1\": \"$NF}' | paste -sd' ' | tr '|' '\\n' | grep EQ; echo; python3 tools/lint.py x", root)
     assert h.read_only('python3 -I tools/lint.py x 2>&1 | tail -20', root)
     # domain-trial ⑤ 被擋的：cd 進切片後的 ../../、rev、<( )、絕對或相對路徑的 tools/*.py、變數
