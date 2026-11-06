@@ -359,7 +359,7 @@ export function showEvent(ev) {
   else if (ev.kind === 'text') { log.insertAdjacentHTML('beforeend', `<div class="t md">${md(ev.text)}</div>`); state.lastText = ev.text; }
   else if (ev.kind === 'tool') addStep(log, `<b>${esc(TOOL_NAME[ev.name] || ev.name)}</b> <code>${esc(ev.brief || '')}</code>`, ev.sub ? '子代理' : (TOOL_NAME[ev.name] || ev.name));
   else if (ev.kind === 'approval' && !ev.allow && state.turnDenied) state.turnDenied.add(ev.brief || '');
-  if (ev.kind === 'approval') log.insertAdjacentHTML('beforeend', `<div class="${ev.allow ? 'ok-line' : 'deny'} small">${ev.allow ? '✓ 放行' : '✗ 不放行'}（${esc(ev.by || '')}）：<code>${esc(ev.brief || '')}</code>${ev.message ? `　${esc(ev.message)}` : ''}</div>`);
+  if (ev.kind === 'approval') log.insertAdjacentHTML('beforeend', `<div class="${ev.allow ? 'ok-line' : 'deny'} small">${ev.allow ? '✓ 放行' : '✗ 不放行'}（${ev.by === 'timeout' ? '逾時沒有人核准' : esc(ev.by || '')}）：<code>${esc(ev.brief || '')}</code>${ev.message ? `　${esc(ev.message)}` : ''}</div>`);
   else if (ev.kind === 'compacted') log.insertAdjacentHTML('beforeend', '<div class="deny">這個 session 剛經過摘要壓縮，建議做完這一段就開新的 session。</div>');
   else if (ev.kind === 'error') log.insertAdjacentHTML('beforeend', `<div class="err">${esc(ev.text)}</div>`);
   else if (ev.kind === 'result') {

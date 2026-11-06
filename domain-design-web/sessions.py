@@ -156,7 +156,7 @@ def approvals_dir(sid):
 
 def _mcp(sid):
     return json.dumps({'mcpServers': {'web': {'command': sys.executable, 'args': [APPROVE],
-                                              'env': {'DOMAIN_WEB_APPROVALS': approvals_dir(sid)}}}})
+                                              'env': {'DOMAIN_WEB_APPROVALS': approvals_dir(sid), 'DOMAIN_WEB_LOG': _log(sid)}}}})
 
 
 def pending_approvals(sid):

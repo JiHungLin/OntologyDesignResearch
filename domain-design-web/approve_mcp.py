@@ -13,6 +13,7 @@ import time
 import uuid
 
 DIR = os.environ.get('DOMAIN_WEB_APPROVALS', '')
+LOG = os.environ.get('DOMAIN_WEB_LOG', '')   # 對話紀錄：逾時的不放行也記進去，網頁上看得到（人按的由 sessions.decide_approval 記）
 WAIT = int(os.environ.get('DOMAIN_WEB_APPROVAL_WAIT', '1800'))   # 秒
 _out = threading.Lock()
 
@@ -48,6 +49,14 @@ def decide(args):
         d = {'behavior': 'deny', 'message': f'網頁上等了 {WAIT // 60} 分鐘沒有人核准，當作不放行。'}
         with open(dpath, 'w', encoding='utf-8') as f:
             json.dump(dict(d, by='timeout'), f, ensure_ascii=False)
+        if LOG:
+            inp = req['input']
+            ev = {'kind': 'approval', 'allow': False, 'tool': req['tool'], 'by': 'timeout',
+                  'brief': str(inp.get('command') or inp.get('file_path') or inp)[:300], 'message': d['message'],
+                  'at': time.strftime('%Y-%m-%dT%H:%M:%S')}
+            os.makedirs(os.path.dirname(LOG), exist_ok=True)
+            with open(LOG, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(ev, ensure_ascii=False) + '\n')
     if d.get('behavior') == 'allow':
         return {'behavior': 'allow', 'updatedInput': req['input']}
     return {'behavior': 'deny', 'message': d.get('message') or '人在網頁上選了不放行。'}

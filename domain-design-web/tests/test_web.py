@@ -482,6 +482,19 @@ def test_approvals(repo, client, tmp_path):
     assert _json.loads(hp.stdout)['hookSpecificOutput']['permissionDecision'] == 'ask'
     cmd = sessions._command(dict(s, turns=0, name='n'), 'hi')
     assert cmd[cmd.index('--permission-prompt-tool') + 1] == 'mcp__web__approve'
+    assert _json.loads(sessions._mcp(s['id']))['mcpServers']['web']['env']['DOMAIN_WEB_LOG'] == sessions._log(s['id'])
+    # 等太久沒人按：當作不放行，也記進對話紀錄（網頁上看得到）
+    env = dict(env, DOMAIN_WEB_APPROVAL_WAIT='1', DOMAIN_WEB_LOG=sessions._log(s['id']))
+    p = subprocess.Popen([sys.executable, os.path.join(HERE, '..', 'approve_mcp.py')], stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE, text=True, env=env)
+    p.stdin.write(_json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'approve', 'arguments': {
+        'tool_name': 'Bash', 'input': {'command': 'docker compose up'}}}}) + '\n')
+    p.stdin.flush()
+    out = _json.loads(_json.loads(p.stdout.readline())['result']['content'][0]['text'])
+    assert out['behavior'] == 'deny'
+    ev = sessions.events(s['id'])['events']
+    assert ev[-1]['kind'] == 'approval' and ev[-1]['by'] == 'timeout' and not ev[-1]['allow'] and ev[-1]['brief'] == 'docker compose up'
+    p.stdin.close(); p.wait(timeout=5)
 
 
 def test_executor_cell(tmp_path):
