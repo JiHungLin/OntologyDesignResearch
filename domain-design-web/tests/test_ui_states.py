@@ -343,3 +343,36 @@ def test_topic_in_header(browser, repo):
         srv.terminate(); srv.wait()
     assert with_plan['brand'].startswith('銷售') and with_plan['title'] == '銷售｜Domain 設計', with_plan
     assert no_plan['brand'] == 'DOMAIN 設計' and no_plan['title'] == 'Domain 設計', no_plan
+
+
+def test_background_results_keep_last_reply(browser, repo):
+    # 碳管理：有背景子代理時一輪有好幾個 result，舊的中間回報在最後一起到，
+    # 對話框最後顯示「第 2 輪核對在背景執行中」，看起來像 AI 還沒做完（其實已經結束、按鈕照最後的回覆）
+    port = _port()
+    srv = subprocess.Popen([sys.executable, 'server.py', '--repo', repo.root, '--port', str(port)], cwd=WEB,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(f'http://127.0.0.1:{port}/api/project'); break
+            except Exception:
+                time.sleep(0.1)
+        r = browser.run(f'http://127.0.0.1:{port}/#/', """
+          document.querySelector('.ai-btn').click(); await new Promise(r=>setTimeout(r,800));
+          const m=await import('/static/js/ai.js');
+          const d=(c)=>({tool:'Bash',input:{command:c}});
+          [{kind:'me',text:'照審查頁修改'},
+           {kind:'text',text:'第 2 輪核對在背景執行中，回報後我再收尾。'},
+           {kind:'text',text:'做完了，送審頁是 reviews/x.md。'},
+           {kind:'result',ok:true,text:'三個挑錯子代理還在跑。',denials:[]},
+           {kind:'result',ok:true,text:'第 2 輪核對在背景執行中，回報後我再收尾。',denials:[d('python3 - <<EOF')]},
+           {kind:'result',ok:true,text:'做完了，送審頁是 reviews/x.md。',denials:[d('python3 - <<EOF')]}].forEach(m.showEvent);
+          const log=document.querySelector('#aiLog');
+          return {texts:[...log.querySelectorAll(':scope > .t')].map(x=>x.innerText.trim()),
+                  ends:log.querySelectorAll('.turn-end').length, denies:log.querySelectorAll('details.deny').length,
+                  denyItems:log.querySelectorAll('details.deny li').length,
+                  lastBefore:(log.querySelector('.turn-end').previousElementSibling||{}).innerText}""", wait='.ai-btn')
+    finally:
+        srv.terminate(); srv.wait()
+    assert r['texts'][-1].startswith('做完了'), r
+    assert r['ends'] == 1 and r['denies'] == 1 and r['denyItems'] == 1, r
