@@ -211,6 +211,21 @@ def post_accept(a: Accept):
         raise HTTPException(400, str(e))
 
 
+class Mode(BaseModel):
+    mode: str
+    who: str
+
+
+@app.post('/api/plan/mode')
+def post_mode(a: Mode):
+    if not a.who.strip() or re.fullmatch(r'(?i)ai|claude', a.who.strip()):
+        raise HTTPException(400, '要寫人的名字')
+    try:
+        return {'mode': project.set_mode(a.mode, a.who.strip())}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 def _criteria(f):
     """某個交付物的「完成標準（AI 自評）」表：[(行號, [完成標準, 類, AI 自評])]。"""
     mb = kit.md2build()

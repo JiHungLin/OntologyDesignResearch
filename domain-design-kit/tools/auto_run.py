@@ -6,7 +6,7 @@
   每一圈開一個新的 claude -p session（一個 session 做一個動作，和手動時「一個 session 一步」相同），
   帶 tools/auto_hook.py 當 PreToolUse hook：不在禁止清單的工具呼叫直接放行並記錄，碰到禁止清單就擋下。
   AI 在回報最後一行寫「全自動：繼續」「全自動：完成（…）」「全自動：需要人（…）」；
-  完成、需要人、沒有這一行、連續兩圈沒有任何改變，或到了 --max-steps，就停下來。
+  完成、需要人、沒有這一行、連續兩圈沒有任何改變、執行模式被改回手動（下一圈開始前檢查），或到了 --max-steps，就停下來。
 
 紀錄（.domain-auto/，不提交）：
   runs/<時間>_<n>.jsonl  每一圈 claude 的完整輸出（stream-json）
@@ -75,6 +75,8 @@ def main():
     env = dict(os.environ, DOMAIN_AUTO='1', DOMAIN_AUTO_REPO=repo)
     same = 0
     for n in range(1, a.max_steps + 1):
+        if n > 1 and not mode(repo).startswith('全自動'):   # 跑到一半改回手動（網頁的規劃頁或直接改 PLAN.md）：這一圈之後停
+            sys.exit('執行模式已改回手動，停下來；之後照手動的流程做')
         before = snapshot(repo)
         stamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
         out = os.path.join(auto, 'runs', f'{stamp}_{n}.jsonl')

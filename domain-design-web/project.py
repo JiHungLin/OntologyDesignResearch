@@ -221,6 +221,40 @@ def accept_draft(rel, who, expect_digest=None):
     return review.set_row(path, st['line'], {'內容': f'已接受為假設（{who}，{_today()}）'}, {'內容'}, expect_digest)
 
 
+def set_mode(mode, who):
+    """切片地圖開頭區的「執行模式」切換成手動或全自動（docs/01 0.2「全自動模式」），並在 slices/CHANGELOG.md 最上面記一筆。
+    只影響之後的動作：已經由 AI（自動）作答的審查頁照樣留著，等人事後看。"""
+    if mode not in ('手動', '全自動'):
+        raise ValueError('執行模式只有手動、全自動')
+    path = _p('slices', 'PLAN.md')
+    if not os.path.exists(path):
+        raise ValueError('還沒有切片地圖')
+    h = head(path)
+    old = h.get('執行模式', {}).get('value', '') or '手動'
+    if old == mode:
+        return old
+    lines = _read(path).split('\n')
+    if '執行模式' in h:
+        n = h['執行模式']['line']
+        lines[n - 1] = f'| 執行模式 | {mode} |'
+    else:
+        n = h.get('狀態', {}).get('line') or max(v['line'] for v in h.values())
+        lines.insert(n, f'| 執行模式 | {mode} |')
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines))
+    log = _p('slices', 'CHANGELOG.md')
+    entry = (f'### {_today()}　PLAN　執行模式改為{mode}\n'
+             f'- 改了什麼：開頭區「執行模式」\n- 依據：使用者在網頁切換\n- 舊 → 新：{old} → {mode}\n'
+             '- 影響：只影響之後的動作；已經由 AI（自動）作答的審查頁、AI 獨立計算的黃金案例照樣留著，等人事後看\n'
+             f'- 同意者：{who}\n')
+    text = _read(log) if os.path.exists(log) else '# 規劃變更紀錄\n'
+    m = re.search(r'^### ', text, re.M)
+    text = text[:m.start()] + entry + '\n' + text[m.start():] if m else text.rstrip('\n') + '\n\n' + entry
+    with open(log, 'w', encoding='utf-8') as f:
+        f.write(text)
+    return mode
+
+
 def add_input(folder, name, text, note='使用者於對話中提供'):
     """把使用者貼上或寫下的東西存成 inputs/ 下的新檔（已存在的不覆寫）。"""
     folder = folder.strip('/')

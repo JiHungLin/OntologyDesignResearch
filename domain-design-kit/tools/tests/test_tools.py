@@ -1005,6 +1005,17 @@ class TestAuto(Base):
         self.assertIn('第 2 圈：需要人（docker 起不來）', out)
         self.assertIn('第 2 圈：需要人', open(os.path.join(self.dir, '.domain-auto', 'runs.md'), encoding='utf-8').read())
 
+    def test_runner_stops_when_switched_to_manual(self):
+        # 跑到一半改回手動：下一圈開始前檢查，停下來
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n')
+        claude = self.fake_claude(['全自動：繼續'] * 5)
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('p = "slices/PLAN.md"\nopen(p, "w").write(open(p).read().replace("全自動 |", "手動 |"))\n')
+        code, out = run('auto_run.py', '--claude', claude, cwd=self.dir)
+        self.assertIn('第 1 圈：繼續', out)
+        self.assertNotIn('第 2 圈', out)
+        self.assertIn('執行模式已改回手動', out)
+
     def write(self, rel, text):
         p = os.path.join(self.dir, rel)
         os.makedirs(os.path.dirname(p), exist_ok=True)

@@ -523,3 +523,19 @@ def test_auto_mode_session_settings(repo):
     t = open(plan, encoding='utf-8').read().replace('| 狀態 | 討論中 |', '| 狀態 | 討論中 |\n| 執行模式 | 全自動 |', 1)
     open(plan, 'w', encoding='utf-8').write(t)
     assert sessions.auto_mode() and 'auto_hook.py' in sessions._settings() and '"matcher": "*"' in sessions._settings()
+
+
+def test_plan_mode_toggle(repo, client):
+    # 規劃頁切換執行模式（docs/01 0.2）：開頭區加「執行模式」一列、slices/CHANGELOG.md 最上面記一筆；不能寫 AI 當同意者
+    assert client.post('/api/plan/mode', json={'mode': '全自動', 'who': 'AI'}).status_code == 400
+    r = client.post('/api/plan/mode', json={'mode': '全自動', 'who': '甲'})
+    assert r.status_code == 200 and r.json()['mode'] == '全自動'
+    plan = open(os.path.join(str(repo), 'slices', 'PLAN.md'), encoding='utf-8').read()
+    assert '| 執行模式 | 全自動 |' in plan and client.get('/api/project').json()['plan']['auto']
+    log = open(os.path.join(str(repo), 'slices', 'CHANGELOG.md'), encoding='utf-8').read()
+    assert '執行模式改為全自動' in log and '手動 → 全自動' in log and '同意者：甲' in log
+    client.post('/api/plan/mode', json={'mode': '手動', 'who': '甲'})
+    plan = open(os.path.join(str(repo), 'slices', 'PLAN.md'), encoding='utf-8').read()
+    assert '| 執行模式 | 手動 |' in plan and plan.count('執行模式') == 1
+    log = open(os.path.join(str(repo), 'slices', 'CHANGELOG.md'), encoding='utf-8').read()
+    assert log.index('執行模式改為手動') < log.index('執行模式改為全自動')   # 最新的在最上面
