@@ -113,7 +113,9 @@ main { flex: 1 1 auto; min-width: 0; width: 100%; max-width: 1080px; margin: 0 a
 .chip.turn { background: var(--turn); border: 0; }
 .muted { color: var(--muted); }
 .small { font-size: 14px; }
-.btn { min-height: 46px; padding: 0 20px; border-radius: 14px; border: 3px solid var(--ink); background: var(--card); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; box-shadow: 3px 3px 0 var(--ink); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .35em; text-decoration: none; text-align: center; line-height: 1.3; min-height: 46px; padding: 0 20px; border-radius: 14px; border: 3px solid var(--ink); background: var(--card); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; box-shadow: 3px 3px 0 var(--ink); }
+/* 按鈕的箭頭：› 在字型裡偏小偏上，放大、對齊中線 */
+.btn .arr { font-size: 1.45em; line-height: 1; margin-top: -.12em; font-weight: 700; }
 .btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
 .btn.primary { background: var(--primary); color: var(--primary-ink); font-weight: 900; }
 .btn.go { background: var(--done); font-weight: 900; }

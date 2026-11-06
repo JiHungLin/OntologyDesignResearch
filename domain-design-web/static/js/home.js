@@ -61,7 +61,7 @@ export async function renderHome(slice) {
           <p>${esc(plain(why.split('，依據')[0]))}</p>
           <p>過關條件：${parts.join('＋')}，還要大約 ${mins} 分鐘。</p>
         </div>
-        <a class="btn big yellow" href="${nextTask(r)}">${c.open === (c.questions + c.confirms + c.cases + 2) ? '開始審查' : '繼續審查'} ›</a>
+        <a class="btn big yellow" href="${nextTask(r)}">${c.open === (c.questions + c.confirms + c.cases + 2) ? '開始審查' : '繼續審查'}<span class="arr">›</span></a>
       </section>`;
     const t = tasksOf(r);
     const p = enc(r.path);
@@ -110,7 +110,7 @@ export async function renderHome(slice) {
           <p>AI 依設計另外推了一次，${off.map(x => esc(x.c.id)).join('、')} 和你的答案對不上。逐一看差在哪：你的答案要改就直接改了再送出；你認為設計錯了，就不用改，交給 AI 時說明。</p>
           <p class="muted small">${off.map(x => `<a href="#/r/${p}/golden/${x.k}">${esc(x.c.id)}</a>`).join('　')}</p>
         </div>
-        <div class="row"><a class="btn big yellow" href="#/r/${p}/golden/${off[0].k}">去對答案 ›</a><button class="btn big" id="handover">對完了，交給 AI</button></div>
+        <div class="row"><a class="btn big yellow" href="#/r/${p}/golden/${off[0].k}">去對答案<span class="arr">›</span></a><button class="btn big" id="handover">對完了，交給 AI</button></div>
       </section>`;
     } else if (redoing) {
       const said = s.last_reply || '';
@@ -124,7 +124,7 @@ export async function renderHome(slice) {
           ${nextLine ? `<div class="hero-next"><b>AI 說下一步：</b>${esc(plain(nextLine))}</div>` : ''}
           <p class="muted small">按下面的按鈕時，網頁會問你要不要開新的 session（AI 建議開新的話就開）。</p>
         </div>
-        <div class="row"><button class="btn big yellow" id="contStep">請 AI 繼續第 ${CIRCLED[nStep]} 步 ›</button><button class="btn big" id="showAi">看 AI 怎麼說</button></div>
+        <div class="row"><button class="btn big yellow" id="contStep">請 AI 繼續第 ${CIRCLED[nStep]} 步<span class="arr">›</span></button><button class="btn big" id="showAi">看 AI 怎麼說</button></div>
       </section>`;
     } else if (handled) {
       // AI 已經處理過這份審查頁的答案：下一步是繼續這一步（還要送下一份審查頁）或凍結，不是再交一次
@@ -147,8 +147,8 @@ export async function renderHome(slice) {
           ${said_}
           <p class="muted small">按下面的按鈕時，網頁會問你要不要開新的 session。</p>
         </div>
-        <div class="row">${redo ? `<button class="btn big yellow" id="contStep">請 AI 重做第 ${CIRCLED[n]} 步 ›</button><button class="btn big" id="showAi">看 AI 怎麼說</button><button class="btn big" id="goBack">還要回頭改設計</button>`
-          : `<button class="btn big yellow" id="goBack">請 AI 依審查頁回頭修改 ›</button><button class="btn big" id="showAi">看 AI 怎麼說</button>`}
+        <div class="row">${redo ? `<button class="btn big yellow" id="contStep">請 AI 重做第 ${CIRCLED[n]} 步<span class="arr">›</span></button><button class="btn big" id="showAi">看 AI 怎麼說</button><button class="btn big" id="goBack">還要回頭改設計</button>`
+          : `<button class="btn big yellow" id="goBack">請 AI 依審查頁回頭修改<span class="arr">›</span></button><button class="btn big" id="showAi">看 AI 怎麼說</button>`}
           <button class="btn big" id="freeze">仍然請 AI 凍結</button></div>
       </section>`;
       else hero = `
@@ -160,8 +160,8 @@ export async function renderHome(slice) {
           <p>${more ? `這份審查頁說這一輪還要再送一份審查頁：請 AI 繼續第 ${CIRCLED[n]} 步，產生下一份。都通過後才凍結。` : '結論都是「通過」的話，請 AI 凍結（凍結＝之後的修改都要留紀錄）。'}</p>
           <p class="muted small">AI 的回覆在右邊的 AI 對話；按下面的按鈕時，網頁會問你要不要開新的 session。</p>
         </div>
-        <div class="row">${more ? `<button class="btn big yellow" id="contStep">請 AI 繼續第 ${CIRCLED[n]} 步 ›</button><button class="btn big" id="freeze">請 AI 凍結</button>`
-          : `<button class="btn big yellow" id="freeze">請 AI 凍結 ›</button><button class="btn big" id="contStep">還要改，請 AI 繼續第 ${CIRCLED[n]} 步</button>`}
+        <div class="row">${more ? `<button class="btn big yellow" id="contStep">請 AI 繼續第 ${CIRCLED[n]} 步<span class="arr">›</span></button><button class="btn big" id="freeze">請 AI 凍結</button>`
+          : `<button class="btn big yellow" id="freeze">請 AI 凍結<span class="arr">›</span></button><button class="btn big" id="contStep">還要改，請 AI 繼續第 ${CIRCLED[n]} 步</button>`}
           <button class="btn big" id="handover">再交一次審查頁</button></div>
       </section>`;
     } else hero = `
@@ -186,7 +186,7 @@ export async function renderHome(slice) {
           <h1>第 ${CIRCLED[n]} 步的凍結還沒做完</h1>
           <p>檔頭已經寫「已凍結」，但還沒有 tag <code>${esc(h.next.version || `${slice}/0${n}-v?`)}</code>：CHANGELOG、合併進 core/、commit、打 tag 至少有一件還沒做。做完才能開始下一關。</p>
         </div>
-        <button class="btn big primary" id="finishFreeze">請 AI 把凍結做完 ›</button>
+        <button class="btn big primary" id="finishFreeze">請 AI 把凍結做完<span class="arr">›</span></button>
       </section>` : `
       <section class="hero idle">
         <div style="flex:999 1 480px;min-width:0">
@@ -197,7 +197,7 @@ export async function renderHome(slice) {
           ${going && n === 6 ? '<p class="small">AI 提到的問題（例：黃金案例的內容要補、系統結果和你算的不一致、缺 API）都在這一步裡處理：AI 能改的（案例情境、程式、測試）自己改，要你決定的（你的答案要不要改、要不要回頭改設計）會列在 ⑥ 的審查頁問你。</p>' : ''}
           <p class="muted small">之後輪到你：${esc(info[2])}。${n === 6 ? '第 ⑥ 步要有實作好的系統才做。' : ''}</p>
         </div>
-        <button class="btn big primary" id="doStep">${going ? `請 AI 繼續第 ${CIRCLED[n]} 步` : `請 AI 開始第 ${CIRCLED[n]} 步`} ›</button>
+        <button class="btn big primary" id="doStep">${going ? `請 AI 繼續第 ${CIRCLED[n]} 步` : `請 AI 開始第 ${CIRCLED[n]} 步`}<span class="arr">›</span></button>
       </section>`;
   } else {
     hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>這條切片全部完成！</h1>
@@ -208,7 +208,7 @@ export async function renderHome(slice) {
   if (designDone && !(s && s.running) && !asking) {
     hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>設計完成（待驗證）</h1>
       <p class="muted">①～⑤ 都凍結了，這是一個設計版本。第 ⑥ 步等系統實作好再做；現在可以開始下一條切片。</p>
-      <div class="row" style="justify-content:center"><a class="btn big primary" href="#/">挑下一條切片 ›</a><button class="btn big" id="doStep">系統好了，開始 ⑥</button></div></section>`;
+      <div class="row" style="justify-content:center"><a class="btn big primary" href="#/">挑下一條切片<span class="arr">›</span></a><button class="btn big" id="doStep">系統好了，開始 ⑥</button></div></section>`;
   }
 
   const eqOpen = h.eqs.filter(e => e['狀態'] !== '已回覆');
@@ -223,7 +223,7 @@ export async function renderHome(slice) {
       <section class="wide">
         ${changes}
         ${eqOpen.length || eqTodo.length ? `<a class="card hint row spread" href="#/eq/${enc(slice)}" style="text-decoration:none;color:inherit">
-          <span><strong>支線：專家問題</strong>　${eqOpen.length ? `${eqOpen.length} 題還沒有答覆（不擋關卡）` : ''}${eqTodo.length ? `　${eqTodo.length} 題答覆了、還沒處理` : ''}</span><span class="btn">打開 ›</span></a>` : ''}
+          <span><strong>支線：專家問題</strong>　${eqOpen.length ? `${eqOpen.length} 題還沒有答覆（不擋關卡）` : ''}${eqTodo.length ? `　${eqTodo.length} 題答覆了、還沒處理` : ''}</span><span class="btn">打開<span class="arr">›</span></span></a>` : ''}
         <section class="card">
           <div class="label">發現問題、專家或客戶有新說法？</div>
           <div class="row"><input type="text" id="changeText" style="flex:1" placeholder="例：店長說兼職人員也有特休、實作時發現餘額算錯…">

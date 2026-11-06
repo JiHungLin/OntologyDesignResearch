@@ -93,7 +93,7 @@ export function renderDone(what, msg, nextHref) {
       <h1>${esc(what)}完成！</h1>
       <p class="muted">${esc(msg)}。答案已經寫回審查頁。</p>
       <div class="row" style="justify-content:center;margin-top:16px">
-        <a class="btn big primary" href="${nextHref}">下一個任務 ›</a>
+        <a class="btn big primary" href="${nextHref}">下一個任務<span class="arr">›</span></a>
         <a class="btn big" href="#/s/${enc(state.review.slice)}">回關卡</a>
       </div>
     </section>`;

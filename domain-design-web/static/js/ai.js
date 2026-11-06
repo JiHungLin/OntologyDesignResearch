@@ -119,7 +119,7 @@ export async function renderAiNext(s) {
     pick: it && ['開始下一條切片：' + it.code, `#/new/${enc(it.code)}`],
   }[N.kind];
   if (!act) return;
-  box.innerHTML = `<div class="label">接下來</div><a class="btn primary" href="${act[1]}" id="aiNextGo">${esc(act[0])} ›</a>
+  box.innerHTML = `<div class="label">接下來</div><a class="btn primary" href="${act[1]}" id="aiNextGo">${esc(act[0])}<span class="arr">›</span></a>
     <div class="small muted" style="margin-top:6px">在網頁上按就好，不用貼 AI 寫的指令；需要新的 session 時網頁會自己開。</div>`;
   // 抽屜蓋在主畫面上時，按了先收起抽屜，才看得到帶過去的頁面
   $('#aiNextGo').onclick = e => { e.preventDefault(); if (!document.body.classList.contains('drawer-push')) $('#aiDrawer').hidden = true; go(act[1]); };

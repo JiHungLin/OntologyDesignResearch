@@ -81,11 +81,11 @@ export async function renderHub() {
   let hero;
   if (N.kind === 'start') hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">從這裡開始</span>
       <h1>想做什麼系統？</h1><p>先用幾句話寫下方向：給誰用、要解決什麼、明確不做什麼。不用懂這套流程，AI 會依它問清楚、盤點資料、提出怎麼切。</p></div>
-      <a class="btn big yellow" href="#/start">寫主題草案 ›</a></section>`;
+      <a class="btn big yellow" href="#/start">寫主題草案<span class="arr">›</span></a></section>`;
   else if (N.kind === 'plan-ai') hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到 AI</span>
       <h1>主題草案寫好了，請 AI 規劃</h1><p>AI 會盤點這個領域通常有哪些資料（你有的、公開找得到的、只能先推想的），把要做的事切成一條條情境（切片），並列出全局會用到的名詞。</p>
       <p class="muted small">之後輪到你：補資料、看推想草稿、看切片地圖，同意後才開始第一條。</p></div>
-      <button class="btn big primary" id="doPlan">請 AI 規劃 ›</button></section>`;
+      <button class="btn big primary" id="doPlan">請 AI 規劃<span class="arr">›</span></button></section>`;
   else if (N.kind === 'running') hero = runningCard(N.scope, N.scope === '_plan' ? 'AI 正在規劃' : `AI 正在做 ${N.scope}`);
   else if (N.kind === 'plan') {
     const parts = [];
@@ -97,23 +97,23 @@ export async function renderHub() {
     hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到你</span>
       <h1>看規劃：${plan.slices.length} 條切片、${P.sketch ? P.sketch.nouns.length : 0} 個名詞</h1>
       <p>${parts.length ? parts.join('、') + '；' : ''}看完切片地圖與名詞草圖，有意見就寫，沒問題就同意。</p></div>
-      <a class="btn big yellow" href="#/plan">看規劃 ›</a></section>`;
+      <a class="btn big yellow" href="#/plan">看規劃<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'review') {
     const f = N.item.f;
     hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到你</span>
       <h1>審查 ${esc(f.slice)} ${esc(stepName(f.review))}</h1><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p>
-      <p>還有 ${f.review.counts.open} 件事要做。</p></div><a class="btn big yellow" href="#/s/${enc(f.slice)}">去審查 ›</a></section>`;
+      <p>還有 ${f.review.counts.open} 件事要做。</p></div><a class="btn big yellow" href="#/s/${enc(f.slice)}">去審查<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'slice') {
     const f = N.item.f;
     hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">進行中</span>
       <h1>${esc(f.slice)}：${f.next.status === '凍結中' ? `${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}的凍結還沒做完` : f.next.status === '待檢查' ? `${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}審查填好了，看下一步（凍結、重做或回頭修改）` : `下一關 ${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}`}</h1><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p></div>
-      <a class="btn big primary" href="#/s/${enc(f.slice)}">打開 ›</a></section>`;
+      <a class="btn big primary" href="#/s/${enc(f.slice)}">打開<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'pick') {
     const r = N.item.row;
     hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">下一條切片</span>
       <h1>${esc(r['切片'])}</h1><p class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'])}</p>
       <p class="small">建議順序 ${esc(r['建議順序'])}${r['依賴'] && r['依賴'] !== '—' ? `　依賴：${esc(r['依賴'])}` : ''}</p></div>
-      <a class="btn big yellow" href="#/new/${enc(r['切片'])}">開始這一條 ›</a></section>`;
+      <a class="btn big yellow" href="#/new/${enc(r['切片'])}">開始這一條<span class="arr">›</span></a></section>`;
   } else hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>地圖上的切片都做完了</h1>
       <p class="muted">有新的情境或需求，到「規劃」補進地圖。</p><a class="btn big" href="#/plan">看規劃</a></section>`;
 
@@ -192,7 +192,7 @@ export async function renderStart() {
         <p class="small muted" style="margin:0 0 8px">可以現在放，也可以之後。放進來的存在 <code>inputs/shared/</code>，原樣保留。</p>
         <button class="btn" id="addInput">加資料</button>
       </section>
-      <div class="row"><button class="btn big primary" id="saveTopic">存好，請 AI 規劃 ›</button><button class="btn big" id="saveOnly">只存起來</button></div>
+      <div class="row"><button class="btn big primary" id="saveTopic">存好，請 AI 規劃<span class="arr">›</span></button><button class="btn big" id="saveOnly">只存起來</button></div>
     </div>`;
   const fields = $$('#app [data-k]');
   const clearDraft = keepDraft('topic', fields);

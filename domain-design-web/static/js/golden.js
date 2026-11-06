@@ -128,8 +128,8 @@ export async function renderGolden(path, i) {
   const handBack = allDone ? `<div class="card hand-back"><b>每一題都對完了？</b>
     <p class="small" style="margin:4px 0 10px">交給 AI：改過的答案它會抄回 golden_cases.md、重新比對；沒改的，它會依你說明的理由處理設計。</p>
     <div class="row"><input type="text" id="g_note" class="soft" style="flex:1 1 260px" placeholder="（選填）哪幾題你認為是設計錯了、為什麼">
-    <button class="btn big yellow" id="g_hand">對完了，交給 AI ›</button></div></div>` : '';
-  const pager = cs.length > 1 ? `<div class="row case-pager">${i > 0 ? `<a class="btn" href="${href(i - 1)}">‹ 上一題 ${esc(cs[i - 1].id)}</a>` : ''}<span style="flex:1"></span>${i < cs.length - 1 ? `<a class="btn" href="${href(i + 1)}">下一題 ${esc(cs[i + 1].id)} ›</a>` : ''}</div>` : '';
+    <button class="btn big yellow" id="g_hand">對完了，交給 AI<span class="arr">›</span></button></div></div>` : '';
+  const pager = cs.length > 1 ? `<div class="row case-pager">${i > 0 ? `<a class="btn" href="${href(i - 1)}"><span class="arr">‹</span>上一題 ${esc(cs[i - 1].id)}</a>` : ''}<span style="flex:1"></span>${i < cs.length - 1 ? `<a class="btn" href="${href(i + 1)}">下一題 ${esc(cs[i + 1].id)}<span class="arr">›</span></a>` : ''}</div>` : '';
   $('#app').innerHTML = `
     ${caseTabs}
     <div>

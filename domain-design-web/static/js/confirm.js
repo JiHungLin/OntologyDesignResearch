@@ -300,7 +300,7 @@ export async function renderConfirm(path, sel) {
     ${r.model ? `<div><h1 style="margin:0">看圖確認：這輪改了哪些東西</h1><p class="muted" style="margin:4px 0 0">點上面的名稱或圖上的方塊看說明；橘色的還沒確認完。合理就按「合理，下一個」。</p></div>${modelHtml}` : ''}
     ${flowHtml}
     ${groups.length ? `<div id="others"><h2 style="margin:0">${r.model || r.flows ? '其他要確認的' : '確認這輪的改動'}</h2><p class="muted small" style="margin:4px 0 0">每一項打 ✓ 或寫一句意見。原文和行號可以點開看。</p></div><div class="groups">${groupsHtml}</div>` : ''}
-    ${!open ? `<div class="row"><a class="btn big primary" href="${nextTask(r)}">確認完成，下一個任務 ›</a></div>` : ''}`;
+    ${!open ? `<div class="row"><a class="btn big primary" href="${nextTask(r)}">確認完成，下一個任務<span class="arr">›</span></a></div>` : ''}`;
 
   const refresh = s => renderConfirm(path, s === undefined ? state.sel : s);
   const okAll = async lines => {

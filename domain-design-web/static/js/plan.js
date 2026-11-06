@@ -54,7 +54,7 @@ export function renderBasket(scope) {
   if (!el) return;
   const items = basket(scope);
   el.hidden = !items.length;
-  el.innerHTML = `<div class="row spread"><strong>你的回饋（${items.length}）</strong><button class="btn primary" id="sendFb">交給 AI 修改 ›</button></div>
+  el.innerHTML = `<div class="row spread"><strong>你的回饋（${items.length}）</strong><button class="btn primary" id="sendFb">交給 AI 修改<span class="arr">›</span></button></div>
     <ol>${items.map((x, k) => `<li>${esc(x)} <button class="x-del" data-del="${k}" aria-label="刪除">✕</button></li>`).join('')}</ol>`;
   $$('[data-del]', el).forEach(b => b.onclick = () => { const it = basket(scope); it.splice(+b.dataset.del, 1); setBasket(scope, it); });
   $('#sendFb').onclick = () => {
@@ -285,7 +285,7 @@ export async function renderKickoff(code) {
     $('#app').innerHTML = `<div class="narrow"><section class="card lift" style="display:flex;flex-direction:column;gap:12px">
       <span class="chip">還不能開始</span><h1 class="qtitle" style="margin:0">${esc(code)} 要等 ${esc(b.slice)} 做完</h1>
       <p class="muted" style="margin:0">網頁一次只做一條切片。${esc(b.slice)} 還在第 ${CIRCLED[b.next.n]} 步；①～⑤ 都凍結後，就可以開始下一條。先做完的切片會把共用名詞定下來，下一條直接引用。</p>
-      <div><a class="btn big primary" href="#/s/${enc(b.slice)}">回去做 ${esc(b.slice)} ›</a></div></section></div>`;
+      <div><a class="btn big primary" href="#/s/${enc(b.slice)}">回去做 ${esc(b.slice)}<span class="arr">›</span></a></div></section></div>`;
     return;
   }
   const qs = [
@@ -304,7 +304,7 @@ export async function renderKickoff(code) {
         ${qs.map(([k, q, ph]) => `<label class="label" style="color:var(--ink);font-size:16px">${esc(q)}<input type="text" class="soft" data-k="${k}" placeholder="${esc(ph)}"></label>`).join('')}
         <div><button class="btn" id="addInput">加資料（放進 inputs/${esc(code)}/）</button></div>
       </section>
-      <div class="row"><button class="btn big primary" id="go1">開始 ›</button></div>
+      <div class="row"><button class="btn big primary" id="go1">開始<span class="arr">›</span></button></div>
     </div>`;
   $('#addInput').onclick = () => inputDialog({ folder: code });
   const fields = $$('#app [data-k]');
