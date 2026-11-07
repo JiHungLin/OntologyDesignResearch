@@ -595,7 +595,10 @@ def test_autorun_from_web(repo, client):
     client.post('/api/auto/start', json={})
     assert _wait(lambda: client.get('/api/auto').json()['state']['running'])
     pid = client.get('/api/auto').json()['state']['pid']
+    os.makedirs(os.path.join(str(repo), '.git'), exist_ok=True)
+    open(os.path.join(str(repo), '.git', 'index.lock'), 'w').close()
     assert client.post('/api/auto/interrupt').status_code == 200
     st = client.get('/api/auto').json()['state']
-    assert not st['running'] and '在網頁上中斷' in st['reason']
+    assert not st['running'] and st['interrupted'] and '在網頁上強制中斷' in st['reason']
     assert _wait(lambda: autorun._proc.poll() is not None) and autorun._proc.pid == pid
+    assert not os.path.exists(os.path.join(str(repo), '.git', 'index.lock')) and '刪掉了 .git/index.lock' in st['reason']

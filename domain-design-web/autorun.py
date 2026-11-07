@@ -1,11 +1,13 @@
 """從網頁開始、停止、中斷全自動跑步器（設計 repo 的 tools/auto_run.py），並讀它的進度。
 跑步器本身不依賴網頁（終端機照樣能跑）；網頁只讀 .domain-auto/state.json、runs.md、runs/<圈>.jsonl，
-停止是建立 .domain-auto/stop（這一圈做完就停），中斷是結束整個程序群組（這一圈做到一半的修改留在工作區，下一圈接著做）。"""
+關閉全自動是建立 .domain-auto/stop（這一圈做完就停）；強制中斷是結束整個程序群組，做到一半的修改留在工作區，
+刪掉被切斷的 git 留下的 .git/index.lock，下次開始時跑步器的第一圈先收拾（tools/auto_run.py 的 RECOVER）。"""
 import json
 import os
 import signal
 import subprocess
 import sys
+import time
 
 import kit
 import sessions
@@ -114,18 +116,48 @@ def stop():
     open(os.path.join(_dir(), 'stop'), 'w').close()
 
 
+def _group_gone(pgid):
+    try:
+        os.killpg(pgid, 0)
+        return False
+    except OSError:
+        return True
+
+
 def interrupt():
-    """立刻結束跑步器與這一圈的 claude。做到一半的修改留在工作區（沒有 commit），下一圈的 /domain-status 會接著做。"""
+    """強制結束跑步器與這一圈的 claude（含它正在跑的指令）。做到一半的修改留在工作區；
+    等整個群組都結束後刪掉 .git/index.lock，記下當下的 git status；下次開始時第一圈先收拾。"""
     st = state()
     if not st['running']:
         raise RuntimeError('全自動沒有在跑')
     try:
-        os.killpg(os.getpgid(st['pid']), signal.SIGTERM)
+        pgid = os.getpgid(st['pid'])
+        os.killpg(pgid, signal.SIGTERM)
     except OSError as e:
         raise RuntimeError(f'中斷不了：{e}')
+    for _ in range(50):   # 最多等 5 秒，還在就 SIGKILL
+        if _proc is not None:
+            _proc.poll()
+        if _group_gone(pgid):
+            break
+        time.sleep(0.1)
+    else:
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except OSError:
+            pass
+        time.sleep(0.3)
+    if _proc is not None:
+        _proc.poll()
+    lock = os.path.join(kit.repo(), '.git', 'index.lock')
+    removed = os.path.exists(lock)
+    if removed:
+        os.remove(lock)
+    git = subprocess.run(['git', '-C', kit.repo(), 'status', '--porcelain'], capture_output=True, text=True).stdout.strip()
     st_path = os.path.join(_dir(), 'state.json')
     raw = json.load(open(st_path, encoding='utf-8'))
-    raw.update(running=False, reason=f'在網頁上中斷（第 {raw.get("round", 0)} 圈做到一半；修改留在工作區，下一圈接著做）')
+    raw.update(running=False, interrupted=True, git_status=git, ended=time.strftime('%Y-%m-%dT%H:%M:%S'),
+               reason=f'在網頁上強制中斷（第 {raw.get("round", 0)} 圈做到一半；修改留在工作區{"，刪掉了 .git/index.lock" if removed else ""}，下次開始時第一圈先收拾）')
     with open(st_path + '.tmp', 'w', encoding='utf-8') as f:
         json.dump(raw, f, ensure_ascii=False, indent=1)
     os.replace(st_path + '.tmp', st_path)

@@ -8,7 +8,9 @@
   AI 在回報最後一行寫「全自動：繼續」「全自動：完成（…）」「全自動：需要人（…）」；
   完成、需要人、沒有這一行、連續兩圈沒有任何改變、執行模式被改回手動（下一圈開始前檢查），或到了 --max-steps，就停下來。
   --until-design-done：切片地圖上出現新的「設計完成（待驗證）」切片（有一條切片的 ⑤ 凍結了）就停，讓人先看一次 AI 代答的審查頁。
-  要停下來又不改執行模式：建立 .domain-auto/stop（網頁的「停止」就是這樣做），這一圈做完就停。
+  要停下來又不改執行模式：建立 .domain-auto/stop（網頁的「關閉全自動」就是這樣做），這一圈做完就停。
+  上一次是做到一半被切斷的（網頁強制中斷、用量上限、程序不在了），第一圈先收拾：
+  提示詞多一段，要 AI 看 git status、diff、最後的 tag，把中斷時的那個動作做完或還原；留下的 .git/index.lock 先刪掉。
 
 紀錄（.domain-auto/，不提交）：
   runs/<時間>_<n>.jsonl  每一圈 claude 的完整輸出（stream-json）
@@ -32,6 +34,11 @@ PROMPT = ('全自動模式（docs/01 0.2「全自動模式」）：沒有人在�
           '先執行 /domain-status，然後只做下一個動作（一步的產出到送審、一次凍結〔含 AI 審查〕、或一次回頭修改），做完就結束這個 session。'
           '要人做的事照全自動模式的規定標記後往下，不要停。'
           '回報一律用繁體中文；最後一行只寫其中一個：「全自動：繼續」「全自動：完成（原因）」「全自動：需要人（原因）」。')
+RECOVER = ('上一次全自動在第 {n} 圈做到一半被切斷（{why}）。這一圈先收拾，不做新的動作：'
+           '看 git status、git diff、git log -3、git tag 最後幾個，和 /domain-status 的結果，判斷中斷時在做哪一個動作'
+           '（寫一步、回頭修改、凍結〔檔頭、CHANGELOG、commit、tag、core/ 同步〕、⑥ 的指令）；'
+           '把那個動作做完，做不完整的就還原到最後一個 commit 的樣子，並在這一圈的回報寫出做了哪一種、改了哪些檔案。'
+           '沒有做到一半的東西就直接說沒有。\n\n')
 MARK = re.compile(r'全自動：(繼續|完成|需要人)(?:（([^）]*)）)?')
 
 
@@ -89,6 +96,37 @@ class State:
         os.replace(self.path + '.tmp', self.path)
 
 
+def interrupted(auto):
+    """上一次是不是做到一半被切斷：回傳 (第幾圈, 原因)，不是就回傳 None。"""
+    try:
+        with open(os.path.join(auto, 'state.json'), encoding='utf-8') as f:
+            st = json.load(f)
+    except (OSError, ValueError):
+        st = None
+    if st:
+        alive = False
+        if st.get('running'):
+            try:
+                os.kill(st.get('pid'), 0)
+                alive = True
+            except (OSError, TypeError):
+                pass
+        if st.get('interrupted'):
+            return st.get('round', 0), '網頁強制中斷'
+        if st.get('running') and not alive:
+            return st.get('round', 0), '跑步器的程序不在了'
+        if str(st.get('last', '')).startswith('沒有回報結果'):
+            return st.get('round', 0), st['last'][6:].strip() or '這一圈沒有回報結果'
+        return None
+    try:   # 還沒有 state.json 的舊紀錄：看 runs.md 最後一行
+        with open(os.path.join(auto, 'runs.md'), encoding='utf-8') as f:
+            last = [l for l in f if l.startswith('- ')][-1]
+    except (OSError, IndexError):
+        return None
+    m = re.search(r'第 (\d+) 圈：沒有回報結果\s*(.*?)\s*（runs/', last)
+    return (int(m.group(1)), m.group(2) or '這一圈沒有回報結果') if m else None
+
+
 def main():
     try:
         run()
@@ -119,7 +157,12 @@ def run():
     stop = os.path.join(auto, 'stop')
     if os.path.exists(stop):
         os.remove(stop)
-    STATE = State(auto, max_steps=a.max_steps, until_design_done=a.until_design_done)
+    cut = interrupted(auto)
+    lock = os.path.join(repo, '.git', 'index.lock')
+    if cut and os.path.exists(lock):   # 被切斷的 git 指令留下的；這時沒有別的 AI 在跑（網頁在全自動跑時不開 AI 工作）
+        os.remove(lock)
+    STATE = State(auto, max_steps=a.max_steps, until_design_done=a.until_design_done,
+                  recovered=f'第 {cut[0]} 圈（{cut[1]}）' if cut else '')
     settings = json.dumps({'hooks': {'PreToolUse': [{'matcher': '*', 'hooks': [
         {'type': 'command', 'command': f'{sys.executable} {os.path.join(HERE, "auto_hook.py")}'}]}]}})
     env = dict(os.environ, DOMAIN_AUTO='1', DOMAIN_AUTO_REPO=repo)
@@ -135,7 +178,8 @@ def run():
         stamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
         out = os.path.join(auto, 'runs', f'{stamp}_{n}.jsonl')
         STATE.save(round=n, log=os.path.basename(out), round_started=datetime.now().isoformat(timespec='seconds'))
-        cmd = [a.claude, '-p', PROMPT, '--output-format', 'stream-json', '--verbose',
+        prompt = RECOVER.format(n=cut[0], why=cut[1]) + PROMPT if cut and n == 1 else PROMPT
+        cmd = [a.claude, '-p', prompt, '--output-format', 'stream-json', '--verbose',
                '--settings', settings, '--permission-mode', 'acceptEdits']
         with open(out, 'w', encoding='utf-8') as f:
             p = subprocess.run(cmd, cwd=repo, env=env, stdout=f, stderr=subprocess.STDOUT, text=True)

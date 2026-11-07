@@ -128,7 +128,7 @@ AI 停下來問人時（例：規劃中的取捨），最後一則回覆裡的�
 全自動的跑步器是設計 repo 的 `tools/auto_run.py`，不依賴網頁（終端機照樣能跑，網頁關掉或伺服器重開它照樣跑）。網頁只是開始與控制它的地方：
 - **開始**：`python3 tools/auto_run.py --max-steps N [--until-design-done]`，自己一個程序群組，輸出寫 `.domain-auto/runner.log`。執行模式要是全自動、網頁沒有 AI 工作在跑。
 - **進度**：讀 `.domain-auto/state.json`（跑步器寫：pid、第幾圈、這一圈的紀錄檔、停下來的原因；pid 不在了就當作停了）、`runs.md`、`runs/<圈>.jsonl`（用 AI 對話的事件格式畫）、`commands.jsonl` 裡被擋下的。
-- **停止**：建立 `.domain-auto/stop`，跑步器下一圈開始前看到就停（這一圈做完、紀錄寫完）。**立刻中斷**：結束整個程序群組（含這一圈的 claude），做到一半的修改留在工作區，下次第一圈的 `/domain-status` 會接著做。兩種都不改執行模式。
+- **關閉全自動**：建立 `.domain-auto/stop`，跑步器下一圈開始前看到就停（這一圈做完、紀錄寫完）。**強制中斷**（頁面上另外按確認）：結束整個程序群組（含這一圈的 claude 與它在跑的指令，5 秒內沒結束就 SIGKILL），刪掉 `.git/index.lock`，`state.json` 記 `interrupted` 與當下的 `git status`；下次開始時跑步器的第一圈先收拾。兩種都不改執行模式。
 - **鎖**：全自動在跑時，審查頁作答、接受草稿、送訊息給 AI、切換執行模式都回 409（兩邊共用同一份工作目錄與 git）。
 
 ## 測試

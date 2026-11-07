@@ -1040,6 +1040,40 @@ class TestAuto(Base):
         self.assertNotIn('第 2 圈', out)
         self.assertIn('執行模式已改回手動', out)
 
+    def test_runner_recovers_after_cut(self):
+        # 上一次做到一半被切斷（網頁強制中斷；或舊紀錄 runs.md 最後一圈沒有回報結果，例：用量上限）：第一圈先收拾，留下的 index.lock 刪掉
+        import json
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n')
+        for prev, why in ((json.dumps({'running': False, 'interrupted': True, 'round': 4}), '網頁強制中斷'),
+                          (None, "You've hit your limit")):
+            for f in ('state.json', 'runs.md'):
+                if os.path.exists(os.path.join(self.dir, '.domain-auto', f)):
+                    os.remove(os.path.join(self.dir, '.domain-auto', f))
+            if prev:
+                self.write('.domain-auto/state.json', prev)
+            else:
+                self.write('.domain-auto/runs.md', "- x 第 13 圈：沒有回報結果　You've hit your limit　（runs/x_13.jsonl）\n")
+            claude = self.fake_claude(['全自動：繼續', '全自動：需要人（停）'])
+            with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+                f.write('open("prompts.txt", "a").write(sys.argv[2].replace("\\n", " ") + "\\n")\n')
+            self.write('.git/index.lock', '')
+            self.write('.fake_n', '0')
+            if os.path.exists(os.path.join(self.dir, 'prompts.txt')):
+                os.remove(os.path.join(self.dir, 'prompts.txt'))
+            run('auto_run.py', '--claude', claude, cwd=self.dir)
+            prompts = open(os.path.join(self.dir, 'prompts.txt'), encoding='utf-8').read().splitlines()
+            self.assertTrue(prompts[0].startswith('上一次全自動在第'), prompts[0])
+            self.assertIn(why, prompts[0])
+            self.assertFalse(prompts[1].startswith('上一次'))
+            self.assertFalse(os.path.exists(os.path.join(self.dir, '.git', 'index.lock')))
+        # 正常停下來的（需要人）：下一次不用收拾
+        claude = self.fake_claude(['全自動：需要人（停）'])
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('open("prompts.txt", "a").write(sys.argv[2].replace("\\n", " ") + "\\n")\n')
+        os.remove(os.path.join(self.dir, 'prompts.txt'))
+        run('auto_run.py', '--claude', claude, cwd=self.dir)
+        self.assertFalse(open(os.path.join(self.dir, 'prompts.txt'), encoding='utf-8').read().startswith('上一次'))
+
     def test_runner_stop_file_and_state(self):
         # 網頁的「停止」建立 .domain-auto/stop：這一圈做完就停，執行模式不變；state.json 記第幾圈、停下來的原因
         import json

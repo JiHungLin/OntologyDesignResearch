@@ -15,7 +15,8 @@ function stateLine(st) {
   if (st.running) return `<b>執行中</b>：第 ${st.round || 1} 圈（從 ${esc((st.round_started || st.started || '').replace('T', ' '))} 開始）${st.stopping ? '，<b>這一圈做完就停</b>' : ''}`
     + `${st.last ? `<div class="small muted">上一圈：${inline(st.last)}</div>` : ''}`;
   if (!st.started) return '還沒有從這裡跑過。';
-  return `<b>已停下來</b>（${esc((st.ended || '').replace('T', ' '))}，跑了 ${st.round || 0} 圈）：${inline(st.reason || '')}`;
+  const tidy = st.interrupted || /^沒有回報結果/.test(st.last || '') ? '<div class="small">上一次做到一半被切斷，下次開始時第一圈會先收拾（把那個動作做完或還原）。</div>' : '';
+  return `<b>已停下來</b>（${esc((st.ended || '').replace('T', ' '))}，跑了 ${st.round || 0} 圈）：${inline(st.reason || '')}${tidy}`;
 }
 
 export async function renderAuto(log) {
@@ -35,9 +36,15 @@ export async function renderAuto(log) {
       <div style="margin-bottom:10px">${stateLine(st)}</div>
       ${!auto ? '<p class="small">執行模式是手動。要全自動，先到<a href="#/plan">規劃頁</a>最下面改成全自動。</p>' : st.running ? `
         <div class="row">
-          <button class="btn" id="aStop" ${st.stopping ? 'disabled' : ''}>停止（這一圈做完後）</button>
-          <button class="btn" id="aKill">立刻中斷</button></div>
-        <p class="muted small" style="margin:6px 0 0">「停止」等這一圈做完、寫完紀錄才停，最乾淨。「立刻中斷」馬上結束這一圈的 AI，做到一半的修改留在工作區（沒有 commit），下次開始時第一圈會接著做。執行模式都不變。</p>` : `
+          <button class="btn primary" id="aStop" ${st.stopping ? 'disabled' : ''}>${st.stopping ? '這一圈做完就關閉' : '關閉全自動（這一圈做完後）'}</button>
+          <button class="btn" id="aKill">強制中斷…</button></div>
+        <p class="muted small" style="margin:6px 0 0">平常用「關閉全自動」：等這一圈做完、檔案和紀錄都寫好才停。執行模式不變，之後可以再開始。</p>
+        <div class="card" id="aKillBox" hidden style="margin-top:10px;background:#FFE8D6">
+          <b>確定要強制中斷？</b>
+          <p class="small" style="margin:4px 0">這一圈的 AI 和它正在跑的指令會馬上結束，可能停在一組修改的中間：例如規則改了但 CHANGELOG 還沒記、凍結時 commit 了還沒打 tag、<code>core/</code> 只同步一半、⑥ 的容器沒關。
+            做到一半的修改留在工作區；被切斷的 git 留下的鎖會刪掉。下次開始全自動時，第一圈會先看 git 的狀態，把那個動作做完或還原，再往下做。</p>
+          <p class="small" style="margin:4px 0">只在 AI 明顯卡住、或方向錯了要馬上停時用。</p>
+          <div class="row"><button class="btn" id="aKillYes" style="border-color:#c0392b;color:#c0392b">確認強制中斷</button><button class="btn" id="aKillNo">不要，回去</button></div></div>` : `
         <div class="row">
           <label class="small">最多 <input type="number" id="aMax" value="${st.max_steps || 40}" min="1" max="200" style="width:5em"> 圈</label>
           <label class="small"><input type="checkbox" id="aUntil" ${st.until_design_done === false ? '' : 'checked'}> 有一條切片 ⑤ 凍結（設計完成）就停，讓我先看 AI 代答的審查頁</label>
@@ -58,8 +65,10 @@ export async function renderAuto(log) {
       <ul class="small">${A.denied.map(d => `<li>${esc((d.at || '').replace('T', ' ').slice(0, 19))}　<code>${esc(d.tool)}</code> ${esc(String(d.what || '').slice(0, 200))}<div class="muted">${esc(d.reason || '')}</div></li>`).join('')}</ul></section>` : ''}`;
   const post = async (url, body, msg) => { try { await api(url, body || {}); toast(msg); renderAuto(); } catch (e) { toast(e.message); } };
   if ($('#aStart')) $('#aStart').onclick = () => post('/api/auto/start', { max_steps: +$('#aMax').value || 40, until_design_done: $('#aUntil').checked }, '全自動開始了');
-  if ($('#aStop')) $('#aStop').onclick = () => post('/api/auto/stop', null, '這一圈做完就停');
-  if ($('#aKill')) $('#aKill').onclick = () => post('/api/auto/interrupt', null, '已中斷；做到一半的修改留在工作區');
+  if ($('#aStop')) $('#aStop').onclick = () => post('/api/auto/stop', null, '這一圈做完就關閉全自動');
+  if ($('#aKill')) $('#aKill').onclick = () => { $('#aKillBox').hidden = false; $('#aKill').disabled = true; };
+  if ($('#aKillNo')) $('#aKillNo').onclick = () => { $('#aKillBox').hidden = true; $('#aKill').disabled = false; };
+  if ($('#aKillYes')) $('#aKillYes').onclick = () => { $('#aKillYes').disabled = true; post('/api/auto/interrupt', null, '已強制中斷；下次開始時第一圈先收拾'); };
   if (cur) follow(cur, st.running);
 }
 
