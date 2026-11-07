@@ -69,6 +69,7 @@ export function renderNav() {
 
   nav.innerHTML = `
     ${a('#/', '總覽')}
+    ${plan && plan.auto ? a('#/auto', '全自動', P.autorun && P.autorun.running ? `執行中・第 ${P.autorun.round || 1} 圈` : '已停', P.autorun && P.autorun.running ? 'busy' : '') : ''}
     ${P.topic ? fileA(P.topic, '主題草案') : plan ? '' : a('#/start', '主題草案', '還沒寫')}
     ${node('plan', `<span class="nav-name">規劃</span><span class="nav-st ${plan && plan.agreed ? 'ok' : plan ? 'turn' : ''}">${plan ? (plan.agreed ? '已同意' : '討論中') : '還沒有'}</span>`,
       a('#/plan', '規劃頁') + (plan ? fileA('slices/PLAN.md', '切片地圖 PLAN.md') : '')
