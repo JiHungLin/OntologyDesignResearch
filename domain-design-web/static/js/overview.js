@@ -4,11 +4,12 @@ import { STEP_INFO } from './home.js';
 import { bindWaiting, openAi, runAi, runningCard, waitingCard } from './ai.js';
 import { markNav, narrow } from './nav.js';
 import { inputDialog, needFetch } from './plan.js';
-import { autoBadge } from './auto.js';
+import { applyAutoLock, autoBadge, autoProgress } from './auto.js';
+import { renderAiHead } from './ai.js';
 
 // ---------- 總覽：整個 domain 走到哪 ----------
 
-export async function loadProject() { state.project = await api('/api/project'); showTopic(state.project); return state.project; }
+export async function loadProject() { state.project = await api('/api/project'); showTopic(state.project); renderAiHead(); applyAutoLock(); return state.project; }
 
 // 主題名稱：切片地圖「領域」的第一段（人資／人事 → 人資）；還沒有切片地圖時照舊「Domain 設計」
 export function topicName(P) {
@@ -47,6 +48,7 @@ export function miniSteps(f) {
 // 現在整個 domain 輪到誰、做什麼
 export function nextOfProject(P) {
   const plan = P.plan;
+  if (P.autorun && P.autorun.running) return { kind: 'auto' };   // 全自動在跑：人的關卡由 AI 代答，總覽只顯示推進到哪
   const ps = P.plan_session;
   if (ps && ps.running) return { kind: 'running', scope: '_plan' };
   if (!plan && !P.topic) return { kind: 'start' };
@@ -82,7 +84,7 @@ export async function renderHub() {
   const toProvide = plan ? plan.inventory.filter(x => x['狀態'] === '待提供').length : 0;
   const pq = plan ? plan.pending.filter(x => x['狀態'] !== '已回覆' && !x['答覆']).length : 0;
   // 整個專案的五個階段（不是切片的 ①～⑥）：切片各自往前走，每條做到哪裡看下面的切片卡片
-  const stage = { start: 0, 'plan-ai': 1, plan: 1, running: N.scope === '_plan' ? 1 : 2, pick: 2, slice: 2, review: 2, verify: 2, done: 4 }[N.kind];
+  const stage = { start: 0, 'plan-ai': 1, plan: 1, running: N.scope === '_plan' ? 1 : 2, pick: 2, slice: 2, review: 2, verify: 2, done: 4, auto: plan && plan.agreed ? 2 : 1 }[N.kind];
   const journey = [['主題草案', ''], ['規劃', '資料、切片地圖、名詞'], ['做切片', '每條 ①～⑤ 設計、⑥ 驗證'],
     ['設計完成', '地圖上的切片都完成（含 ⑥）'], ['系統完成', '整合成可以使用的系統（流程還沒定義）']];
 
@@ -122,6 +124,11 @@ export async function renderHub() {
       <h1>${esc(r['切片'])}</h1><p class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'])}</p>
       <p class="small">建議順序 ${esc(r['建議順序'])}${r['依賴'] && r['依賴'] !== '—' ? `　依賴：${esc(r['依賴'])}` : ''}</p></div>
       <a class="btn big yellow" href="#/new/${enc(r['切片'])}">開始這一條<span class="arr">›</span></a></section>`;
+  } else if (N.kind === 'auto') {
+    hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">全自動</span>
+      <h1>全自動執行中・第 ${P.autorun.round || 1} 圈</h1><p>${esc(autoProgress(P))}</p>
+      <p class="small muted">人的關卡由 AI 代答並標「AI（自動）」，你事後再看、再改。這段時間網頁只能看。</p></div>
+      <a class="btn big primary" href="#/auto">看進度<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'verify') {
     const f = N.item.f;
     hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">還差 ⑥</span>
@@ -141,7 +148,7 @@ export async function renderHub() {
     ${list.length ? `<section><div class="row spread"><h2 style="margin:0">切片</h2>${plan ? `<a href="#/plan">切片地圖${plan.agreed ? '（已同意）' : '（討論中）'}</a>` : ''}</div>
       ${started.length ? `<div class="slices">${started.map(x => {
         const r = x.row || {};
-        const st = x.f.review ? '輪到你審查' : x.f.session && x.f.session.running ? 'AI 進行中' : !x.f.next ? '完成' : x.f.next.n === 6 ? (x.f.next.status === '未開始' ? '設計完成（待驗證）' : '⑥ 驗證中') : x.f.next.status === '凍結中' ? `${CIRCLED[x.f.next.n]} 凍結中` : `下一關 ${CIRCLED[x.f.next.n]}`;
+        const st = P.autorun && P.autorun.running && (x.f.review || (x.f.next && (x.f.next.n <= 5 || x.f.next.status !== '未開始'))) ? '全自動進行中' : x.f.review ? '輪到你審查' : x.f.session && x.f.session.running ? 'AI 進行中' : !x.f.next ? '完成' : x.f.next.n === 6 ? (x.f.next.status === '未開始' ? '設計完成（待驗證）' : '⑥ 驗證中') : x.f.next.status === '凍結中' ? `${CIRCLED[x.f.next.n]} 凍結中` : `下一關 ${CIRCLED[x.f.next.n]}`;
         const sc = r['情境（起點 → 可驗證的結果）'] || '';
         return `<a class="slice ${x.f.review ? 'turn' : ''}" href="#/s/${enc(x.code)}" title="${esc(sc)}">
           <span class="row spread"><b>${esc(x.code)}</b><span class="chip ${x.f.review ? 'turn' : ''}">${esc(st)}</span></span>

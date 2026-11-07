@@ -3,6 +3,7 @@ import { $, $$, api, CIRCLED, enc, esc, go, inline, LEVEL_NAME, md, plain, remem
 import { showDrawer } from './files.js';
 import { markNav, refreshNav } from './nav.js';
 import { loadProject, nextOfProject } from './overview.js';
+import { renderAutoDrawer } from './auto.js';
 import { route } from './main.js';
 
 // ---------- AI session ----------
@@ -33,6 +34,8 @@ export async function refreshSlices() {
 export function anyRunning() { return state.sessions.some(s => s.running); }
 
 export function renderAiHead() {
+  const au = state.project && state.project.autorun;
+  if (au && au.running) { $('#aiDot').className = 'dot busy'; $('#aiLabel').textContent = `全自動執行中（第 ${au.round || 1} 圈）`; return; }
   const s = curSession();
   const run = state.sessions.find(x => x.running);
   const ask = run && (state.approvals[run.id] || []).length;
@@ -55,6 +58,9 @@ export async function renderAi() {
   const box = $('#aiSession');
   const warn = state.gitignored === false ? `<div class="small" style="background:var(--hint);padding:6px 10px;border-radius:10px">設計 repo 的 <code>.gitignore</code> 沒有排除 <code>.domain-web/</code>（AI session 的登記與紀錄放在這裡），請加上這一行。</div>` : '';
   if (state.pending) { box.innerHTML = warn + state.pending.html; state.pending.bind(); return; }
+  const au = state.project && state.project.autorun;
+  if (au && au.running) return renderAutoDrawer(au);
+  if ($('#aiLog').dataset.auto) { $('#aiLog').dataset.auto = ''; setAiBusy(false); }   // 全自動剛停下來：還原輸入框
   const s = curSession();
   if (!aiScope()) { box.innerHTML = warn + '<div class="muted">在總覽頁時，AI 對話跟著你按的按鈕走（規劃或某條切片）。</div>'; $('#aiLog').innerHTML = ''; return; }
   if (!s) { box.innerHTML = warn + `<div><b>${esc(scopeName(aiScope()))}</b> 還沒有 AI session。按畫面上的按鈕交給 AI 時會自動開一個。</div>`; $('#aiLog').innerHTML = ''; return; }
@@ -117,6 +123,7 @@ export async function renderAiNext(s) {
     review: it && it.f.review && [`開始審查 ${it.code} ${stepName(it.f.review)}`, `#/r/${enc(it.f.review.path)}`],
     slice: it && [it.f.next && it.f.next.status === '待檢查' ? `到 ${it.code} 首頁，看 ${step} 的下一步（凍結、重做或回頭修改）` : `到 ${it.code} 首頁，交給 AI 做 ${step}`, `#/s/${enc(it.code)}`],
     pick: it && ['開始下一條切片：' + it.code, `#/new/${enc(it.code)}`],
+    auto: ['看全自動的進度', '#/auto'],
     verify: it && [`到 ${it.code} 首頁，做 ⑥ 驗證`, `#/s/${enc(it.code)}`],
   }[N.kind];
   if (!act) return;

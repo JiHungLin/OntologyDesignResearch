@@ -1,8 +1,9 @@
 // 全自動：開始、停止、中斷跑步器（tools/auto_run.py），看每一圈做了什麼
-import { $, $$, api, esc, inline, md, setTop, state, toast } from './core.js';
-import { addStep, TOOL_NAME } from './ai.js';
+import { $, $$, api, CIRCLED, esc, inline, md, setTop, state, toast } from './core.js';
+import { addStep, renderAi, renderAiHead, TOOL_NAME } from './ai.js';
 import { markNav } from './nav.js';
-import { loadProject, showTopic } from './overview.js';
+import { loadProject, planSlices, showTopic } from './overview.js';
+import { route } from './main.js';
 
 let timer = null;
 
@@ -69,23 +70,37 @@ export async function renderAuto(log) {
   if ($('#aKill')) $('#aKill').onclick = () => { $('#aKillBox').hidden = false; $('#aKill').disabled = true; };
   if ($('#aKillNo')) $('#aKillNo').onclick = () => { $('#aKillBox').hidden = true; $('#aKill').disabled = false; };
   if ($('#aKillYes')) $('#aKillYes').onclick = () => { $('#aKillYes').disabled = true; post('/api/auto/interrupt', null, '已強制中斷；下次開始時第一圈先收拾'); };
-  if (cur) follow(cur, st.running);
+  if (cur) follow($('#aLog'), cur, st.running, () => renderAuto());
+}
+
+// 右側「AI 對話」抽屜：全自動在跑時跟著這一圈（輸入框不能用，跑的時候網頁不開 AI 工作）
+let drawerLog = null;
+export function renderAutoDrawer(st) {
+  $('#aiSession').innerHTML = `<div><b>全自動</b>・第 ${st.round || 1} 圈　<span class="chip turn">執行中</span>${st.stopping ? '　這一圈做完就關閉' : ''}</div>
+    <div class="small muted">每一圈是一個新的 AI session；這裡跟著正在跑的那一圈。開始、關閉、看之前的圈在<a href="#/auto">全自動頁</a>。</div>`;
+  $('#aiNext').innerHTML = '';
+  $('#aiInput').disabled = true; $('#aiSend').disabled = true;
+  $('#aiInput').placeholder = '全自動在跑，網頁不開 AI 工作；要停到全自動頁按「關閉全自動」';
+  const log = $('#aiLog');
+  if (drawerLog === st.log && log.dataset.auto === st.log) return;   // 已經在跟這一圈
+  drawerLog = st.log;
+  log.innerHTML = ''; log.dataset.auto = st.log; log.dataset.sid = '';
+  follow(log, st.log, true, null, () => drawerLog === st.log && log.dataset.auto === st.log);
 }
 
 // 照 AI 對話抽屜的樣子畫一圈的事件；這一圈還在跑就每 3 秒接著讀
-function follow(log, live) {
-  const box = $('#aLog');
+function follow(box, log, live, onEnd, still) {
   let n = 0;
   const tick = async () => {
-    if (!document.body.contains(box)) return;   // 換頁了
+    if (!document.body.contains(box) || (still && !still())) return;   // 換頁了、抽屜換成別的內容
     let r;
     try { r = await api(`/api/auto/events?log=${encodeURIComponent(log)}&after=${n}`); } catch (e) { return; }
     const atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
     for (const ev of r.events) show(box, ev);
     n += r.events.length;
     if (atEnd) box.scrollTop = box.scrollHeight;
-    if (r.running) { timer = setTimeout(tick, 3000); return; }
-    if (live) { live = false; renderAuto(); }   // 這一圈結束：重畫，看跑步器停了還是進到下一圈
+    if (r.running) { setTimeout(tick, 3000); return; }
+    if (live && onEnd) { live = false; onEnd(); }   // 這一圈結束：重畫，看跑步器停了還是進到下一圈
   };
   tick();
 }
@@ -110,5 +125,70 @@ setInterval(async () => {
     state.project.autorun = st;
     showTopic(state.project);
     if (was.running && !st.running) toast(`全自動停下來了：${st.reason || ''}`);
+    // 在全自動頁上：開始、停下來、進到下一圈都重畫（跑步器不依賴網頁，網頁要自己看）
+    const changed = was.running !== st.running || was.round !== st.round || was.stopping !== st.stopping;
+    if (st.running) { await pullLatest(st); const el = $('#autoLatest'); if (el && latest.text) el.textContent = '正在：' + latest.text; }
+    // 開始、停下來、進到下一圈：檔案的狀態變了，整頁重畫（橫幅、鎖、切片的狀態跟著更新）；抽屜開著就跟到下一圈
+    if (changed) { await route(); if (!$('#aiDrawer').hidden) renderAi(); }
+    renderAiHead();
   } catch (e) { /* 伺服器暫時連不到：下次再試 */ }
 }, 10000);
+
+// ---------- 全自動在跑時，其他頁面：只能看，看得到推進到哪 ----------
+
+export const autoOn = () => !!(state.project && state.project.autorun && state.project.autorun.running);
+
+// 全自動正在推進的切片：①～⑤ 還沒做完、有審查頁、或 ⑥ 已開始的（同總覽的「現在在做的切片」）
+export function autoSlice(P) {
+  const list = planSlices(P).filter(x => x.f && x.f.next);
+  return list.find(x => x.f.review || x.f.next.n <= 5 || x.f.next.status !== '未開始') || list[0] || null;
+}
+
+export function autoProgress(P) {
+  const x = autoSlice(P);
+  if (!x) return '規劃';
+  const nx = x.f.next;
+  return `${x.code} ${CIRCLED[nx.n]}${nx.status === '待檢查' ? ' 送審中（AI 代答、凍結或回頭修改）' : nx.status === '凍結中' ? ' 凍結中' : nx.status === '未開始' ? ' 還沒開始' : ' ' + nx.status}`;
+}
+
+const latest = { log: null, n: 0, text: '' };
+function latestText(ev) {
+  if (ev.kind === 'tool') return `${TOOL_NAME[ev.name] || ev.name}${ev.sub ? '（子代理）' : ''}：${String(ev.brief || '').slice(0, 100)}`;
+  if (ev.kind === 'text' && !ev.sub) return String(ev.text).replace(/\s+/g, ' ').slice(0, 140);
+  return '';
+}
+async function pullLatest(st) {
+  if (latest.log !== st.log) { latest.log = st.log; latest.n = 0; latest.text = ''; }
+  const r = await api(`/api/auto/events?log=${encodeURIComponent(st.log)}&after=${latest.n}`);
+  latest.n = r.n;
+  for (const ev of r.events) latest.text = latestText(ev) || latest.text;
+}
+
+export function autoBanner() {
+  const P = state.project, st = P.autorun;
+  return `<section class="card auto-banner" id="autoBanner"><div class="row spread"><div>
+      <b>全自動執行中・第 ${st.round || 1} 圈</b>　${esc(autoProgress(P))}${st.stopping ? '　（這一圈做完就關閉）' : ''}
+      <div class="small" id="autoLatest">${latest.log === st.log && latest.text ? '正在：' + esc(latest.text) : ''}</div>
+      <div class="small muted">人的關卡由 AI 代答，這段時間網頁只能看、不能作答或交給 AI。</div></div>
+    <a class="btn" href="#/auto">看進度、關閉全自動</a></div></section>`;
+}
+
+// 每次換頁後（main.js 的 route）：在跑就在頁面最上面放橫幅、把這一頁的按鈕與輸入鎖住（伺服器也會擋）
+export function applyAutoLock() {
+  if (!autoOn() || location.hash.startsWith('#/auto')) return;
+  const app = $('#app');
+  if (!$('#autoBanner')) app.insertAdjacentHTML('afterbegin', autoBanner());
+  lockControls();
+}
+
+function lockControls() {
+  if (location.hash.startsWith('#/auto')) return;
+  $$('#app button:not([disabled]), #app input:not([disabled]), #app textarea:not([disabled]), #app select:not([disabled])').forEach(el => {
+    if (el.closest('#autoBanner')) return;
+    el.disabled = true; el.title = '全自動執行中，只能看';
+  });
+}
+
+// 有些頁面在 route 結束後還會非同步重畫（例：切片首頁讀完審查頁再畫一次）：#app 有變動就再套一次
+new MutationObserver(() => { if (autoOn() && !$('#autoBanner')) applyAutoLock(); else if (autoOn()) lockControls(); })
+  .observe(document.getElementById('app'), { childList: true, subtree: true });

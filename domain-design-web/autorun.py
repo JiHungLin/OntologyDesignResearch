@@ -106,6 +106,14 @@ def start(max_steps=40, until_design_done=True):
     # 自己一個程序群組：伺服器重開不會帶走它，中斷時連同這一圈的 claude 一起結束
     _proc = subprocess.Popen(cmd, cwd=kit.repo(), stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     log.close()
+    # 等跑步器寫好這一次的 state.json 才回：不然網頁馬上重畫時讀到的還是上一次（已停下來），看起來像沒開始
+    for _ in range(100):
+        st = state()
+        if st.get('pid') == _proc.pid or _proc.poll() is not None:
+            break
+        time.sleep(0.05)
+    if _proc.poll() is not None and not state().get('running'):
+        raise RuntimeError(f'跑步器一開始就停了（看 .domain-auto/runner.log）：{state().get("reason") or "沒有寫出狀態"}')
     return {'pid': _proc.pid}
 
 

@@ -12,7 +12,7 @@ import { renderHub, renderStart } from './overview.js';
 import { renderCore } from './coreview.js';
 import { attachPanZoom } from './panzoom.js';
 import { renderDraft, renderEq, renderKickoff, renderPlan } from './plan.js';
-import { renderAuto } from './auto.js';
+import { applyAutoLock, renderAuto } from './auto.js';
 
 // ---------- 路由 ----------
 // #/ 總覽　#/start 主題草案　#/plan 規劃　#/draft/<檔> 推想草稿　#/new/<切片> 開始切片　#/eq/<切片> 專家問題
@@ -50,7 +50,7 @@ export async function route() {
     if (parts[0] === 'f' && parts[1]) return await renderFile(parts.slice(1).join('/'));
     if (parts[0] === 'core') return await renderCore(parts[1] || 'entities', parts[2] || null);
     return await renderHub();
-  } catch (e) { toast(e.message); } finally { refreshNav(); }
+  } catch (e) { toast(e.message); } finally { refreshNav(); applyAutoLock(); }
 }
 
 document.addEventListener('click', e => {

@@ -629,3 +629,4 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
 .auto-log { max-height: 60vh; overflow-y: auto; }
 .auto-rounds li { margin: 3px 0; }
 .auto-rounds li.on { font-weight: 700; }
+.auto-banner { margin-bottom: 12px; border: 3px solid var(--ink); background: var(--turn); }
