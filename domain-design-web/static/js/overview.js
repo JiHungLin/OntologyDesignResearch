@@ -64,6 +64,9 @@ export function nextOfProject(P) {
   }
   const nxt = list.find(x => !x.f && x.row && x.row['狀態'] === '候選');
   if (nxt) return { kind: 'pick', item: nxt };
+  // 地圖上的切片都開始過了：還有 ⑥ 沒做的（設計完成、待驗證）就去驗證；都完成才是「設计完成」
+  const verify = list.find(x => x.f && x.f.next);
+  if (verify) return { kind: 'verify', item: verify };
   return { kind: 'done' };
 }
 
@@ -78,8 +81,10 @@ export async function renderHub() {
   const pendingDrafts = P.drafts.filter(d => d.pending).length;
   const toProvide = plan ? plan.inventory.filter(x => x['狀態'] === '待提供').length : 0;
   const pq = plan ? plan.pending.filter(x => x['狀態'] !== '已回覆' && !x['答覆']).length : 0;
-  const stage = { start: 0, 'plan-ai': 1, plan: 1, running: N.scope === '_plan' ? 1 : 2, pick: 2, slice: 2, review: 2, done: 3 }[N.kind];
-  const journey = ['主題草案', '規劃：資料、切片地圖、名詞', '一條一條切片做 ①～⑤', '設計完成，有系統再做 ⑥'];
+  // 整個專案的五個階段（不是切片的 ①～⑥）：切片各自往前走，每條做到哪裡看下面的切片卡片
+  const stage = { start: 0, 'plan-ai': 1, plan: 1, running: N.scope === '_plan' ? 1 : 2, pick: 2, slice: 2, review: 2, verify: 2, done: 4 }[N.kind];
+  const journey = [['主題草案', ''], ['規劃', '資料、切片地圖、名詞'], ['做切片', '每條 ①～⑤ 設計、⑥ 驗證'],
+    ['設計完成', '地圖上的切片都完成（含 ⑥）'], ['系統完成', '整合成可以使用的系統（流程還沒定義）']];
 
   let hero;
   if (N.kind === 'start') hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">從這裡開始</span>
@@ -117,14 +122,20 @@ export async function renderHub() {
       <h1>${esc(r['切片'])}</h1><p class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'])}</p>
       <p class="small">建議順序 ${esc(r['建議順序'])}${r['依賴'] && r['依賴'] !== '—' ? `　依賴：${esc(r['依賴'])}` : ''}</p></div>
       <a class="btn big yellow" href="#/new/${enc(r['切片'])}">開始這一條<span class="arr">›</span></a></section>`;
-  } else hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>地圖上的切片都做完了</h1>
-      <p class="muted">有新的情境或需求，到「規劃」補進地圖。</p><a class="btn big" href="#/plan">看規劃</a></section>`;
+  } else if (N.kind === 'verify') {
+    const f = N.item.f;
+    hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">還差 ⑥</span>
+      <h1>${esc(f.slice)}：${f.next.status === '未開始' ? '設計完成，接著做 ⑥ 驗證' : '⑥ 驗證還沒做完'}</h1><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p>
+      <p class="small muted">地圖上的切片都開始過了；每條都做完 ⑥ 才算「設計完成」。</p></div>
+      <a class="btn big yellow" href="#/s/${enc(f.slice)}">打開<span class="arr">›</span></a></section>`;
+  } else hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>設計完成：地圖上的切片都做完了（含 ⑥）</h1>
+      <p class="muted">下一個階段「系統完成」——整合成可以使用的系統（介面、部署）——流程還沒定義。有新的情境或需求，到「規劃」補進地圖。</p><a class="btn big" href="#/plan">看規劃</a></section>`;
 
   const eqTotal = P.slices.reduce((n, x) => n + x.eq_open, 0);
   const started = list.filter(x => x.f), waiting = list.filter(x => !x.f);
   const doing = started.find(x => x.f.next && x.f.next.n <= 5);   // 一次只做一條：這條做完前不能開新的
   $('#app').innerHTML = `
-    <nav class="journey">${journey.map((j, k) => `<div class="${k < stage ? 'done' : k === stage ? 'now' : ''}"><b>${k + 1}</b><span>${esc(j)}</span></div>`).join('')}</nav>
+    <nav class="journey" aria-label="專案階段">${journey.map(([j, d], k) => `<div class="${k < stage ? 'done' : k === stage ? 'now' : ''}"><b>${k < stage ? '✓' : '階段 ' + (k + 1)}</b><span>${esc(j)}${d ? `<small>${esc(d)}</small>` : ''}</span></div>`).join('')}</nav>
     ${waitingCard('_plan')}
     ${hero}
     ${list.length ? `<section><div class="row spread"><h2 style="margin:0">切片</h2>${plan ? `<a href="#/plan">切片地圖${plan.agreed ? '（已同意）' : '（討論中）'}</a>` : ''}</div>
