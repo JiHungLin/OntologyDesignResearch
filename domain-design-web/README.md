@@ -86,6 +86,7 @@ AI 停下來問人時（例：規劃中的取捨），最後一則回覆裡的�
 | `panzoom.js` | 圖的縮放與平移：拖曳移動、Ctrl／⌘＋滾輪或觸控板捏合縮放、－／＋、全圖、1:1；`main.js` 在 `.diagram` 裡的 svg 出現時自動掛上，重畫時保留位置與倍率 |
 | `overview.js` | 總覽與主題草案 |
 | `plan.js` | 規劃：加資料、切片地圖、推想草稿、開始一條切片、專家問題 |
+| `auto.js` | 全自動頁（`#/auto`）：開始、停止、立刻中斷跑步器，每一圈的 AI 對話、被禁止清單擋下的指令；頂列「全自動執行中・第 n 圈」每 10 秒更新 |
 | `home.js` | 切片首頁 |
 | `decide.js`、`confirm.js`、`flows.js`、`golden.js`、`finish.js` | 審查的四個任務：決定、看圖確認（`flows.js` 是 ③ 的狀態圖）、黃金案例、抽查與簽名 |
 
@@ -121,6 +122,14 @@ AI 停下來問人時（例：規劃中的取捨），最後一則回覆裡的�
 - **權限**：網頁用 `--permission-mode acceptEdits`（只限設計 repo 內的檔案修改）加一份允許清單：讀寫檔、子代理、skills、網路搜尋與讀取、`python3 tools/*`、`git status/diff/log/show/tag/add/commit/rev-parse`、`ls`、`cp`、`mkdir`、`curl`、`date`、`cd`，以及唯讀的 `cat`、`head`、`tail`、`wc`、`sed -n`、`echo`、`sort`、`diff`（串接的指令每一段都要在清單內才會過；系統提示也請 AI 一次一個指令、不用 for 迴圈，下載的原文放 `.domain-web/tmp/`）。另外附一個小工具 `fetch_text.py`：AI 用 `python3 <網頁資料夾>/fetch_text.py <網址> [檔名]` 下載公開來源，原文存到 `.domain-web/tmp/`，HTML、PDF 轉成同名 `.txt`（照原文、不摘要）；這是允許清單裡唯一能跑的 python（設計 repo 的 `tools/*` 之外）。被擋下的指令在 AI 對話裡收成一塊，AI 多半會改用別的方法繼續。同一個設計 repo 一次只跑一件 AI 工作（所有 session 共用同一份工作目錄與 git，CHANGELOG、`core/`、commit、tag 會互相踩到），伺服器和畫面都會擋；要多條切片平行，照流程由不同的人各自 clone、開分支、用 PR 合併。網頁也一次只做一條切片：還有切片 ①～⑤ 沒都凍結時，不能開新的切片（開切片頁只顯示「要等 X 做完」，伺服器也拒絕建立新切片的 session）；規劃不受限。注意：`cp` 只要加選項（`-r` 等）就一定要人核准（Claude Code 內建的路徑安全規則，`--allowedTools` 放行不了；2026-10-28 用 2.1.312 實測），所以系統提示請 AI 先 `mkdir -p` 再逐檔 `cp`。另外用 `--settings` 掛一個 PreToolUse hook（`readonly_hook.py`）：串接的指令（`cd …; for …; cat …`、`grep … | head`、`awk`、`sed -n`）只要每一段都只讀、讀的路徑都在設計 repo 裡就放行（`git` 只算 `status`、`diff`、`log`、`show` 等讀的子指令）；自己寫的 python（`python3 - <<EOF`、`python3 -c`）直接拒絕並在理由裡寫改用什麼（挑錯、核對的子代理拿不到 `web_prompt.md`，只能從被擋的理由學到）；其他照原本的規則。附加給 AI 的系統提示在 `web_prompt.md`，每次執行時讀，改了不用重開伺服器。清單之外、hook 沒有直接拒絕的指令（`git push`、`rm`、第 ⑥ 步的 `docker`、`pytest`、`pip`…）**在網頁上逐條核准**（2026-11-04，`docs/01` ⑥「實作指令與執行紀錄」）：`claude -p` 加 `--permission-prompt-tool mcp__web__approve`，`--mcp-config` 掛網頁附的 `approve_mcp.py`（stdio MCP）；它把請求寫成 `.domain-web/approvals/<session>/<請求>.json`，等網頁寫回 `<請求>.decision.json` 再回給 claude（等 30 分鐘沒人按就當作不放行；子程序的 `MCP_TOOL_TIMEOUT` 設 40 分鐘）。AI 對話抽屜自動打開、頂列顯示「AI 等你核准指令」，卡片寫出用途（Bash 的 description）與完整指令，人填核准人（＝⑥ 的執行者）按「放行這一次」或「不放行」（可寫原因，AI 照著改）；決定記進對話紀錄。`tools/run_evidence.py` 雖然在 `tools/` 底下，hook 一律回 `ask`，所以也要核准。注意：Claude Code 自己判定為安全的指令（例：`uname`）與 `acceptEdits` 下工作目錄內的檔案指令（例：`touch`）不會跳出核准（2026-11-04 用 2.1.318 實測）。清單可用環境變數 `DOMAIN_WEB_ALLOWED`（逗號分隔）覆寫。使用者自己的 Claude Code 設定仍然有效。
 - **網頁附加的系統提示**（`--append-system-prompt`）只說明執行環境：使用者看不到選項介面，要問人時照 0.2「問人的方式」寫成「問題／例子／A（建議）：做法 → 結果／B／其他」，網頁會把它變成選擇題卡片。流程規則仍以工具包為準。
 - `CLAUDE_BIN` 環境變數可以指定 `claude` 的路徑（測試用假的 `tests/fake_claude.py`）。
+
+## 全自動（`autorun.py`）
+
+全自動的跑步器是設計 repo 的 `tools/auto_run.py`，不依賴網頁（終端機照樣能跑，網頁關掉或伺服器重開它照樣跑）。網頁只是開始與控制它的地方：
+- **開始**：`python3 tools/auto_run.py --max-steps N [--until-design-done]`，自己一個程序群組，輸出寫 `.domain-auto/runner.log`。執行模式要是全自動、網頁沒有 AI 工作在跑。
+- **進度**：讀 `.domain-auto/state.json`（跑步器寫：pid、第幾圈、這一圈的紀錄檔、停下來的原因；pid 不在了就當作停了）、`runs.md`、`runs/<圈>.jsonl`（用 AI 對話的事件格式畫）、`commands.jsonl` 裡被擋下的。
+- **停止**：建立 `.domain-auto/stop`，跑步器下一圈開始前看到就停（這一圈做完、紀錄寫完）。**立刻中斷**：結束整個程序群組（含這一圈的 claude），做到一半的修改留在工作區，下次第一圈的 `/domain-status` 會接著做。兩種都不改執行模式。
+- **鎖**：全自動在跑時，審查頁作答、接受草稿、送訊息給 AI、切換執行模式都回 409（兩邊共用同一份工作目錄與 git）。
 
 ## 測試
 

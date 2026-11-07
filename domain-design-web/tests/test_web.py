@@ -539,3 +539,63 @@ def test_plan_mode_toggle(repo, client):
     assert '| 執行模式 | 手動 |' in plan and plan.count('執行模式') == 1
     log = open(os.path.join(str(repo), 'slices', 'CHANGELOG.md'), encoding='utf-8').read()
     assert log.index('執行模式改為手動') < log.index('執行模式改為全自動')   # 最新的在最上面
+
+
+FAKE_RUNNER = '''import json, os, sys, time
+d = ".domain-auto"; os.makedirs(os.path.join(d, "runs"), exist_ok=True)
+def save(**kw):
+    st.update(kw); json.dump(st, open(d + "/state.json.tmp", "w")); os.replace(d + "/state.json.tmp", d + "/state.json")
+st = {"pid": os.getpid(), "running": True, "started": "2026-11-08T10:00:00", "round": 1, "log": "x_1.jsonl", "args": sys.argv[1:]}
+open(d + "/runs/x_1.jsonl", "w").write(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "寫 ④"}]}}) + "\\n")
+open(d + "/runs.md", "a").write("- x 第 1 圈：繼續　寫 ④　（runs/x_1.jsonl）\\n")
+save()
+for _ in range(200):
+    if os.path.exists(d + "/stop"):
+        os.remove(d + "/stop"); save(running=False, reason="有人按了停止"); sys.exit(0)
+    time.sleep(0.05)
+'''
+
+
+def _wait(cond, n=100):
+    import time
+    for _ in range(n):
+        if cond():
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def test_autorun_from_web(repo, client):
+    # 網頁開始、停止、中斷全自動跑步器（tools/auto_run.py）；跑的時候網頁不能作答、不能開 AI 工作、不能切換執行模式
+    import autorun
+    os.makedirs(os.path.join(str(repo), 'tools'), exist_ok=True)
+    open(os.path.join(str(repo), 'tools', 'auto_hook.py'), 'w').close()
+    open(os.path.join(str(repo), 'tools', 'auto_run.py'), 'w').write(FAKE_RUNNER)
+    assert client.post('/api/auto/start', json={}).status_code == 400          # 手動模式不能開始
+    client.post('/api/plan/mode', json={'mode': '全自動', 'who': '甲'})
+    r = client.post('/api/auto/start', json={'max_steps': 5, 'until_design_done': True})
+    assert r.status_code == 200
+    assert _wait(lambda: client.get('/api/auto').json()['state']['running'])
+    a = client.get('/api/auto').json()
+    assert a['state']['args'] == ['--max-steps', '5', '--until-design-done'] and a['rounds'][0]['log'] == 'x_1.jsonl'
+    assert client.get('/api/auto/events?log=x_1.jsonl').json()['events'][0]['text'] == '寫 ④'
+    assert client.get('/api/auto/events?log=../state.json').status_code == 404
+    assert client.get('/api/project').json()['autorun']['running']
+    assert client.post('/api/auto/start', json={}).status_code == 409          # 已經在跑
+    assert client.post('/api/plan/mode', json={'mode': '手動', 'who': '甲'}).status_code == 409
+    assert client.post('/api/review/answer', json={'path': REVIEW, 'line': 1, 'value': 'A', 'digest': ''}).status_code == 409
+    s = client.post('/api/sessions', json={'slice': '_plan', 'purpose': '規劃', 'handoff': ''}).json()
+    assert client.post(f"/api/sessions/{s['id']}/send", json={'text': 'hi'}).status_code == 409
+    # 停止：這一圈做完就停
+    assert client.post('/api/auto/stop').status_code == 200
+    assert _wait(lambda: not client.get('/api/auto').json()['state']['running'])
+    assert client.get('/api/auto').json()['state']['reason'] == '有人按了停止'
+    assert client.post('/api/auto/stop').status_code == 409
+    # 中斷：立刻結束整個程序群組
+    client.post('/api/auto/start', json={})
+    assert _wait(lambda: client.get('/api/auto').json()['state']['running'])
+    pid = client.get('/api/auto').json()['state']['pid']
+    assert client.post('/api/auto/interrupt').status_code == 200
+    st = client.get('/api/auto').json()['state']
+    assert not st['running'] and '在網頁上中斷' in st['reason']
+    assert _wait(lambda: autorun._proc.poll() is not None) and autorun._proc.pid == pid

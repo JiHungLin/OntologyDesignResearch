@@ -621,3 +621,9 @@ dialog::backdrop { background: rgba(22, 18, 58, .45); }
 .crow .row-ask { font-weight: 700; font-size: 15px; color: var(--ink); background: #FFF6C7; border-radius: 8px; padding: 6px 10px; }
 .gc-paper { font-size: 13px; color: var(--muted); }
 .gc-paper summary { cursor: pointer; }
+
+/* 全自動 */
+.brand-sub.auto-live { opacity: 1; color: var(--done); text-decoration: none; }
+.auto-log { max-height: 60vh; overflow-y: auto; }
+.auto-rounds li { margin: 3px 0; }
+.auto-rounds li.on { font-weight: 700; }

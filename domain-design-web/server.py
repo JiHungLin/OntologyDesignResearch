@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import autorun
 import core_view
 import evidence
 import kit
@@ -44,6 +45,12 @@ REVIEW_NAME = re.compile(r'^(\d{4}-\d{2}-\d{2})_(.+)\.md$')
 @app.get('/')
 def index():
     return FileResponse(os.path.join(HERE, 'static', 'index.html'))
+
+
+def _no_autorun():
+    # 全自動在跑時，網頁不改設計檔（審查頁作答、接受草稿、開 AI 工作）：兩邊共用同一份工作目錄與 git
+    if autorun.running():
+        raise HTTPException(409, '全自動正在跑（規劃頁看進度），停下來之後才能在網頁上改')
 
 
 def _review_path(rel):
@@ -157,7 +164,7 @@ def get_project():
     return {'repo': kit.repo(), 'gitignored': sessions.gitignored(), 'topic': project.topic(),
             'plan': p, 'sketch': project.sketch(), 'drafts': project.drafts(), 'inputs': project.inputs(),
             'core': project.files_under('core'),
-            'slices': slices, 'plan_session': sessions.active('_plan')}
+            'slices': slices, 'plan_session': sessions.active('_plan'), 'autorun': autorun.state()}
 
 
 class Topic(BaseModel):
@@ -201,6 +208,7 @@ class Accept(BaseModel):
 
 @app.post('/api/draft/accept')
 def post_accept(a: Accept):
+    _no_autorun()
     if not a.who.strip() or re.fullmatch(r'(?i)ai|claude', a.who.strip()):
         raise HTTPException(400, '接受者要寫人的名字')
     try:
@@ -218,12 +226,54 @@ class Mode(BaseModel):
 
 @app.post('/api/plan/mode')
 def post_mode(a: Mode):
+    _no_autorun()   # 跑的時候用「停止」：改執行模式會寫 PLAN.md、CHANGELOG，和這一圈的 AI 同時改
     if not a.who.strip() or re.fullmatch(r'(?i)ai|claude', a.who.strip()):
         raise HTTPException(400, '要寫人的名字')
     try:
         return {'mode': project.set_mode(a.mode, a.who.strip())}
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+# ---- 全自動跑步器（tools/auto_run.py）：開始、停止、中斷、進度 ----
+
+@app.get('/api/auto')
+def get_auto():
+    return {'state': autorun.state(), 'rounds': autorun.rounds(), 'denied': autorun.denied()}
+
+
+class AutoStart(BaseModel):
+    max_steps: int = 40
+    until_design_done: bool = True
+
+
+@app.post('/api/auto/start')
+def post_auto_start(a: AutoStart):
+    try:
+        return autorun.start(max(1, min(a.max_steps, 200)), a.until_design_done)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.post('/api/auto/{what}')
+def post_auto_stop(what: str):
+    if what not in ('stop', 'interrupt'):
+        raise HTTPException(404, '沒有這個動作')
+    try:
+        (autorun.stop if what == 'stop' else autorun.interrupt)()
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    return {'state': autorun.state()}
+
+
+@app.get('/api/auto/events')
+def get_auto_events(log: str, after: int = 0):
+    try:
+        return autorun.events(log, after)
+    except KeyError:
+        raise HTTPException(404, '找不到這一圈的紀錄')
 
 
 def _criteria(f):
@@ -347,6 +397,7 @@ class Answer(BaseModel):
 
 
 def _write(fn, a, *args):
+    _no_autorun()
     p = _review_path(a.path)
     try:
         return {'digest': fn(p, a.line, *args, expect_digest=a.digest)}
@@ -450,6 +501,7 @@ class Message(BaseModel):
 @app.post('/api/sessions/{sid}/send')
 async def send(sid: str, m: Message):
     """在背景交給 AI；進度用 /events 取（重新整理頁面也接得回來）。"""
+    _no_autorun()
     try:
         sessions.start(sid, m.text)
     except KeyError:

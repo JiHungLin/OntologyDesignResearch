@@ -1040,6 +1040,25 @@ class TestAuto(Base):
         self.assertNotIn('第 2 圈', out)
         self.assertIn('執行模式已改回手動', out)
 
+    def test_runner_stop_file_and_state(self):
+        # 網頁的「停止」建立 .domain-auto/stop：這一圈做完就停，執行模式不變；state.json 記第幾圈、停下來的原因
+        import json
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n')
+        claude = self.fake_claude(['全自動：繼續'] * 5)
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('import os\nos.makedirs(".domain-auto", exist_ok=True)\nopen(".domain-auto/stop", "w").close()\n')
+        code, out = run('auto_run.py', '--claude', claude, cwd=self.dir)
+        self.assertIn('第 1 圈：繼續', out)
+        self.assertNotIn('第 2 圈', out)
+        self.assertIn('有人按了停止', out)
+        st = json.load(open(os.path.join(self.dir, '.domain-auto', 'state.json'), encoding='utf-8'))
+        self.assertFalse(st['running'])
+        self.assertEqual(st['round'], 1)
+        self.assertIn('有人按了停止', st['reason'])
+        self.assertTrue(st['log'].endswith('_1.jsonl'))
+        self.assertFalse(os.path.exists(os.path.join(self.dir, '.domain-auto', 'stop')))
+        self.assertIn('全自動 |', open(os.path.join(self.dir, 'slices', 'PLAN.md'), encoding='utf-8').read())
+
     def write(self, rel, text):
         p = os.path.join(self.dir, rel)
         os.makedirs(os.path.dirname(p), exist_ok=True)

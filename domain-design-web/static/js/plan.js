@@ -209,9 +209,9 @@ export async function renderPlan() {
       <div class="row spread"><div><div class="label">執行模式</div>
         <b>${plan.auto ? '全自動' : '手動'}</b>
         <p class="muted small" style="margin:4px 0 0;max-width:46em">${plan.auto
-          ? '人的關卡先由 AI 代答並標「AI（自動）」，你事後看、改；原文核對、正式簽核 ⑥ 仍要你。在終端機執行 <code>python3 tools/auto_run.py</code> 連續往下做；改回手動後，跑步器在這一圈結束時停下來。'
+          ? '人的關卡先由 AI 代答並標「AI（自動）」，你事後看、改；原文核對、正式簽核 ⑥ 仍要你。到<a href="#/auto">全自動頁</a>開始、停止、看每一圈做了什麼（終端機的 <code>python3 tools/auto_run.py</code> 也可以）。'
           : '每一步停下來等你審查、核准。改成全自動後，人的關卡先由 AI 代答並標記，你事後再看（試用中）。'}</p></div>
-        <button class="btn" id="modeToggle" ${running ? 'disabled' : ''}>${plan.auto ? '改回手動' : '改成全自動'}</button></div>
+        <div class="row">${plan.auto ? `<a class="btn primary" href="#/auto">${state.project.autorun && state.project.autorun.running ? '看進度' : '開始全自動'}</a>` : ''}<button class="btn" id="modeToggle" ${running || (state.project.autorun && state.project.autorun.running) ? 'disabled' : ''}>${plan.auto ? '改回手動' : '改成全自動'}</button></div></div>
       <p class="muted small" style="margin:6px 0 0">切換只影響之後的動作，會記在規劃的變更紀錄；已經由 AI 作答的審查頁照樣留著。</p>
     </section>
     <aside class="basket card lift" id="basket" hidden></aside>`;

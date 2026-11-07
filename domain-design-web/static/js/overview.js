@@ -4,6 +4,7 @@ import { STEP_INFO } from './home.js';
 import { bindWaiting, openAi, runAi, runningCard, waitingCard } from './ai.js';
 import { markNav, narrow } from './nav.js';
 import { inputDialog, needFetch } from './plan.js';
+import { autoBadge } from './auto.js';
 
 // ---------- 總覽：整個 domain 走到哪 ----------
 
@@ -15,12 +16,12 @@ export function topicName(P) {
   return [...new Set(ds)].join('、');
 }
 
-function showTopic(P) {
+export function showTopic(P) {
   const name = topicName(P);
   const b = $('.brand');
   // 全自動模式（docs/01 0.2）：標在頂列，人一眼知道這裡的審查頁、黃金案例是 AI 代答的，要事後看
   const auto = P.plan && P.plan.auto ? '<span class="brand-sub" title="人的關卡由 AI 代答並標記 AI（自動），事後再看、再改">全自動</span>' : '';
-  if (b) b.innerHTML = (name ? `${esc(name)}<span class="brand-sub">DOMAIN 設計</span>` : 'DOMAIN 設計') + auto;
+  if (b) b.innerHTML = (name ? `${esc(name)}<span class="brand-sub">DOMAIN 設計</span>` : 'DOMAIN 設計') + (autoBadge(P.autorun) || auto);
   document.title = name ? `${name}｜Domain 設計` : 'Domain 設計';
 }
 

@@ -12,10 +12,11 @@ import { renderHub, renderStart } from './overview.js';
 import { renderCore } from './coreview.js';
 import { attachPanZoom } from './panzoom.js';
 import { renderDraft, renderEq, renderKickoff, renderPlan } from './plan.js';
+import { renderAuto } from './auto.js';
 
 // ---------- 路由 ----------
 // #/ 總覽　#/start 主題草案　#/plan 規劃　#/draft/<檔> 推想草稿　#/new/<切片> 開始切片　#/eq/<切片> 專家問題
-// #/core[/<分頁>/<項目>] 共用核心　#/s/<切片> 切片首頁　#/r/<審查頁>/decide/<n>　/confirm[/<Entity>]　/golden/<n>　/finish
+// #/auto[/<一圈的紀錄檔>] 全自動　#/core[/<分頁>/<項目>] 共用核心　#/s/<切片> 切片首頁　#/r/<審查頁>/decide/<n>　/confirm[/<Entity>]　/golden/<n>　/finish
 
 export async function route() {
   $('#fileDrawer').hidden = true;
@@ -42,6 +43,7 @@ export async function route() {
     state.path = null;
     if (parts[0] === 'start') return await renderStart();
     if (parts[0] === 'plan') return await renderPlan();
+    if (parts[0] === 'auto') return await renderAuto(parts[1] || null);
     if (parts[0] === 'draft' && parts[1]) return await renderDraft(parts.slice(1).join('/'));
     if (parts[0] === 'new' && parts[1]) return await renderKickoff(parts[1]);
     if (parts[0] === 'eq' && parts[1]) return await renderEq(parts[1]);
