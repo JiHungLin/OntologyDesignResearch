@@ -650,6 +650,11 @@ def test_auto_review_page(client, repo, monkeypatch):
     p = repo / 'slices/demo/reviews/2026-11-09_auto.md'
     p.write_text(p.read_text(encoding='utf-8').replace('| 處理 | （人答完後，AI 處理時寫：日期、CHANGELOG 哪一筆） |', '| 處理 | 2026-11-10 CHANGELOG 第一筆 |'), encoding='utf-8')
     assert client.get('/api/home', params={'slice': 'demo'}).json()['auto_review'] is None
+    # 同一天的第二份（<日期>-2_auto.md）也要列出來（HR-Domain-Auto 第二份原本網頁看不到）
+    (repo / 'slices/demo/reviews/2026-11-09-2_auto.md').write_text(AUTO_PAGE, encoding='utf-8')
+    h = client.get('/api/home', params={'slice': 'demo'}).json()
+    assert h['auto_review']['path'] == 'slices/demo/reviews/2026-11-09-2_auto.md'
+    assert [r['path'] for r in h['reviews'] if r['auto']][0].endswith('2026-11-09-2_auto.md')   # 新到舊
 
 
 def test_review_draft(client, repo, monkeypatch, tmp_path):

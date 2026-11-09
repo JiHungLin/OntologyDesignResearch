@@ -447,6 +447,32 @@ class TestLint(Base):
         self.assertNotIn('還沒作答', out)
         self.assertNotIn('    ✗', out.split('[審查頁]')[1].split('\n[')[0], out)
 
+    def test_review_old_verdict_of_step_reviewed_again(self):
+        # 同一份審查頁上，這一步之後改由更新的審查頁審查（檢查紀錄指到別份）：上一輪的「不通過」不擋凍結（HR-Domain-Auto hire-employee）
+        self.setup_review()
+        self.setup_review_filled()
+        p = self.slice_file('reviews/2026-10-27_03.md')
+        self.edit(p, '| ③ | 審查者甲 | 2026-10-27 | 通過 |', '| ② | 審查者甲 | 2026-10-27 | 不通過 |\n| ③ | 審查者甲 | 2026-10-27 | 通過 |')
+        code, out = self.lint('--freeze')
+        sec = out.split('[審查頁]')[1].split('\n[')[0]
+        self.assertNotIn('    ✗', sec, out)
+        self.assertIn('② 的結論是「不通過」：這一步已改由之後的審查頁審查', sec)
+        self.edit(p, '| ③ | 審查者甲 | 2026-10-27 | 通過 |', '| ③ | 審查者甲 | 2026-10-27 | 不通過 |')
+        code, out = self.lint('--freeze')
+        self.assertIn('③ 的結論是「不通過」，不是「通過」', out)
+
+    def test_superseded_relation_with_same_name(self):
+        # 同名關係一條已取代、一條仍有效：只算寫出已取代那條「從」的列（HR-Domain-Auto Person／Employer belongsToCustomer）
+        with open(os.path.join(self.dir, 'core/relations.md'), 'a', encoding='utf-8') as f:
+            f.write('| Person | belongsTo（歸屬） | Employment | 1 | 無 | 舊的歸屬 | [已取代: Person of，2026-11-09] |\n'
+                    '| Employer | belongsTo（歸屬） | Employment | 1 | 無 | 雇主的歸屬 | [候選] |\n')
+        with open(os.path.join(self.dir, self.slice_file('03_flows.md')), 'a', encoding='utf-8') as f:
+            f.write('\n雇主用 Employer belongsTo 找到客戶。\n\nbelongsTo 是租戶鍵。\n\n人用 Person belongsTo 找到客戶。\n')
+        code, out = self.lint()
+        sec = out.split('[已取消]')[1].split('\n[')[0]
+        self.assertEqual(sec.count('    ✗'), 1, sec)
+        self.assertIn('core/ 的 Person belongsTo 已取代', sec)
+
     def test_review_excerpt_must_match_line(self):
         self.setup_review(quote='CorrectLeaveOccurrence')
         code, out = self.lint()

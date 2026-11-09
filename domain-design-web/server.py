@@ -40,7 +40,14 @@ async def revalidate(request, call_next):
     return resp
 
 TEXT_EXT = {'.md', '.txt', '.yaml', '.yml', '.json', '.js', '.csv', '.py', '.log', '.sql', ''}
-REVIEW_NAME = re.compile(r'^(\d{4}-\d{2}-\d{2})_(.+)\.md$')
+# <日期>_<步驟>.md；同一天第二份全自動事後審查頁是 <日期>-2_auto.md（docs/02「全自動事後審查頁」）
+REVIEW_NAME = re.compile(r'^(\d{4}-\d{2}-\d{2})(?:-(?:\d+))?_(.+)\.md$')
+
+
+def _review_order(n):
+    """新到舊排序用：日期、同一天的第幾份（<日期>-2_…）。"""
+    m = re.match(r'^(\d{4}-\d{2}-\d{2})(?:-(\d+))?_', n)
+    return (m.group(1), int(m.group(2) or 1), n) if m else ('', 0, n)
 
 
 @app.get('/')
@@ -73,7 +80,7 @@ def status():
         rdir = os.path.join(kit.repo(), 'slices', s, 'reviews')
         reviews = []
         if os.path.isdir(rdir):
-            for n in sorted(os.listdir(rdir), reverse=True):
+            for n in sorted(os.listdir(rdir), key=_review_order, reverse=True):
                 m = REVIEW_NAME.match(n)
                 if not m:
                     continue

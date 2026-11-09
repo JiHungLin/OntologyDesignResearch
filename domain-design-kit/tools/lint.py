@@ -237,10 +237,17 @@ class Lint:
                 if x.get('status') in ('superseded', 'retired')]
         for x in gone:
             pat = word(x['name'])
+            # 關係可以同名（Person belongsToCustomer 已取代、Employer belongsToCustomer 仍有效）：
+            # 同名的還有有效的，只算寫出這條關係的「從」、沒寫出有效那條「從」的列
+            live = {r['domain'] for r in self.data.get('relations') or []
+                    if r.get('domain') and r['name'] == x['name'] and r.get('status') not in ('superseded', 'retired')}
+            label = f"{x['domain']} {x['name']}" if live else x['name']
             for f, no, h2, h3, text in self.lines():
-                if pat.search(text or ''):
-                    self.red('已取消', f"core/ 的 {x['name']} 已{'取代' if x['status'] == 'superseded' else '停用'}，"
-                                     f"仍被引用：{f}:{no}")
+                if not pat.search(text or ''): continue
+                if live and (not word(x['domain']).search(text) or any(word(d).search(text) for d in live)):
+                    continue
+                self.red('已取消', f"core/ 的 {label} 已{'取代' if x['status'] == 'superseded' else '停用'}，"
+                                 f"仍被引用：{f}:{no}")
         if not cancelled and not gone:
             print("    ✓ 通過（沒有取消或停用的項目）")
         else:
@@ -1013,7 +1020,12 @@ class Lint:
                 miss = [k for k in c if k != '步驟' and not c[k].strip()]
                 if miss: unanswered.append(f"{rel}:{no} 結論（{c['步驟']}）")
                 elif self.freeze and not c.get('結論', '').strip().startswith('通過'):
-                    self.red('審查頁', f"{rel}:{no} {c['步驟']} 的結論是「{c.get('結論')}」，不是「通過」")
+                    step = next((i + 1 for i, ch in enumerate('①②③④⑤⑥') if ch in c['步驟']), None)
+                    if step and step not in {self.STEP_OF[f] for f in files}:
+                        # 這一步之後另有審查頁（檢查紀錄指到更新的那份），這一列是上一輪的結論
+                        print(f"    • {rel}:{no} {c['步驟']} 的結論是「{c.get('結論')}」：這一步已改由之後的審查頁審查，不算")
+                    else:
+                        self.red('審查頁', f"{rel}:{no} {c['步驟']} 的結論是「{c.get('結論')}」，不是「通過」")
             if not r['verdicts']:
                 self.red('審查頁', f"{rel} 沒有「結論」表")
             # ⑤ 分兩段（docs/01 ⑤「兩段審查」）：第一段答完不凍結，第二段才凍結
