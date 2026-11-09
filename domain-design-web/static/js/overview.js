@@ -4,7 +4,7 @@ import { STEP_INFO } from './home.js';
 import { bindWaiting, openAi, runAi, runningCard, waitingCard } from './ai.js';
 import { markNav, narrow } from './nav.js';
 import { inputDialog, needFetch } from './plan.js';
-import { applyAutoLock, autoBadge, autoProgress, waitText } from './auto.js';
+import { applyAutoLock, autoBadge, autoProgress, HANDOFF_STEPS, waitText } from './auto.js';
 import { renderAiHead } from './ai.js';
 
 // ---------- 總覽：整個 domain 走到哪 ----------
@@ -58,6 +58,8 @@ export function nextOfProject(P) {
   // 全自動留給人的決定（事後審查頁）：人的決定先做，答完 AI 才能照著回頭修改
   const ar = list.find(x => x.f && x.f.auto_review && x.f.auto_review.open);
   if (ar) return { kind: 'autodecide', item: ar };
+  // 全自動模式、跑過又停下來了：先說停在哪、AI 代答了哪些審查頁，接著是「繼續全自動」，不是自己動手開下一條
+  if (plan.auto && P.autorun && P.autorun.started && !P.autorun.running) return { kind: 'autostopped' };
   // ①～⑤ 還沒做完的；或 ⑥ 已經開始（有進度或有審查頁）的——⑥ 開始後也是「現在在做的切片」
   // 好幾條同時在做時：AI 正在跑的 → 有審查頁等人作答的（輪到你）→ 地圖上的順序
   const going = list.filter(x => x.f && x.f.next && (x.f.next.n <= 5 || x.f.review || x.f.next.status !== '未開始'));
@@ -87,7 +89,7 @@ export async function renderHub() {
   const toProvide = plan ? plan.inventory.filter(x => x['狀態'] === '待提供').length : 0;
   const pq = plan ? plan.pending.filter(x => x['狀態'] !== '已回覆' && !x['答覆']).length : 0;
   // 整個專案的五個階段（不是切片的 ①～⑥）：切片各自往前走，每條做到哪裡看下面的切片卡片
-  const stage = { start: 0, 'plan-ai': 1, plan: 1, running: N.scope === '_plan' ? 1 : 2, pick: 2, slice: 2, review: 2, verify: 2, done: 4, autodecide: 2, auto: plan && plan.agreed ? 2 : 1 }[N.kind];
+  const stage = { start: 0, 'plan-ai': 1, plan: 1, running: N.scope === '_plan' ? 1 : 2, pick: 2, slice: 2, review: 2, verify: 2, done: 4, autodecide: 2, autostopped: 2, auto: plan && plan.agreed ? 2 : 1 }[N.kind];
   const journey = [['主題草案', ''], ['規劃', '資料、切片地圖、名詞'], ['做切片', '每條 ①～⑤ 設計、⑥ 驗證'],
     ['設計完成', '地圖上的切片都完成（含 ⑥）'], ['系統完成', '整合成可以使用的系統（流程還沒定義）']];
 
@@ -133,6 +135,18 @@ export async function renderHub() {
       <h1>全自動留給你的決定：${esc(N.item.f.slice)} ${a.open} 題</h1>
       <p>AI 代答時依據不夠、或同一件事來回改了兩次的，先照設計目前的做法（A）往下做，收在這裡等你決定。選 A 就是確認；選別的，AI 會照你的答案回頭修改。</p></div>
       <a class="btn big yellow" href="#/r/${enc(a.path)}">去決定<span class="arr">›</span></a></section>`;
+  } else if (N.kind === 'autostopped') {
+    const st = P.autorun, rv = P.auto_reviewed || [];
+    const done = /設計完成/.test(st.reason || '');
+    const nxt = list.find(x => x.f && x.f.next && x.f.next.n <= 5) || list.find(x => !x.f && x.row && x.row['狀態'] === '候選');
+    hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">全自動・已停下來</span>
+      <h1>${done ? esc(st.reason.split(' ')[0]) + ' 設計完成，全自動停下來等你看一次' : '全自動停下來了'}</h1>
+      <p class="small">${esc((st.ended || '').replace('T', ' ').slice(0, 16))} 停下來：${inline(st.reason || '')}</p>
+      ${rv.length ? `<p>這次 AI 代答的審查頁（不用作答，看看 AI 替你決定了什麼；有不同意的，用切片頁的「發現問題」交給 AI）：</p>
+      <ul>${rv.map(r => `<li><a href="#/r/${enc(r.path)}">${esc(r.slice)}・${esc(r.steps.map(n => CIRCLED[n]).join(''))} ${esc(r.title)}</a></li>`).join('')}</ul>` : ''}
+      <p class="small muted">${nxt ? `繼續全自動會接著做 ${esc(nxt.f ? nxt.f.slice : nxt.row['切片'])}` : '繼續全自動會接著做地圖上的下一件事'}，下一條切片的 ⑤ 凍結時再停（最多 ${HANDOFF_STEPS} 圈）。第 ⑥ 步要系統實作好才做。想自己一步步做，到規劃頁把執行模式改回手動。</p></div>
+      <div style="display:flex;flex-direction:column;gap:8px"><button class="btn big primary" id="autoGo">繼續全自動<span class="arr">›</span></button>
+      <a class="btn" href="#/auto">看每一圈做了什麼</a></div></section>`;
   } else if (N.kind === 'auto') {
     const ad = list.find(x => x.f && x.f.auto_review && x.f.auto_review.open);
     hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">全自動</span>
@@ -190,6 +204,12 @@ export async function renderHub() {
   const dp = $('#doPlan');
   if (dp) dp.onclick = () => runAi('_plan', '規劃', `/domain-plan 主題草案在 ${P.topic}（使用者自己寫的方向）。先盤點現實資料，再提出切片地圖與全局名詞草圖。`);
   const sa = $('#showAi'); if (sa) sa.onclick = () => openAi(N.scope);
+  const ag = $('#autoGo');
+  if (ag) ag.onclick = async () => {
+    ag.disabled = true;
+    try { await api('/api/auto/start', { max_steps: HANDOFF_STEPS, until_design_done: true }); toast('全自動開始了'); go('#/auto'); }
+    catch (e) { toast(e.message); ag.disabled = false; }
+  };
   $('#addInput').onclick = () => inputDialog({ folder: 'shared' });
 }
 

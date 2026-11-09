@@ -681,3 +681,19 @@ def test_review_draft(client, repo, monkeypatch, tmp_path):
     assert (repo / path).read_text(encoding='utf-8') == before
     assert client.post('/api/review/draft', json={'path': path, 'n': 9, 'rough': 'x'}).status_code == 404
     assert client.post('/api/review/draft', json={'path': path, 'n': 1, 'rough': ' '}).status_code == 400
+
+
+def test_auto_reviewed_after_stop(client, repo):
+    # 全自動停下來之後，總覽列出這次 AI 代答過的審查頁（從開始之後改過的）；在跑時不列（HR-Domain-Auto 停下來後畫面看不到要做什麼）
+    import json, time
+    d = repo / '.domain-auto'
+    d.mkdir(exist_ok=True)
+    started = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - 60))
+    (d / 'state.json').write_text(json.dumps({'running': False, 'started': started, 'ended': started, 'round': 2,
+                                              'reason': 'demo 設計完成（⑤ 凍結），照 --until-design-done 停下來'}), encoding='utf-8')
+    old = repo / REVIEW
+    os.utime(old, (time.time() - 3600, time.time() - 3600))
+    assert client.get('/api/project').json()['auto_reviewed'] == []
+    os.utime(old, None)
+    got = client.get('/api/project').json()['auto_reviewed']
+    assert [r['path'] for r in got] == [REVIEW]

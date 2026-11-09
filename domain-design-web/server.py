@@ -6,6 +6,7 @@
 import argparse
 import base64
 import json
+from datetime import datetime
 import os
 import re
 import shutil
@@ -161,13 +162,31 @@ def home(slice: str):
 
 # ---- 整個 domain：主題草案 → 規劃 → 切片 ----
 
+def _auto_reviewed(st, slices):
+    """全自動停下來之後：這次（從開始到停）AI 代答過的審查頁，給總覽列出來讓人事後看；在跑或沒跑過是 []。"""
+    if st.get('running') or not st.get('started'):
+        return []
+    try:
+        since = datetime.fromisoformat(st['started']).timestamp()
+    except ValueError:
+        return []
+    out = []
+    for s in slices:
+        for r in s.get('reviews', []):
+            p = os.path.join(kit.repo(), r['path'])
+            if not r.get('auto') and os.path.exists(p) and os.path.getmtime(p) >= since:
+                out.append({'slice': s['slice'], 'path': r['path'], 'title': r.get('title', ''), 'steps': r.get('steps', [])})
+    return out
+
+
 @app.get('/api/project')
 def get_project():
     p = project.plan()
     slices = []
+    st_all, au = status(), autorun.state()
     for sl in kit.slices():
         steps = project.steps(sl)
-        st = next((x for x in status()['slices'] if x['slice'] == sl), {})
+        st = next((x for x in st_all['slices'] if x['slice'] == sl), {})
         cur = next((r for r in st.get('reviews', []) if not r.get('auto') and r.get('counts') and r['counts']['open']), None)
         eqs = project.eqs(sl)
         # 全部作答完、這幾步還沒凍結：左側仍留審查頁的入口，想改答案回得去
@@ -182,7 +201,8 @@ def get_project():
     return {'repo': kit.repo(), 'gitignored': sessions.gitignored(), 'topic': project.topic(),
             'plan': p, 'sketch': project.sketch(), 'drafts': project.drafts(), 'inputs': project.inputs(),
             'core': project.files_under('core'),
-            'slices': slices, 'plan_session': sessions.active('_plan'), 'autorun': autorun.state()}
+            'slices': slices, 'plan_session': sessions.active('_plan'), 'autorun': au,
+            'auto_reviewed': _auto_reviewed(au, st_all['slices'])}
 
 
 class Topic(BaseModel):
