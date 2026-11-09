@@ -7,7 +7,7 @@
   帶 tools/auto_hook.py 當 PreToolUse hook：不在禁止清單的工具呼叫直接放行並記錄，碰到禁止清單就擋下。
   AI 在回報最後一行寫「全自動：繼續」「全自動：完成（…）」「全自動：需要人（…）」；
   完成、需要人、沒有這一行、連續兩圈沒有任何改變、執行模式被改回手動（下一圈開始前檢查），或到了 --max-steps，就停下來。
-  --until-design-done：切片地圖上出現新的「設計完成（待驗證）」切片（有一條切片的 ⑤ 凍結了）就停，讓人先看一次 AI 代答的審查頁。
+  --until-design-done：有一條切片的 ⑤ 凍結了就停（切片地圖上出現新的「設計完成（待驗證）」切片，或回頭修改後 ⑤ 重新凍結、多了 <切片>/05-vN tag），讓人先看一次 AI 代答的審查頁。
   要停下來又不改執行模式：建立 .domain-auto/stop（網頁的「關閉全自動」就是這樣做），這一圈做完就停。
   上一次是做到一半被切斷的（網頁強制中斷、用量上限、程序不在了），第一圈先收拾：
   提示詞多一段，要 AI 看 git status、diff、最後的 tag，把中斷時的那個動作做完或還原；留下的 .git/index.lock 先刪掉。
@@ -65,6 +65,12 @@ def design_done(repo):
             k = header.index('狀態')
             out |= {c[0].strip() for no, c in rows if c[k].strip().startswith('設計完成')}
     return out
+
+
+def frozen5(repo):
+    """⑤ 凍結的 tag（<切片>/05-vN）：回頭修改後重新凍結也會多一個。"""
+    out = subprocess.run(['git', '-C', repo, 'tag', '-l', '*/05-v*'], capture_output=True, text=True).stdout
+    return set(out.split())
 
 
 def snapshot(repo):
@@ -169,7 +175,7 @@ def run():
         {'type': 'command', 'command': f'{sys.executable} {os.path.join(HERE, "auto_hook.py")}'}]}]}})
     env = dict(os.environ, DOMAIN_AUTO='1', DOMAIN_AUTO_REPO=repo)
     same = 0
-    done_before = design_done(repo)
+    done_before, tags_before = design_done(repo), frozen5(repo)
     for n in range(1, a.max_steps + 1):
         if n > 1 and not mode(repo).startswith('全自動'):   # 跑到一半改回手動（網頁的規劃頁或直接改 PLAN.md）：這一圈之後停
             sys.exit('執行模式已改回手動，停下來；之後照手動的流程做')
@@ -199,7 +205,8 @@ def run():
             sys.exit(f'claude 結束碼 {p.returncode}，停下來；看 {out}')
         if kind != '繼續':
             sys.exit(0 if kind == '完成' else 1)
-        new = design_done(repo) - done_before
+        # 新的設計完成切片，或已設計完成的切片回頭修改後 ⑤ 重新凍結（多了 <切片>/05-vN tag）
+        new = (design_done(repo) - done_before) | {t.split('/')[0] for t in frozen5(repo) - tags_before}
         if a.until_design_done and new:
             sys.exit(f'{"、".join(sorted(new))} 設計完成（⑤ 凍結），照 --until-design-done 停下來；先看 AI 代答的審查頁')
         same = same + 1 if snapshot(repo) == before else 0

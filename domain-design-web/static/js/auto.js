@@ -48,7 +48,7 @@ export async function renderAuto(log) {
           <div class="row"><button class="btn" id="aKillYes" style="border-color:#c0392b;color:#c0392b">確認強制中斷</button><button class="btn" id="aKillNo">不要，回去</button></div></div>` : `
         <div class="row">
           <label class="small">最多 <input type="number" id="aMax" value="${st.max_steps || 40}" min="1" max="200" style="width:5em"> 圈</label>
-          <label class="small"><input type="checkbox" id="aUntil" ${st.until_design_done === false ? '' : 'checked'}> 有一條切片 ⑤ 凍結（設計完成）就停，讓我先看 AI 代答的審查頁</label>
+          <label class="small"><input type="checkbox" id="aUntil" ${st.until_design_done === false ? '' : 'checked'}> 有一條切片 ⑤ 凍結（設計完成，含回頭修改後重新凍結）就停，讓我先看 AI 代答的審查頁</label>
           <button class="btn primary go" id="aStart" ${busy ? 'disabled' : ''}>開始全自動</button></div>
         ${busy ? '<p class="small">AI 正在做網頁上的工作，做完再開始。</p>' : ''}
         <p class="muted small" style="margin:6px 0 0">也會在這些情況停下來：AI 回報「完成」或「需要人」、連續兩圈沒有任何改變、碰到禁止清單、用量上限。</p>`}

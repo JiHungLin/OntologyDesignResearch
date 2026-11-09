@@ -1078,6 +1078,22 @@ class TestAuto(Base):
         self.assertNotIn('第 3 圈', out)
         self.assertIn('a 設計完成（⑤ 凍結），照 --until-design-done 停下來', out)
 
+    def test_runner_until_design_done_refreeze(self):
+        # 已經設計完成的切片回頭修改後 ⑤ 重新凍結（多了 a/05-v2 tag）也停：地圖狀態沒變，看 tag
+        git = lambda *a: subprocess.run(['git', *a], cwd=self.dir, capture_output=True, text=True, check=True)
+        git('init', '-q')
+        git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x')
+        git('tag', 'a/05-v1')
+        plan = '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n\n## 切片\n\n| 切片 | 狀態 |\n|---|---|\n| a | 設計完成（待驗證） |\n'
+        self.write('slices/PLAN.md', plan)
+        claude = self.fake_claude(['全自動：繼續'] * 5)
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('if n == 1:\n    import subprocess; subprocess.run(["git", "tag", "a/05-v2"], check=True)\n')
+        code, out = run('auto_run.py', '--claude', claude, '--until-design-done', cwd=self.dir)
+        self.assertIn('第 2 圈：繼續', out)
+        self.assertNotIn('第 3 圈', out)
+        self.assertIn('a 設計完成（⑤ 凍結），照 --until-design-done 停下來', out)
+
     def test_runner_stops_when_switched_to_manual(self):
         # 跑到一半改回手動：下一圈開始前檢查，停下來
         self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n')
