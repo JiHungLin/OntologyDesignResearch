@@ -64,9 +64,9 @@ export async function renderAuto(log) {
           <p class="small" style="margin:4px 0">只在 AI 明顯卡住、或方向錯了要馬上停時用。</p>
           <div class="row"><button class="btn" id="aKillYes" style="border-color:#c0392b;color:#c0392b">確認強制中斷</button><button class="btn" id="aKillNo">不要，回去</button></div></div>` : `
         <div class="row">
-          <label class="small">最多 <input type="number" id="aMax" value="${st.max_steps || RUN_STEPS}" min="1" max="1000" style="width:5em"> 圈</label>
-          <label class="small">每 <input type="number" id="aEvery" value="${st.stop_every ?? RUN_EVERY}" min="0" max="99" style="width:4em"> 條切片 ⑤ 凍結停一次（含回頭修改後重新凍結；0＝不停），讓我看 AI 代答的審查頁</label>
-          <label class="small"><input type="checkbox" id="aDesign" ${st.design_only === false ? '' : 'checked'}> 只做到 ⑤（不開始 ⑥；地圖上的切片都做到 ⑤ 或擱置就完成）</label>
+          <label class="small">最多 <input type="number" id="aMax" value="${RUN_STEPS}" min="1" max="1000" style="width:5em"> 圈</label>
+          <label class="small">每 <input type="number" id="aEvery" value="${RUN_EVERY}" min="0" max="99" style="width:4em"> 條切片 ⑤ 凍結停一次（含回頭修改後重新凍結；0＝不停），讓我看 AI 代答的審查頁</label>
+          <label class="small"><input type="checkbox" id="aDesign" checked> 只做到 ⑤（不開始 ⑥；地圖上的切片都做到 ⑤ 或擱置就完成）</label>
           <button class="btn primary go" id="aStart" ${busy ? 'disabled' : ''}>開始全自動</button></div>
         ${busy ? '<p class="small">AI 正在做網頁上的工作，做完再開始。</p>' : ''}
         <p class="muted small" style="margin:6px 0 0">也會在這些情況停下來：AI 回報「完成」或「需要人」、連續兩圈沒有任何改變、碰到禁止清單。只卡住一條切片的會「擱置」那條、接著做別條，原因收在那條切片「全自動留給你的決定」，你答完它才接著做；碰到用量上限會等到重置再接著跑。</p>`}
