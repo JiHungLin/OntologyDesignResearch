@@ -1,7 +1,7 @@
 // 全自動：開始、停止、中斷跑步器（tools/auto_run.py），看每一圈做了什麼
 import { $, $$, api, CIRCLED, esc, inline, md, setTop, state, toast } from './core.js';
 import { addStep, renderAi, renderAiHead, TOOL_NAME } from './ai.js';
-import { markNav } from './nav.js';
+import { markNav, refreshNav } from './nav.js';
 import { loadProject, planSlices, showTopic } from './overview.js';
 import { route } from './main.js';
 
@@ -129,7 +129,8 @@ setInterval(async () => {
     const changed = was.running !== st.running || was.round !== st.round || was.stopping !== st.stopping;
     if (st.running) { await pullLatest(st); const el = $('#autoLatest'); if (el && latest.text) el.textContent = '正在：' + latest.text; }
     // 開始、停下來、進到下一圈：檔案的狀態變了，整頁重畫（橫幅、鎖、切片的狀態跟著更新）；抽屜開著就跟到下一圈
-    if (changed) { await route(); if (!$('#aiDrawer').hidden) renderAi(); }
+    // 正在答全自動事後審查頁：只更新導覽與頂列，不重畫頁面（「其他」打到一半的字不會被清掉）
+    if (changed) { if (onAutoReview()) await refreshNav(); else await route(); if (!$('#aiDrawer').hidden) renderAi(); }
     renderAiHead();
   } catch (e) { /* 伺服器暫時連不到：下次再試 */ }
 }, 10000);
