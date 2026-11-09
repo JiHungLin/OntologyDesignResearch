@@ -55,6 +55,9 @@ export function nextOfProject(P) {
   if (!plan) return { kind: 'plan-ai' };
   if (!plan.agreed) return { kind: 'plan' };
   const list = planSlices(P);
+  // 全自動留給人的決定（事後審查頁）：人的決定先做，答完 AI 才能照著回頭修改
+  const ar = list.find(x => x.f && x.f.auto_review && x.f.auto_review.open);
+  if (ar) return { kind: 'autodecide', item: ar };
   // ①～⑤ 還沒做完的；或 ⑥ 已經開始（有進度或有審查頁）的——⑥ 開始後也是「現在在做的切片」
   // 好幾條同時在做時：AI 正在跑的 → 有審查頁等人作答的（輪到你）→ 地圖上的順序
   const going = list.filter(x => x.f && x.f.next && (x.f.next.n <= 5 || x.f.review || x.f.next.status !== '未開始'));
@@ -84,7 +87,7 @@ export async function renderHub() {
   const toProvide = plan ? plan.inventory.filter(x => x['狀態'] === '待提供').length : 0;
   const pq = plan ? plan.pending.filter(x => x['狀態'] !== '已回覆' && !x['答覆']).length : 0;
   // 整個專案的五個階段（不是切片的 ①～⑥）：切片各自往前走，每條做到哪裡看下面的切片卡片
-  const stage = { start: 0, 'plan-ai': 1, plan: 1, running: N.scope === '_plan' ? 1 : 2, pick: 2, slice: 2, review: 2, verify: 2, done: 4, auto: plan && plan.agreed ? 2 : 1 }[N.kind];
+  const stage = { start: 0, 'plan-ai': 1, plan: 1, running: N.scope === '_plan' ? 1 : 2, pick: 2, slice: 2, review: 2, verify: 2, done: 4, autodecide: 2, auto: plan && plan.agreed ? 2 : 1 }[N.kind];
   const journey = [['主題草案', ''], ['規劃', '資料、切片地圖、名詞'], ['做切片', '每條 ①～⑤ 設計、⑥ 驗證'],
     ['設計完成', '地圖上的切片都完成（含 ⑥）'], ['系統完成', '整合成可以使用的系統（流程還沒定義）']];
 
@@ -124,10 +127,17 @@ export async function renderHub() {
       <h1>${esc(r['切片'])}</h1><p class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'])}</p>
       <p class="small">建議順序 ${esc(r['建議順序'])}${r['依賴'] && r['依賴'] !== '—' ? `　依賴：${esc(r['依賴'])}` : ''}</p></div>
       <a class="btn big yellow" href="#/new/${enc(r['切片'])}">開始這一條<span class="arr">›</span></a></section>`;
+  } else if (N.kind === 'autodecide') {
+    const a = N.item.f.auto_review;
+    hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到你</span>
+      <h1>全自動留給你的決定：${esc(N.item.f.slice)} ${a.open} 題</h1>
+      <p>AI 代答時依據不夠、或同一件事來回改了兩次的，先照設計目前的做法（A）往下做，收在這裡等你決定。選 A 就是確認；選別的，AI 會照你的答案回頭修改。</p></div>
+      <a class="btn big yellow" href="#/r/${enc(a.path)}">去決定<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'auto') {
+    const ad = list.find(x => x.f && x.f.auto_review && x.f.auto_review.open);
     hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">全自動</span>
       <h1>全自動執行中・第 ${P.autorun.round || 1} 圈</h1><p>${esc(autoProgress(P))}</p>
-      <p class="small muted">人的關卡由 AI 代答並標「AI（自動）」，你事後再看、再改。這段時間網頁只能看。</p></div>
+      <p class="small muted">人的關卡由 AI 代答並標「AI（自動）」，你事後再看、再改。這段時間網頁只能看${ad ? `，但<a href="#/r/${enc(ad.f.auto_review.path)}">全自動留給你的 ${ad.f.auto_review.open} 題決定</a>現在就能答` : ''}。</p></div>
       <a class="btn big primary" href="#/auto">看進度<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'verify') {
     const f = N.item.f;
@@ -154,6 +164,7 @@ export async function renderHub() {
           <span class="row spread"><b>${esc(x.code)}</b><span class="chip ${x.f.review ? 'turn' : ''}">${esc(st)}</span></span>
           <span class="small clamp3">${scenario(sc)}</span>
           ${miniSteps(x.f)}
+          ${x.f.auto_review ? `<span class="small ${x.f.auto_review.open ? '' : 'muted'}">${x.f.auto_review.open ? `全自動留給你的決定：${x.f.auto_review.open} 題` : '全自動的決定答完了，等 AI 處理'}</span>` : ''}
           ${x.f.eq_open || x.f.eq_answered ? `<span class="small muted">專家問題：${x.f.eq_open} 題等答覆${x.f.eq_answered ? `、${x.f.eq_answered} 題答覆了待處理` : ''}</span>` : ''}
         </a>`;
       }).join('')}</div>` : ''}

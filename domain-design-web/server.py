@@ -81,12 +81,21 @@ def status():
                     r = review.parse(p)
                     reviews.append({'path': kit.rel(p), 'date': m.group(1), 'step': m.group(2),
                                     'steps': sorted(_review_steps(m.group(2), r['meta'])),
-                                    'title': r['title'], 'counts': r['counts']})
+                                    'title': r['title'], 'counts': r['counts'], 'auto': r['auto']})
                 except Exception as e:  # 看不懂的審查頁照樣列出，讓人知道
                     reviews.append({'path': kit.rel(p), 'date': m.group(1), 'step': m.group(2),
-                                    'steps': sorted(_review_steps(m.group(2))), 'title': n, 'error': str(e)})
+                                    'steps': sorted(_review_steps(m.group(2))), 'title': n, 'error': str(e), 'auto': review.is_auto(p)})
         out.append({'slice': s, 'reviews': reviews, 'session': sessions.active(s)})
     return {'repo': kit.repo(), 'slices': out, 'gitignored': sessions.gitignored()}
+
+
+def _auto_review(reviews):
+    """這條切片的全自動事後審查頁（docs/02「全自動事後審查頁」）：還有題目沒答的，或答完還沒處理的那一份；沒有就 None。"""
+    for r in reviews:                       # 新到舊
+        c = r.get('counts')
+        if r.get('auto') and c and (c['questions_open'] or not c.get('processed')):
+            return {'path': r['path'], 'open': c['questions_open'], 'total': c['questions'], 'processed': c.get('processed', False)}
+    return None
 
 
 STEPS = [('01', '範圍', '01_scope.md'), ('02', '名詞', '02_entities.md'), ('03', '流程', '03_flows.md'),
@@ -122,7 +131,7 @@ def home(slice: str):
         raise HTTPException(404, f'沒有這條切片：{slice}')
     st = status()
     s = next(x for x in st['slices'] if x['slice'] == slice)
-    current = next((r for r in s['reviews'] if r.get('counts') and r['counts']['open']), None)
+    current = next((r for r in s['reviews'] if not r.get('auto') and r.get('counts') and r['counts']['open']), None)
     on = set(current['steps']) if current else set()
     steps = project.steps(slice)
     levels = []
@@ -134,7 +143,7 @@ def home(slice: str):
     eqs = project.eqs(slice)
     out = {'slice': slice, 'levels': levels, 'reviews': s['reviews'], 'current': None,
            'next': nxt, 'eqs': eqs, 'eq_open': len([e for e in eqs if e.get('狀態') != '已回覆']),
-           'session': s['session']}
+           'session': s['session'], 'auto_review': _auto_review(s['reviews'])}
     if current:
         r = get_review(current['path'])
         out['current'] = {'path': r['path'], 'title': r['title'], 'step': current['step'], 'steps': current['steps'], 'counts': r['counts'],
@@ -151,16 +160,17 @@ def get_project():
     for sl in kit.slices():
         steps = project.steps(sl)
         st = next((x for x in status()['slices'] if x['slice'] == sl), {})
-        cur = next((r for r in st.get('reviews', []) if r.get('counts') and r['counts']['open']), None)
+        cur = next((r for r in st.get('reviews', []) if not r.get('auto') and r.get('counts') and r['counts']['open']), None)
         eqs = project.eqs(sl)
         # 全部作答完、這幾步還沒凍結：左側仍留審查頁的入口，想改答案回得去
-        last = (st.get('reviews') or [None])[0]
+        last = next((r for r in st.get('reviews', []) if not r.get('auto')), None)
         answered = last if last and not cur and last.get('counts') and any(
             not x['status'].startswith('已凍結') for x in steps if x['n'] in last.get('steps', [])) else None
         slices.append({'slice': sl, 'steps': steps, 'next': project.next_step(steps), 'review': cur, 'answered': answered,
                        'eq_open': len([e for e in eqs if e.get('狀態') != '已回覆']),
                        'eq_answered': len([e for e in eqs if e.get('狀態') == '已回覆' and not e.get('處理')]),
-                       'session': sessions.active(sl), 'files': project.slice_files(sl)})
+                       'session': sessions.active(sl), 'files': project.slice_files(sl),
+                       'auto_review': _auto_review(st.get('reviews', []))})
     return {'repo': kit.repo(), 'gitignored': sessions.gitignored(), 'topic': project.topic(),
             'plan': p, 'sketch': project.sketch(), 'drafts': project.drafts(), 'inputs': project.inputs(),
             'core': project.files_under('core'),
@@ -397,8 +407,9 @@ class Answer(BaseModel):
 
 
 def _write(fn, a, *args):
-    _no_autorun()
     p = _review_path(a.path)
+    if not review.is_auto(p):   # 全自動事後審查頁在跑時也能答：跑步器照 A 往下做，答案由之後的一圈處理（docs/01 0.2「待人決定」）
+        _no_autorun()
     try:
         return {'digest': fn(p, a.line, *args, expect_digest=a.digest)}
     except review.Conflict:

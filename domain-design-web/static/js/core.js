@@ -165,6 +165,7 @@ export function nextTask(r) {
   const c = r.counts;
   const p = enc(r.path);
   if (c.questions_open) return `#/r/${p}/decide/${firstOpenQ(r)}`;
+  if (r.auto) return `#/s/${enc(r.slice)}`;   // 全自動事後審查頁只有選擇題
   if (c.confirms_open) return `#/r/${p}/confirm`;
   if (c.cases_open) return `#/r/${p}/golden/${r.cases.findIndex(caseOpen)}`;
   return `#/r/${p}/finish`;

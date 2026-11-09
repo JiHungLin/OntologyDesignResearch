@@ -5,7 +5,7 @@
   --freeze：準備凍結時使用，「提出／同意」有「待確認」就亮紅燈（平常只列出）。
   --baseline：上一版的切片資料夾（預設取各步驟最新的 git tag），用來找被刪除或改名的名稱。
   表格、EQ 影響、範圍外、佔位符、黃金案例（含事後才到的輸入）、連鎖、core 前綴（--freeze 時亮紅燈）、被引用也在這裡檢查；
-  審查頁（--freeze 時沒作答的亮紅燈）、挑錯反例、黃金案例自給自足也在這裡檢查；
+  審查頁（--freeze 時沒作答的亮紅燈）、挑錯反例、黃金案例自給自足、全自動事後審查頁、黃金案例的預期結果修改也在這裡檢查；
   跨切片引用（<切片>/<檔名> D-nn）、架構決定紀錄（architecture/DECISIONS.md）、② 的資料性質（P11）也在這裡檢查；
   「用在」「舊版上游」「使用者同意」「其他切片要求」只列提醒，不算紅燈。
 只檢查引用與結構對不對得起來，不代表內容正確。"""
@@ -18,6 +18,7 @@ EXAMPLE_SINCE = '2026-10-28'   # 審查頁問題要有「例子」、選項要�
 GOLDEN_ASK_SINCE = '2026-11-04'   # 黃金案例要有逐項的「要得出」的起始日（docs/02 ⑥，先試用）
 CODE_REF = re.compile(r'(?<![A-Za-z])(R\d{2,}|D-\d+|X-\d+)(?!\d)')
 SIGNOFF = '06_evidence/signoff.md'
+AUTO_REVIEW_SINCE = '2026-11-09'   # 審查頁的「待人決定」要收進全自動事後審查頁：從這天的審查頁起檢查（docs/01 0.2，先試用）
 SPOT_FORMAT_SINCE = '2026-11-05'   # 抽查可挑的條目寫「⑥ 第 n 條」：從這天的審查頁起檢查（規定 11-04 下午才加，當天已作答的頁不追溯）
 EVIDENCE_HEADER = '# 執行紀錄（tools/run_evidence.py 產生，不手改）'
 ALL_FILES = ['01_scope.md', '02_entities.md', '03_flows.md', '03_use_cases.md', '04_rules.md', '05_mapping.md']
@@ -1386,6 +1387,89 @@ class Lint:
                     self.red('執行模式', f"06_evidence/golden_cases.md:{no} 計算者是「{m.group(1)}」：手動模式的預期結果由人算")
         self.done('執行模式', n, '個審查者與計算者', skipped=None if n else '沒有已填的審查者或計算者')
 
+    AUTO_FIELDS = ('來源', '例子', '問題', '影響', '你的回答')
+
+    def auto_reviews(self):
+        """全自動事後審查頁 reviews/<日期>_auto.md：[(相對路徑, parse_review 結果, 「來源」欄的全文)]。"""
+        rdir = os.path.join(self.dir, 'reviews')
+        out = []
+        for name in sorted(os.listdir(rdir)) if os.path.isdir(rdir) else []:
+            if not name.endswith('_auto.md'): continue
+            r = self.parse_review(os.path.join(rdir, name))
+            out.append((f'reviews/{name}', r, ' '.join(q['fields'].get('來源', (0, ''))[1] for q in r['questions'])))
+        return out
+
+    def check_auto_review(self):
+        """全自動事後審查頁（docs/01 0.2「待人決定」，先試用）：每題的格式；AI 審查者寫了「待人決定」的題目、AI 改的黃金案例預期結果都收進來；
+        答完還沒處理的提醒下一步。"""
+        print("\n[事後審查] 全自動事後審查頁每題有來源、例子、影響與選項；審查頁的「待人決定」都收進事後審查頁")
+        autos = self.auto_reviews()
+        n = 0
+        for rel, r, _ in autos:
+            open_ = []
+            for q in r['questions']:
+                n += 1
+                fl = q['fields']
+                for need in self.AUTO_FIELDS:
+                    if need not in fl:
+                        self.red('事後審查', f"{rel}:{q['no']} {q['title']} 沒有「{need}」（docs/02「全自動事後審查頁」）")
+                if not any(re.match(r'^A（建議）$', k) for k in fl):
+                    self.red('事後審查', f"{rel}:{q['no']} {q['title']} 沒有「A（建議）」（寫設計目前的做法，也就是 AI 暫時採用的）")
+                if q['options'] < 2:
+                    self.red('事後審查', f"{rel}:{q['no']} {q['title']} 除了 A（建議），至少還要一個選項（B…）")
+                if '你的回答' in fl and not fl['你的回答'][1]:
+                    open_.append(q['title'])
+            done = next((l.split('|')[2].strip() for l in r['lines'] if re.match(r'^\|\s*處理\s*\|', l)), '')
+            if open_:
+                print(f"    • {rel}：還有 {len(open_)} 題待人決定（全自動照 A 往下做；人答完後處理）")
+            elif r['questions'] and not done:
+                print(f"    • {rel}：都答完了、還沒處理：下一步 /domain-change 處理事後審查頁（和 A 不同的照第 0 級回頭修改）")
+        # 2026-11-09 起的審查頁：AI 審查者寫了「待人決定」的題目，要收進某一份事後審查頁（來源寫「reviews/<檔名> 問題 n」）
+        sources = ' '.join(src for _, _, src in autos)
+        rdir = os.path.join(self.dir, 'reviews')
+        for name in sorted(os.listdir(rdir)) if os.path.isdir(rdir) else []:
+            if not name.endswith('.md') or name.endswith('_auto.md') or name[:10] < AUTO_REVIEW_SINCE: continue
+            r = self.parse_review(os.path.join(rdir, name))
+            for q in r['questions']:
+                ln, v = q['fields'].get('你的回答', (q['no'], ''))
+                if '待人決定' not in v: continue
+                n += 1
+                num = re.search(r'問題\s*(\d+)', q['title'])
+                if not num or not re.search(rf'reviews/{re.escape(name)}\s*問題\s*{num.group(1)}(?!\d)', sources):
+                    self.red('事後審查', f"reviews/{name}:{ln} {q['title']} 寫了「待人決定」，沒有收進全自動事後審查頁（reviews/<日期>_auto.md，來源寫「reviews/{name} 問題 {num.group(1) if num else 'n'}」）")
+        self.done('事後審查', n, '題', skipped=None if n else '沒有事後審查頁，也沒有待人決定的題目')
+
+    EXPECTED_CHANGE = re.compile(r'^(\d{4}-\d{2}-\d{2})\s+(.+?)[：:](.+?)；\s*種類[：:]\s*(\S+?)；\s*依據[：:]\s*(.+)$')
+
+    def check_expected_changes(self):
+        """黃金案例「預期結果修改」（docs/02 ⑥，先試用）：寫出日期、修改者、原答案 → 新答案、種類（算錯、輸入補齊）與依據；
+        依據不能是被驗證的設計（R、D、X、UC 編號）；設計錯了改設計，不改預期結果。AI 改的要收進事後審查頁。"""
+        print("\n[預期結果修改] 黃金案例改預期結果要寫種類與依據，依據不能是被驗證的設計；AI 改的收進事後審查頁")
+        path = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
+        if not os.path.exists(path):
+            return self.done('預期結果修改', 0, '', skipped='沒有 golden_cases.md')
+        sources = ' '.join(src for _, _, src in self.auto_reviews())
+        n = 0
+        gc = None
+        for no, h2, h3, line in mb.Doc(path).items:
+            if h2 and re.match(r'GC\d+', h2): gc = h2.split()[0]
+            m = re.match(r'^- 預期結果修改[：:]\s*(.*)$', line or '')
+            if not m or not gc: continue
+            n += 1
+            e = self.EXPECTED_CHANGE.match(m.group(1).strip())
+            if not e:
+                self.red('預期結果修改', f"golden_cases.md:{no} {gc} 的「預期結果修改」要寫成「<日期> <修改者>：③ 原答案 → 新答案；種類：算錯 或 輸入補齊；依據：<inputs/… 或法條>」"); continue
+            date, who, what, kind, basis = e.groups()
+            if kind not in ('算錯', '輸入補齊'):
+                self.red('預期結果修改', f"golden_cases.md:{no} {gc} 的種類是「{kind}」：只能是算錯、輸入補齊（設計錯了改設計，不改預期結果）")
+            if '→' not in what:
+                self.red('預期結果修改', f"golden_cases.md:{no} {gc} 要寫出原答案 → 新答案")
+            if re.search(r'(?<![A-Za-z])(R\d+|D-\d+|X-\d+|UC-\d+)', basis):
+                self.red('預期結果修改', f"golden_cases.md:{no} {gc} 的依據指到被驗證的設計（{basis[:40]}）：預期結果要獨立於設計，依據寫 inputs/ 的原文或法條；是設計錯了就改設計")
+            if who.strip().startswith('AI') and self.run_mode().startswith('全自動') and gc not in sources:
+                self.red('預期結果修改', f"golden_cases.md:{no} {gc} 的預期結果由 AI 修改，沒有收進全自動事後審查頁（來源寫「{gc} 預期結果修改」）")
+        self.done('預期結果修改', n, '筆修改', skipped=None if n else '沒有修改紀錄')
+
     def check_known_limits(self):
         """⑥ 設計問題處理成「已知限制」（2026-11-06 起，先試用）：要有重現測試、寫出程式暫時的做法。"""
         print("\n[已知限制] signoff.md 設計問題處理為「已知限制」的，牽涉或處理寫出重現測試（test_…），實作暫時的做法不空白")
@@ -1614,6 +1698,7 @@ class Lint:
         self.check_golden(); self.check_late_inputs(); self.check_param_storage(); self.check_chain(); self.check_core_prefix(); self.check_referenced_by()
         self.check_reviews(); self.check_challenge(); self.check_golden_selfcontained(); self.check_user_agreement()
         self.check_cross_refs(); self.check_requests(); self.check_architecture(); self.check_data_nature(); self.check_api(); self.check_evidence(); self.check_known_limits(); self.check_auto_marks()
+        self.check_auto_review(); self.check_expected_changes()
         self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")

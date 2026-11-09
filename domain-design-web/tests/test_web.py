@@ -36,7 +36,8 @@ def client(repo):
 def test_parse(repo):
     r = review.parse(str(repo / REVIEW))
     assert r['counts'] == {'questions': 2, 'questions_open': 2, 'confirms': 2, 'confirms_open': 2,
-                           'spot_done': False, 'conclusion_done': False, 'cases': 1, 'cases_open': 1, 'open': 7}
+                           'spot_done': False, 'conclusion_done': False, 'cases': 1, 'cases_open': 1, 'open': 7,
+                           'processed': False}
     q = r['questions'][0]
     assert (q['n'], q['ref']) == (1, '② D-01')
     assert [(o['key'], o['recommended']) for o in q['options']] == [('A', True), ('B', False)]
@@ -602,3 +603,50 @@ def test_autorun_from_web(repo, client):
     assert not st['running'] and st['interrupted'] and '在網頁上強制中斷' in st['reason']
     assert _wait(lambda: autorun._proc.poll() is not None) and autorun._proc.pid == pid
     assert not os.path.exists(os.path.join(str(repo), '.git', 'index.lock')) and '刪掉了 .git/index.lock' in st['reason']
+
+
+AUTO_PAGE = """# demo 全自動事後審查頁（2026-11-09）
+
+| 項目 | 內容 |
+|---|---|
+| 這輪審查的步驟 | 全自動事後審查 |
+| 處理 | （人答完後，AI 處理時寫：日期、CHANGELOG 哪一筆） |
+
+## 一、要你回答的問題
+
+### 問題 1（④ D-01）
+- 主題：資料範圍
+- 來源：reviews/2026-10-27_02.md 問題 1
+- 背景：…
+- 例子：林小姐從甲公司到乙公司
+- 問題：資料以客戶還是法人為範圍？
+- A（建議）：以客戶為範圍 → 設計不變
+- B：以法人為範圍 → 改 D-01
+- 其他：（寫一句）
+- 影響：04_rules.md D-01
+- 你的回答：
+"""
+
+
+def test_auto_review_page(client, repo, monkeypatch):
+    # 全自動事後審查頁（docs/02「全自動事後審查頁」）：只有選擇題；不搶「輪到你審查」的那一份；全自動在跑時也能答
+    import autorun
+    (repo / 'slices/demo/reviews/2026-11-09_auto.md').write_text(AUTO_PAGE, encoding='utf-8')
+    r = client.get('/api/review', params={'path': 'slices/demo/reviews/2026-11-09_auto.md'}).json()
+    assert r['auto'] and r['counts']['open'] == 1
+    assert r['questions'][0]['source'] == 'reviews/2026-10-27_02.md 問題 1' and r['questions'][0]['impact'] == '04_rules.md D-01'
+    h = client.get('/api/home', params={'slice': 'demo'}).json()
+    assert h['auto_review'] == {'path': 'slices/demo/reviews/2026-11-09_auto.md', 'open': 1, 'total': 1, 'processed': False}
+    assert h['current'] is None or not h['current']['path'].endswith('_auto.md')
+    sl = next(x for x in client.get('/api/project').json()['slices'] if x['slice'] == 'demo')
+    assert sl['auto_review']['open'] == 1
+    monkeypatch.setattr(autorun, 'running', lambda: True)
+    assert client.post('/api/review/answer', json={'path': REVIEW, 'line': 1, 'value': 'A', 'digest': ''}).status_code == 409
+    res = client.post('/api/review/answer', json={'path': 'slices/demo/reviews/2026-11-09_auto.md', 'digest': r['digest'],
+                                                  'line': r['questions'][0]['answer_line'], 'value': 'B'})
+    assert res.status_code == 200, res.text
+    a = client.get('/api/home', params={'slice': 'demo'}).json()['auto_review']
+    assert a['open'] == 0 and not a['processed']                   # 答完、等 AI 處理
+    p = repo / 'slices/demo/reviews/2026-11-09_auto.md'
+    p.write_text(p.read_text(encoding='utf-8').replace('| 處理 | （人答完後，AI 處理時寫：日期、CHANGELOG 哪一筆） |', '| 處理 | 2026-11-10 CHANGELOG 第一筆 |'), encoding='utf-8')
+    assert client.get('/api/home', params={'slice': 'demo'}).json()['auto_review'] is None

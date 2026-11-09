@@ -174,15 +174,18 @@ export function autoBanner() {
 }
 
 // 每次換頁後（main.js 的 route）：在跑就在頁面最上面放橫幅、把這一頁的按鈕與輸入鎖住（伺服器也會擋）
+// 全自動事後審查頁（reviews/<日期>_auto.md）在跑時也能答（docs/01 0.2「待人決定」）
+const onAutoReview = () => /_auto\.md/.test(decodeURIComponent(location.hash));
+
 export function applyAutoLock() {
-  if (!autoOn() || location.hash.startsWith('#/auto')) return;
+  if (!autoOn() || location.hash.startsWith('#/auto') || onAutoReview()) return;
   const app = $('#app');
   if (!$('#autoBanner')) app.insertAdjacentHTML('afterbegin', autoBanner());
   lockControls();
 }
 
 function lockControls() {
-  if (location.hash.startsWith('#/auto')) return;
+  if (location.hash.startsWith('#/auto') || onAutoReview()) return;
   $$('#app button:not([disabled]), #app input:not([disabled]), #app textarea:not([disabled]), #app select:not([disabled])').forEach(el => {
     if (el.closest('#autoBanner')) return;
     el.disabled = true; el.title = '全自動執行中，只能看';

@@ -725,6 +725,55 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertNotIn('審查者是「AI（自動）」', out)
 
+    AUTO_PAGE = ('# leave-backfill 全自動事後審查頁（2026-11-09）\n\n| 項目 | 內容 |\n|---|---|\n| 這輪審查的步驟 | 全自動事後審查 |\n| 處理 | {done} |\n\n'
+                 '## 一、要你回答的問題\n\n### 問題 1（④ D-01）\n- 來源：{src}\n- 背景：…\n- 例子：小明 2026-03-01 補登\n- 問題：要不要補登？\n'
+                 '- A（建議）：可以補登 → 設計不變\n- B：不補登 → 改 D-01\n- 其他：（寫一句）\n- 影響：04_rules.md D-01\n- 你的回答：{ans}\n')
+
+    def test_auto_review_page(self):
+        # 全自動事後審查頁（docs/01 0.2「待人決定」）：格式；審查頁寫了「待人決定」要收進來；答完提醒處理
+        self.write(self.slice_file('reviews/2026-11-09_04.md'),
+                   '# x\n\n## 一、要你回答的問題\n\n### 問題 2（④ D-01）\n- 問題：…\n- A（建議）：a → b\n- B：c → d\n- 你的回答：A（待人決定：依據只有推論）\n')
+        code, out = self.lint()
+        self.assertIn('問題 2（④ D-01） 寫了「待人決定」，沒有收進全自動事後審查頁', out)
+        self.write(self.slice_file('reviews/2026-11-09_auto.md'),
+                   self.AUTO_PAGE.format(src='reviews/2026-11-09_04.md 問題 2', ans='', done=''))
+        code, out = self.lint()
+        self.assertNotIn('沒有收進全自動事後審查頁', out)
+        self.assertIn('還有 1 題待人決定', out)
+        self.write(self.slice_file('reviews/2026-11-09_auto.md'),
+                   self.AUTO_PAGE.format(src='reviews/2026-11-09_04.md 問題 2', ans='B', done='').replace('- 影響：04_rules.md D-01\n', ''))
+        code, out = self.lint()
+        self.assertIn('沒有「影響」', out)
+        self.assertIn('都答完了、還沒處理', out)
+        self.write(self.slice_file('reviews/2026-11-09_auto.md'),
+                   self.AUTO_PAGE.format(src='reviews/2026-11-09_04.md 問題 2', ans='B', done='2026-11-10 CHANGELOG 第一筆'))
+        code, out = self.lint()
+        self.assertNotIn('還沒處理', out)
+        self.assertNotIn('[事後審查] 紅燈', out)
+
+    def test_expected_result_change(self):
+        # 改黃金案例的預期結果：寫種類與依據，依據不能是被驗證的設計；AI 改的（全自動）要收進事後審查頁
+        gc = self.GC.format('一致', '[未執行]')
+        line = '- 判定：[未執行]\n\n## GC02'
+        def put(change):
+            self.write(self.slice_file('06_evidence/golden_cases.md'), gc.replace(line, f'- 判定：[未執行]\n- 預期結果修改：{change}\n\n## GC02', 1))
+            return self.lint()
+        code, out = put('2026-11-09 王小明：③ 1996-08-01 → 2026-01-01；種類：算錯；依據：R12 的起算日')
+        self.assertIn('依據指到被驗證的設計', out)
+        code, out = put('2026-11-09 王小明：③ 不通過 → 資料不足；種類：設計；依據：inputs/shared/a.md')
+        self.assertIn('只能是算錯、輸入補齊', out)
+        code, out = put('改成 2026-01-01')
+        self.assertIn('要寫成「<日期> <修改者>', out)
+        code, out = put('2026-11-09 王小明：③ 1996-08-01 → 2026-01-01；種類：輸入補齊；依據：inputs/shared/範圍釐清_員工編號.md')
+        self.assertNotIn('預期結果修改] 紅燈', out)
+        self.assertNotIn('golden_cases.md:', out.split('[預期結果修改]')[1].split('[')[0])
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 已同意 |\n| 執行模式 | 全自動 |\n')
+        code, out = put('2026-11-09 AI（自動）：③ 1996-08-01 → 2026-01-01；種類：輸入補齊；依據：inputs/shared/a.md')
+        self.assertIn('沒有收進全自動事後審查頁', out)
+        self.write(self.slice_file('reviews/2026-11-09_auto.md'), self.AUTO_PAGE.format(src='GC01 預期結果修改', ans='', done=''))
+        code, out = put('2026-11-09 AI（自動）：③ 1996-08-01 → 2026-01-01；種類：輸入補齊；依據：inputs/shared/a.md')
+        self.assertNotIn('沒有收進全自動事後審查頁', out)
+
     def test_challenge_angle_required(self):
         """這輪新增、來源是 AI 挑錯的反例要寫角度（2026-11-04 T27）"""
         self.setup_review()

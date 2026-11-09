@@ -32,11 +32,14 @@ export async function renderDecide(path, i) {
       </div>
       ${q.example ? `<section class="card"><div class="label">舉個例子</div>${inline(q.example)}</section>` : ''}
       ${q.background ? `<section class="why"><div class="label">為什麼要你決定</div>${inline(q.background)}</section>` : ''}
+      ${r.auto ? `<section class="card soft-card"><div class="label">全自動時 AI 暫時照 A 做</div>
+        ${q.source ? `<div class="small">從哪來：${inline(q.source)}</div>` : ''}
+        ${q.impact ? `<div class="small">選 A 以外的要改：${inline(q.impact)}</div>` : ''}</section>` : ''}
       <fieldset style="border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:18px">
         <legend class="label">選一個${ans && !chosen ? `（你寫了：${esc(ans)}）` : ''}</legend>
         <div class="opts">${q.options.map(o => `
           <button class="opt ${o.recommended ? 'rec' : ''} ${chosen === o.key ? 'on' : ''}" data-opt="${o.key}">
-            <span class="row spread"><span class="k">${o.key}</span>${o.recommended ? '<span class="badge-rec">★ AI 建議</span>' : ''}${chosen === o.key ? '<span class="badge-rec">你選的</span>' : ''}</span>
+            <span class="row spread"><span class="k">${o.key}</span>${o.recommended ? `<span class="badge-rec">${r.auto ? '★ 設計目前的做法' : '★ AI 建議'}</span>` : ''}${chosen === o.key ? '<span class="badge-rec">你選的</span>' : ''}</span>
             <span class="sum">${inline(o.summary || o.text)}</span>
             ${o.outcome ? `<span class="out">選了之後：${inline(o.outcome)}</span>` : ''}
           </button>`).join('')}</div>

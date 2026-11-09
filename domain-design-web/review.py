@@ -6,7 +6,7 @@ import re
 import kit
 
 H3_QUESTION = re.compile(r'^### 問題\s*(\d+)\s*(?:（(.*)）)?\s*$')
-ITEM = re.compile(r'^- (背景|問題|例子|主題|其他|你的回答)：\s*(.*)$')
+ITEM = re.compile(r'^- (背景|問題|例子|主題|其他|你的回答|來源|影響)：\s*(.*)$')   # 來源、影響：全自動事後審查頁才有
 H3_CASE = re.compile(r'^### (GC\d+)\s*(.*)$')
 CASE_ITEM = re.compile(r'^- ([^：:]+)[：:]\s*(.*)$')
 # 黃金案例中人填的欄位（docs/02 ⑥；AI 不填）
@@ -17,6 +17,11 @@ FILE_REF = re.compile(r'`?([^\s`「」（）()、，]+?\.(?:md|ya?ml|js|sql|py))
 
 def digest(text):
     return hashlib.sha1(text.encode('utf-8')).hexdigest()[:12]
+
+
+def is_auto(path):
+    """全自動事後審查頁：reviews/<日期>_auto.md。"""
+    return str(path).endswith('_auto.md')
 
 
 def _empty(v):
@@ -41,7 +46,8 @@ def parse(path):
         m = H3_QUESTION.match(line)
         if m:
             cur = {'n': int(m.group(1)), 'ref': m.group(2) or '', 'section': h2, 'line': no,
-                   'background': '', 'question': '', 'example': '', 'topic': '', 'options': [], 'other': '', 'answer': '', 'answer_line': None}
+                   'background': '', 'question': '', 'example': '', 'topic': '', 'options': [], 'other': '', 'answer': '', 'answer_line': None,
+                   'source': '', 'impact': ''}
             questions.append(cur)
             continue
         if line.startswith('### '):
@@ -59,7 +65,8 @@ def parse(path):
             if k == '你的回答':
                 cur['answer'], cur['answer_line'] = v, no
             else:
-                cur[{'背景': 'background', '問題': 'question', '例子': 'example', '主題': 'topic', '其他': 'other'}[k]] = v
+                cur[{'背景': 'background', '問題': 'question', '例子': 'example', '主題': 'topic', '其他': 'other',
+                     '來源': 'source', '影響': 'impact'}[k]] = v
             continue
         if line.startswith('  ') and line.strip() and not line.strip().startswith('<!--'):
             # 前一項的續行
@@ -116,10 +123,15 @@ def parse(path):
         'cases': len(cases),
         'cases_open': sum(1 for c in cases if any(_empty(c['fields'].get(k, {}).get('value', '')) for k in CASE_HUMAN)),
     }
-    counts['open'] = (counts['questions_open'] + counts['confirms_open'] + counts['cases_open']
-                      + (0 if counts['spot_done'] else 1) + (0 if counts['conclusion_done'] else 1))
+    # 全自動事後審查頁（docs/02「全自動事後審查頁」）：只有選擇題，沒有確認列、抽查、結論；「處理」由 AI 處理答案後寫
+    auto = is_auto(path) or any(m['key'] == '這輪審查的步驟' and '全自動事後審查' in m['value'] for m in meta)
+    counts['open'] = counts['questions_open'] if auto else (
+        counts['questions_open'] + counts['confirms_open'] + counts['cases_open']
+        + (0 if counts['spot_done'] else 1) + (0 if counts['conclusion_done'] else 1))
+    handled = next((m['value'] for m in meta if m['key'] == '處理'), '')
+    counts['processed'] = bool(handled.strip()) and not handled.strip().startswith('（')
     return {
-        'title': title, 'digest': digest(text), 'meta': meta,
+        'title': title, 'digest': digest(text), 'meta': meta, 'auto': auto,
         'questions': questions, 'confirms': confirms, 'spot': spot, 'spot_hint': spot_hint,
         'conclusion': conclusion, 'golden': section_text('三'), 'cases': cases, 'counts': counts,
         'problems': [f'{no} {msg}' for p, no, msg in mb.problems if p == path],

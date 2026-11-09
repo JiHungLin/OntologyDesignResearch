@@ -231,6 +231,12 @@ export async function renderHome(slice) {
   app.innerHTML = `
     ${levelStrip(h.levels)}
     ${asking ? '' : waitingCard(slice)}
+    ${h.auto_review ? `<section class="card ${h.auto_review.open ? 'lift' : 'soft-card'}"><div class="row spread"><div>
+      <span class="chip ${h.auto_review.open ? 'turn' : ''}">全自動留給你的決定</span>
+      <p style="margin:8px 0 0">${h.auto_review.open
+        ? `還有 <strong>${h.auto_review.open} / ${h.auto_review.total} 題</strong>。AI 代答時依據不夠或同一件事來回改的，先照設計目前的做法（A）往下做；選 A 就是確認，選別的 AI 會照你的答案回頭修改。全自動在跑時也能答。`
+        : '都答完了，等 AI 處理（全自動下一圈，或手動請 AI「處理事後審查頁」）。'}</p></div>
+      <a class="btn ${h.auto_review.open ? 'yellow' : ''}" href="#/r/${enc(h.auto_review.path)}/decide/0">${h.auto_review.open ? '去決定' : '看答案'}<span class="arr">›</span></a></div></section>` : ''}
     ${hero}
     ${reopen}
     <div class="cols">

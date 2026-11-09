@@ -18,6 +18,7 @@ export function sliceState(f, row) {
   const au = state.project && state.project.autorun;
   if (au && au.running && (f.review || (f.next && (f.next.n <= 5 || f.next.status !== '未開始')))) return { text: '全自動進行中', cls: 'busy' };
   if (f.review) return { text: '輪到你審查', cls: 'turn' };
+  if (f.auto_review && f.auto_review.open) return { text: `${f.auto_review.open} 題待你決定`, cls: 'turn' };
   if (!f.next) return { text: '完成', cls: 'ok' };
   // ⑥ 還沒開始才算「設計完成」；已經開始（有簽核紀錄）就是還在驗證，不是完成
   if (f.next.n === 6) return f.next.status === '未開始' ? { text: '設計完成', cls: 'ok' } : { text: f.next.status === '凍結中' ? '⑥ 凍結中' : '⑥ 驗證中', cls: '' };
@@ -63,6 +64,8 @@ export function renderNav() {
     const body = a(`#/s/${enc(x.code)}`, '切片首頁')
       + (f.review ? a(`#/r/${enc(f.review.path)}`, '審查（輪到你）', `${f.review.counts.open} 件`, 'hot')
         : f.answered ? a(`#/r/${enc(f.answered.path)}`, '審查頁', '已作答，可以改') : '')
+      + (f.auto_review ? a(`#/r/${enc(f.auto_review.path)}/decide/0`, '全自動留給你的決定',
+        f.auto_review.open ? `${f.auto_review.open} 題` : '答完，等處理', f.auto_review.open ? 'hot' : '') : '')
       + a(`#/eq/${enc(x.code)}`, '專家問題', f.eq_open ? `${f.eq_open} 題待答` : '')
       + `<div class="nav-steps">${steps}</div>`
       + (others.length ? node('files:' + x.code, '<span class="nav-dir">其他檔案</span>', others.map(p => fileA(p)).join('')) : '');
