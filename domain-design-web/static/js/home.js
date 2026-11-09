@@ -234,7 +234,7 @@ export async function renderHome(slice) {
     ${h.auto_review ? `<section class="card ${h.auto_review.open ? 'lift' : 'soft-card'}"><div class="row spread"><div>
       <span class="chip ${h.auto_review.open ? 'turn' : ''}">全自動留給你的決定</span>
       <p style="margin:8px 0 0">${h.auto_review.open
-        ? `還有 <strong>${h.auto_review.open} / ${h.auto_review.total} 題</strong>。AI 代答時依據不夠或同一件事來回改的，先照設計目前的做法（A）往下做；選 A 就是確認，選別的 AI 會照你的答案回頭修改。全自動在跑時也能答。`
+        ? `還有 <strong>${h.auto_review.open} / ${h.auto_review.total} 題</strong>。AI 代答時依據不夠或同一件事來回改的，先照設計目前的做法（A）往下做；選 A 就是確認，選別的 AI 會照你的答案回頭修改。全自動在跑時也能答。${h.auto_review.parked ? '<br><strong>這條切片擱置中</strong>：有 AI 卡住、要你決定才能往下的題目（來源寫「擱置」），全自動先做別條，你答完才接著做這條。' : ''}`
         : '都答完了，交給 AI 照你的答案處理。'}</p></div>
       <span class="row"><a class="btn ghost" href="#/r/${enc(h.auto_review.path)}/all">全部題目</a>
       <a class="btn ${h.auto_review.open ? 'yellow' : 'primary'}" href="#/r/${enc(h.auto_review.path)}/${h.auto_review.open ? 'decide/0' : 'all'}">${h.auto_review.open ? '去決定' : '交給 AI 處理'}<span class="arr">›</span></a></span></div></section>` : ''}

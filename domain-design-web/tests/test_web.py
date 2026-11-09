@@ -37,7 +37,7 @@ def test_parse(repo):
     r = review.parse(str(repo / REVIEW))
     assert r['counts'] == {'questions': 2, 'questions_open': 2, 'confirms': 2, 'confirms_open': 2,
                            'spot_done': False, 'conclusion_done': False, 'cases': 1, 'cases_open': 1, 'open': 7,
-                           'processed': False}
+                           'processed': False, 'parked': 0}
     q = r['questions'][0]
     assert (q['n'], q['ref']) == (1, '② D-01')
     assert [(o['key'], o['recommended']) for o in q['options']] == [('A', True), ('B', False)]
@@ -574,11 +574,11 @@ def test_autorun_from_web(repo, client):
     open(os.path.join(str(repo), 'tools', 'auto_run.py'), 'w').write(FAKE_RUNNER)
     assert client.post('/api/auto/start', json={}).status_code == 400          # 手動模式不能開始
     client.post('/api/plan/mode', json={'mode': '全自動', 'who': '甲'})
-    r = client.post('/api/auto/start', json={'max_steps': 5, 'until_design_done': True})
+    r = client.post('/api/auto/start', json={'max_steps': 5, 'stop_every': 3, 'design_only': True})   # 一路做完：每 3 條停、只做到 ⑤
     assert r.status_code == 200
     assert _wait(lambda: client.get('/api/auto').json()['state']['running'])
     a = client.get('/api/auto').json()
-    assert a['state']['args'] == ['--max-steps', '5', '--until-design-done'] and a['rounds'][0]['log'] == 'x_1.jsonl'
+    assert a['state']['args'] == ['--max-steps', '5', '--stop-every', '3', '--design-only'] and a['rounds'][0]['log'] == 'x_1.jsonl'
     assert client.get('/api/auto/events?log=x_1.jsonl').json()['events'][0]['text'] == '寫 ④'
     assert client.get('/api/auto/events?log=../state.json').status_code == 404
     assert client.get('/api/project').json()['autorun']['running']
@@ -636,7 +636,7 @@ def test_auto_review_page(client, repo, monkeypatch):
     assert r['auto'] and r['counts']['open'] == 1
     assert r['questions'][0]['source'] == 'reviews/2026-10-27_02.md 問題 1' and r['questions'][0]['impact'] == '04_rules.md D-01'
     h = client.get('/api/home', params={'slice': 'demo'}).json()
-    assert h['auto_review'] == {'path': 'slices/demo/reviews/2026-11-09_auto.md', 'open': 1, 'total': 1, 'processed': False}
+    assert h['auto_review'] == {'path': 'slices/demo/reviews/2026-11-09_auto.md', 'open': 1, 'total': 1, 'processed': False, 'parked': 0}
     assert h['current'] is None or not h['current']['path'].endswith('_auto.md')
     sl = next(x for x in client.get('/api/project').json()['slices'] if x['slice'] == 'demo')
     assert sl['auto_review']['open'] == 1
@@ -690,7 +690,7 @@ def test_auto_reviewed_after_stop(client, repo):
     d.mkdir(exist_ok=True)
     started = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - 60))
     (d / 'state.json').write_text(json.dumps({'running': False, 'started': started, 'ended': started, 'round': 2,
-                                              'reason': 'demo 設計完成（⑤ 凍結），照 --until-design-done 停下來'}), encoding='utf-8')
+                                              'reason': 'demo 設計完成（⑤ 凍結），累計 1 條，照設定停下來'}), encoding='utf-8')
     old = repo / REVIEW
     os.utime(old, (time.time() - 3600, time.time() - 3600))
     assert client.get('/api/project').json()['auto_reviewed'] == []

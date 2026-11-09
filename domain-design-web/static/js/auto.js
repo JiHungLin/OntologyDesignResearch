@@ -23,13 +23,16 @@ function pager(pages) {
   return `<div class="row auto-pager">${btn(1, '最新')}${btn(page - 1, '‹ 較新')}<span class="small">第 ${page} / ${pages} 頁</span>${btn(page + 1, '較舊 ›')}${btn(pages, '最舊')}</div>`;
 }
 
+const parkedLine = st => (st.parked || []).length
+  ? `<div class="small">這次擱置的：${st.parked.map(x => esc(x)).join('；')}（在那條切片的「全自動留給你的決定」回答後接著做）</div>` : '';
+
 function stateLine(st) {
   if (st.running && waitText(st)) return `<b>執行中・${waitText(st)}</b>${st.stopping ? '，<b>按了關閉，馬上停</b>' : ''}<div class="small muted">這一圈被上限切掉，重置後下一圈先收拾做到一半的；不想等就按「關閉全自動」。</div>`;
   if (st.running) return `<b>執行中</b>：第 ${st.round || 1} 圈（從 ${esc((st.round_started || st.started || '').replace('T', ' '))} 開始）${st.stopping ? '，<b>這一圈做完就停</b>' : ''}`
-    + `${st.last ? `<div class="small muted">上一圈：${inline(st.last)}</div>` : ''}`;
+    + `${st.last ? `<div class="small muted">上一圈：${inline(st.last)}</div>` : ''}${parkedLine(st)}`;
   if (!st.started) return '還沒有從這裡跑過。';
   const tidy = st.interrupted || /^沒有回報結果/.test(st.last || '') ? '<div class="small">上一次做到一半被切斷，下次開始時第一圈會先收拾（把那個動作做完或還原）。</div>' : '';
-  return `<b>已停下來</b>（${esc((st.ended || '').replace('T', ' '))}，跑了 ${st.round || 0} 圈）：${inline(st.reason || '')}${tidy}`;
+  return `<b>已停下來</b>（${esc((st.ended || '').replace('T', ' '))}，跑了 ${st.round || 0} 圈）：${inline(st.reason || '')}${tidy}${parkedLine(st)}`;
 }
 
 export async function renderAuto(log) {
@@ -61,11 +64,12 @@ export async function renderAuto(log) {
           <p class="small" style="margin:4px 0">只在 AI 明顯卡住、或方向錯了要馬上停時用。</p>
           <div class="row"><button class="btn" id="aKillYes" style="border-color:#c0392b;color:#c0392b">確認強制中斷</button><button class="btn" id="aKillNo">不要，回去</button></div></div>` : `
         <div class="row">
-          <label class="small">最多 <input type="number" id="aMax" value="${st.max_steps || 40}" min="1" max="200" style="width:5em"> 圈</label>
-          <label class="small"><input type="checkbox" id="aUntil" ${st.until_design_done === false ? '' : 'checked'}> 有一條切片 ⑤ 凍結（設計完成，含回頭修改後重新凍結）就停，讓我先看 AI 代答的審查頁</label>
+          <label class="small">最多 <input type="number" id="aMax" value="${st.max_steps || RUN_STEPS}" min="1" max="1000" style="width:5em"> 圈</label>
+          <label class="small">每 <input type="number" id="aEvery" value="${st.stop_every ?? RUN_EVERY}" min="0" max="99" style="width:4em"> 條切片 ⑤ 凍結停一次（含回頭修改後重新凍結；0＝不停），讓我看 AI 代答的審查頁</label>
+          <label class="small"><input type="checkbox" id="aDesign" ${st.design_only === false ? '' : 'checked'}> 只做到 ⑤（不開始 ⑥；地圖上的切片都做到 ⑤ 或擱置就完成）</label>
           <button class="btn primary go" id="aStart" ${busy ? 'disabled' : ''}>開始全自動</button></div>
         ${busy ? '<p class="small">AI 正在做網頁上的工作，做完再開始。</p>' : ''}
-        <p class="muted small" style="margin:6px 0 0">也會在這些情況停下來：AI 回報「完成」或「需要人」、連續兩圈沒有任何改變、碰到禁止清單、用量上限。</p>`}
+        <p class="muted small" style="margin:6px 0 0">也會在這些情況停下來：AI 回報「完成」或「需要人」、連續兩圈沒有任何改變、碰到禁止清單。只卡住一條切片的會「擱置」那條、接著做別條，原因收在那條切片「全自動留給你的決定」，你答完它才接著做；碰到用量上限會等到重置再接著跑。</p>`}
     </section>
     <section class="card" style="margin-top:12px">
       <div class="row spread"><h2 style="margin:0">${cur ? `這一圈的 AI 對話 <span class="muted small">${esc(cur)}</span>` : 'AI 對話'}</h2>
@@ -80,7 +84,7 @@ export async function renderAuto(log) {
       <ul class="small">${A.denied.map(d => `<li>${esc((d.at || '').replace('T', ' ').slice(0, 19))}　<code>${esc(d.tool)}</code> ${esc(String(d.what || '').slice(0, 200))}<div class="muted">${esc(d.reason || '')}</div></li>`).join('')}</ul></section>` : ''}`;
   $$('.auto-pager button').forEach(b => b.onclick = () => { page = +b.dataset.page; renderAuto(log); });
   const post = async (url, body, msg) => { try { await api(url, body || {}); toast(msg); renderAuto(); } catch (e) { toast(e.message); } };
-  if ($('#aStart')) $('#aStart').onclick = () => post('/api/auto/start', { max_steps: +$('#aMax').value || 40, until_design_done: $('#aUntil').checked }, '全自動開始了');
+  if ($('#aStart')) $('#aStart').onclick = () => post('/api/auto/start', { max_steps: +$('#aMax').value || RUN_STEPS, stop_every: Math.max(0, +$('#aEvery').value || 0), design_only: $('#aDesign').checked }, '全自動開始了');
   if ($('#aStop')) $('#aStop').onclick = () => post('/api/auto/stop', null, '這一圈做完就關閉全自動');
   if ($('#aKill')) $('#aKill').onclick = () => { $('#aKillBox').hidden = false; $('#aKill').disabled = true; };
   if ($('#aKillNo')) $('#aKillNo').onclick = () => { $('#aKillBox').hidden = true; $('#aKill').disabled = false; };
@@ -214,6 +218,8 @@ new MutationObserver(() => { if (autoOn() && !$('#autoBanner')) applyAutoLock();
 
 // ---------- 全自動事後審查頁答完：一鍵交給 AI 處理（docs/01 0.2「待人決定」） ----------
 
+// 一路做完所有切片（docs/01 0.2）：每 3 條切片 ⑤ 凍結停一次、只做到 ⑤；一條切片大約 20～30 圈
+export const RUN_STEPS = 200, RUN_EVERY = 3;
 export const HANDOFF_STEPS = 25;   // 處理答案＋回頭修改 ①～⑤ 大約要的圈數；⑤ 重新凍結就停
 
 export function handoffBlock(r) {
@@ -235,7 +241,7 @@ export function bindHandoff(r) {
     const P = state.project || {};
     try {
       if (P.plan && P.plan.auto) {
-        await api('/api/auto/start', { max_steps: HANDOFF_STEPS, until_design_done: true });
+        await api('/api/auto/start', { max_steps: HANDOFF_STEPS, stop_every: 1, design_only: true });
         toast('全自動開始了：先處理你的答案');
         go('#/auto');
       } else {

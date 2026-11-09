@@ -1431,6 +1431,8 @@ class Lint:
                     self.red('事後審查', f"{rel}:{q['no']} {q['title']} 除了 A（建議），至少還要一個選項（B…）")
                 if '你的回答' in fl and not fl['你的回答'][1]:
                     open_.append(q['title'])
+                    if fl.get('來源', (0, ''))[1].startswith('擱置'):     # docs/01 0.2「擱置」：答之前這條切片不往下做
+                        print(f"    • {rel}:{q['no']} {q['title']}：這條切片擱置中（{fl['來源'][1]}），人答完才繼續；依賴它的切片也跳過")
             done = next((l.split('|')[2].strip() for l in r['lines'] if re.match(r'^\|\s*處理\s*\|', l)), '')
             if open_:
                 print(f"    • {rel}：還有 {len(open_)} 題待人決定（全自動照 A 往下做；人答完後處理）")

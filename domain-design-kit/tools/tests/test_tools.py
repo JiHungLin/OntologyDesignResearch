@@ -776,6 +776,11 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertNotIn('還沒處理', out)
         self.assertNotIn('[事後審查] 紅燈', out)
+        # 擱置（docs/01 0.2）：來源「擱置：…」的題目還沒答，列出這條切片擱置中
+        self.write(self.slice_file('reviews/2026-11-09-2_auto.md'),
+                   self.AUTO_PAGE.format(src='擱置：lint 把仍有效的同名關係報成已取代', ans='', done=''))
+        code, out = self.lint()
+        self.assertIn('這條切片擱置中（擱置：lint 把仍有效的同名關係報成已取代）', out)
 
     def test_expected_result_change(self):
         # 改黃金案例的預期結果：寫種類與依據，依據不能是被驗證的設計；AI 改的（全自動）要收進事後審查頁
@@ -1102,7 +1107,31 @@ class TestAuto(Base):
         code, out = run('auto_run.py', '--claude', claude, '--until-design-done', cwd=self.dir)
         self.assertIn('第 2 圈：繼續', out)
         self.assertNotIn('第 3 圈', out)
-        self.assertIn('a 設計完成（⑤ 凍結），照 --until-design-done 停下來', out)
+        self.assertIn('a 設計完成（⑤ 凍結），累計 1 條，照設定停下來', out)
+
+    def test_runner_park_and_stop_every(self):
+        # 一路做完所有切片（使用者選：擱置那條做別條、每 3 條停一次、只做到 ⑤）：擱置不停；累計 N 條 ⑤ 凍結才停；--design-only 提示詞多一句
+        plan = ('# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n\n## 切片\n\n| 切片 | 狀態 |\n|---|---|\n'
+                '| a | 進行中 |\n| b | 候選 |\n| c | 候選 |\n')
+        self.write('slices/PLAN.md', plan)
+        subprocess.run(['git', 'init', '-q'], cwd=self.dir, check=True)
+        claude = self.fake_claude(['全自動：擱置（c：lint 誤報）', '全自動：繼續', '全自動：繼續', '全自動：繼續', '全自動：繼續'])
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('open("prompts.txt", "a").write(sys.argv[2].replace("\\n", " ") + "\\n")\n'
+                    'open(f"round_{n}.txt", "w").close()\n'        # 每圈都有新檔：不會被「連續兩圈沒有改變」停下來
+                    'p = "slices/PLAN.md"; t = open(p).read()\n'
+                    'if n == 2: open(p, "w").write(t.replace("| a | 進行中 |", "| a | 設計完成（待驗證） |"))\n'
+                    'if n == 4: open(p, "w").write(t.replace("| b | 候選 |", "| b | 設計完成（待驗證） |"))\n')
+        code, out = run('auto_run.py', '--claude', claude, '--stop-every', '2', '--design-only', cwd=self.dir)
+        self.assertIn('第 1 圈：擱置（c：lint 誤報）', out)
+        self.assertIn('第 5 圈：繼續', out)
+        self.assertNotIn('第 6 圈', out)
+        self.assertIn('a、b 設計完成（⑤ 凍結），累計 2 條', out)
+        import json
+        st = json.load(open(os.path.join(self.dir, '.domain-auto', 'state.json'), encoding='utf-8'))
+        self.assertEqual((st['parked'], st['designed'], st['stop_every'], st['design_only']), (['c：lint 誤報'], ['a', 'b'], 2, True))
+        prompts = open(os.path.join(self.dir, 'prompts.txt'), encoding='utf-8').read().splitlines()
+        self.assertTrue(all('只做到第 ⑤ 步' in x for x in prompts))
 
     def test_runner_until_design_done_refreeze(self):
         # 已經設計完成的切片回頭修改後 ⑤ 重新凍結（多了 a/05-v2 tag）也停：地圖狀態沒變，看 tag
@@ -1118,7 +1147,7 @@ class TestAuto(Base):
         code, out = run('auto_run.py', '--claude', claude, '--until-design-done', cwd=self.dir)
         self.assertIn('第 2 圈：繼續', out)
         self.assertNotIn('第 3 圈', out)
-        self.assertIn('a 設計完成（⑤ 凍結），照 --until-design-done 停下來', out)
+        self.assertIn('a 設計完成（⑤ 凍結），累計 1 條，照設定停下來', out)
 
     def test_runner_waits_for_usage_limit(self):
         # 用量上限：不停下來，等到重置後接著跑，下一圈先收拾；被上限切掉的那一圈不算進 --max-steps（HR-Domain-Auto 第 3 圈）

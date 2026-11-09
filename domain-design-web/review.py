@@ -130,6 +130,8 @@ def parse(path):
         + (0 if counts['spot_done'] else 1) + (0 if counts['conclusion_done'] else 1))
     handled = next((m['value'] for m in meta if m['key'] == '處理'), '')
     counts['processed'] = bool(handled.strip()) and not handled.strip().startswith('（')
+    # 擱置（docs/01 0.2「擱置」）：來源「擱置：…」的題目還沒答，這條切片全自動先跳過
+    counts['parked'] = sum(1 for q in questions if _empty(q['answer']) and q.get('source', '').startswith('擱置'))
     return {
         'title': title, 'digest': digest(text), 'meta': meta, 'auto': auto,
         'questions': questions, 'confirms': confirms, 'spot': spot, 'spot_hint': spot_hint,

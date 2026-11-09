@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import subprocess
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -103,7 +104,8 @@ def _auto_review(reviews):
     for r in reviews:                       # 新到舊
         c = r.get('counts')
         if r.get('auto') and c and (c['questions_open'] or not c.get('processed')):
-            return {'path': r['path'], 'open': c['questions_open'], 'total': c['questions'], 'processed': c.get('processed', False)}
+            return {'path': r['path'], 'open': c['questions_open'], 'total': c['questions'], 'processed': c.get('processed', False),
+                    'parked': c.get('parked', 0)}
     return None
 
 
@@ -285,12 +287,15 @@ def get_auto(page: int = 1):
 class AutoStart(BaseModel):
     max_steps: int = 40
     until_design_done: bool = True
+    stop_every: Optional[int] = None    # 累計幾條切片 ⑤ 凍結停一次；沒給時照 until_design_done（1 或 0）
+    design_only: bool = False           # 只做到 ⑤
 
 
 @app.post('/api/auto/start')
 def post_auto_start(a: AutoStart):
     try:
-        return autorun.start(max(1, min(a.max_steps, 200)), a.until_design_done)
+        every = a.stop_every if a.stop_every is not None else (1 if a.until_design_done else 0)
+        return autorun.start(max(1, min(a.max_steps, 1000)), max(0, every), a.design_only)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except RuntimeError as e:

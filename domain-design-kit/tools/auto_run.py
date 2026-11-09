@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """全自動模式的跑步器（docs/01 0.2「全自動模式」，先試用）。
 
-用法：python3 tools/auto_run.py [--max-steps 30] [--until-design-done] [--claude claude]
+用法：python3 tools/auto_run.py [--max-steps 30] [--until-design-done | --stop-every N] [--design-only] [--claude claude]
   在設計 repo 根目錄執行。slices/PLAN.md 開頭區的「執行模式」要是「全自動」。
   每一圈開一個新的 claude -p session（一個 session 做一個動作，和手動時「一個 session 一步」相同），
   帶 tools/auto_hook.py 當 PreToolUse hook：不在禁止清單的工具呼叫直接放行並記錄，碰到禁止清單就擋下。
-  AI 在回報最後一行寫「全自動：繼續」「全自動：完成（…）」「全自動：需要人（…）」；
+  AI 在回報最後一行寫「全自動：繼續」「全自動：擱置（<切片>：…）」「全自動：完成（…）」「全自動：需要人（…）」；
+  擱置是只卡住一條切片（docs/01 0.2「擱置」）：原因已收進那條切片的事後審查頁，跑步器接著做別條；
   完成、需要人、沒有這一行、連續兩圈沒有任何改變、執行模式被改回手動（下一圈開始前檢查），或到了 --max-steps，就停下來。
-  --until-design-done：有一條切片的 ⑤ 凍結了就停（切片地圖上出現新的「設計完成（待驗證）」切片，或回頭修改後 ⑤ 重新凍結、多了 <切片>/05-vN tag），讓人先看一次 AI 代答的審查頁。
+  --stop-every N：這次開始後累計 N 條切片的 ⑤ 凍結了就停（切片地圖上出現新的「設計完成（待驗證）」切片，或回頭修改後 ⑤ 重新凍結、
+  多了 <切片>/05-vN tag），讓人先看一次 AI 代答的審查頁；0＝不因此停。--until-design-done 等於 --stop-every 1。
+  --design-only：只做到第 ⑤ 步，不開始任何切片的 ⑥；地圖上沒有切片可以做 ①～⑤ 時 AI 回報完成。
   要停下來又不改執行模式：建立 .domain-auto/stop（網頁的「關閉全自動」就是這樣做），這一圈做完就停。
   上一次是做到一半被切斷的（網頁強制中斷、用量上限、程序不在了），第一圈先收拾：
   提示詞多一段，要 AI 看 git status、diff、最後的 tag，把中斷時的那個動作做完或還原；留下的 .git/index.lock 先刪掉。
   跑到一半碰到用量上限（「You've hit your … limit · resets 3:30pm (Asia/Taipei)」）：不停下來，等到重置時間再多 2 分鐘，
   下一圈先收拾再往下；等的時候 state.json 的 waiting_until 寫要等到幾點，有人按停止（.domain-auto/stop）就不等了。
-  看不懂重置時間的每 30 分鐘試一次；累計等超過 --limit-wait-hours（預設 24）就停下來。
+  看不懂重置時間的每 30 分鐘試一次；累計等超過 --limit-wait-hours（預設 168，一週上限也等得到）就停下來。
 
 紀錄（.domain-auto/，不提交）：
   runs/<時間>_<n>.jsonl  每一圈 claude 的完整輸出（stream-json）
@@ -37,7 +40,11 @@ import md2build as mb  # noqa: E402
 PROMPT = ('全自動模式（docs/01 0.2「全自動模式」）：沒有人在線上，不要問人、不要等人。'
           '先執行 /domain-status，然後只做下一個動作（一步的產出到送審、一次凍結〔含 AI 審查〕、或一次回頭修改），做完就結束這個 session。'
           '要人做的事照全自動模式的規定標記後往下，不要停。'
-          '回報一律用繁體中文；最後一行只寫其中一個：「全自動：繼續」「全自動：完成（原因）」「全自動：需要人（原因）」。')
+          '只卡住一條切片、要人才能往下的，照 docs/01 0.2「擱置」收進那條切片的事後審查頁，回報「全自動：擱置（<切片>：原因）」，下一圈做別條；'
+          '擱置中的切片（事後審查頁有來源「擱置」的題目還沒答）和依賴它的切片都跳過。'
+          '回報一律用繁體中文；最後一行只寫其中一個：「全自動：繼續」「全自動：擱置（切片：原因）」「全自動：完成（原因）」「全自動：需要人（原因）」。')
+DESIGN_ONLY = ('這次只做到第 ⑤ 步：不開始任何切片的第 ⑥ 步。地圖上已經沒有切片可以做 ①～⑤（都設計完成或擱置中）時，'
+               '回報「全自動：完成（地圖上的切片都做到 ⑤ 或擱置）」。')
 RECOVER = ('上一次全自動在第 {n} 圈做到一半被切斷（{why}）。這一圈先收拾，不做新的動作：'
            '看 git status、git diff、git log -3、git tag 最後幾個，和 /domain-status 的結果，判斷中斷時在做哪一個動作'
            '（寫一步、回頭修改、凍結〔檔頭、CHANGELOG、commit、tag、core/ 同步〕、⑥ 的指令）；'
@@ -49,7 +56,7 @@ LIMIT = re.compile(r"hit your .*?limit", re.I)
 RESET = re.compile(r'resets\s+(?:([A-Z][a-z]{2})\s+(\d{1,2}),?\s+(?:at\s+)?)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)(?:\s*\(([^)]+)\))?', re.I)
 LIMIT_MARGIN = float(os.environ.get('DOMAIN_AUTO_LIMIT_MARGIN', 120))   # 重置時間之後再多等幾秒
 LIMIT_RETRY = float(os.environ.get('DOMAIN_AUTO_LIMIT_RETRY', 1800))    # 看不懂重置時間時，幾秒後再試
-MARK = re.compile(r'全自動：(繼續|完成|需要人)(?:（([^）]*)）)?')
+MARK = re.compile(r'全自動：(繼續|擱置|完成|需要人)(?:（([^）]*)）)?')
 
 
 def mode(repo):
@@ -190,9 +197,12 @@ def run():
     ap = argparse.ArgumentParser(description='全自動模式：一圈一個 claude -p session，連續往下做')
     ap.add_argument('--max-steps', type=int, default=30)
     ap.add_argument('--claude', default=os.environ.get('CLAUDE_BIN', 'claude'))
-    ap.add_argument('--until-design-done', action='store_true', help='有一條切片的 ⑤ 凍結（設計完成）就停')
-    ap.add_argument('--limit-wait-hours', type=float, default=24, help='碰到用量上限時最多累計等幾小時')
+    ap.add_argument('--until-design-done', action='store_true', help='有一條切片的 ⑤ 凍結（設計完成）就停（＝--stop-every 1）')
+    ap.add_argument('--stop-every', type=int, default=0, help='累計幾條切片的 ⑤ 凍結就停；0＝不因此停')
+    ap.add_argument('--design-only', action='store_true', help='只做到第 ⑤ 步，不開始 ⑥')
+    ap.add_argument('--limit-wait-hours', type=float, default=168, help='碰到用量上限時最多累計等幾小時')
     a = ap.parse_args()
+    every = 1 if a.until_design_done and not a.stop_every else max(a.stop_every, 0)
     repo = os.path.realpath(os.getcwd())
     m = mode(repo)
     if not m.startswith('全自動'):
@@ -206,7 +216,7 @@ def run():
     lock = os.path.join(repo, '.git', 'index.lock')
     if cut and os.path.exists(lock):   # 被切斷的 git 指令留下的；這時沒有別的 AI 在跑（網頁在全自動跑時不開 AI 工作）
         os.remove(lock)
-    STATE = State(auto, max_steps=a.max_steps, until_design_done=a.until_design_done,
+    STATE = State(auto, max_steps=a.max_steps, until_design_done=every == 1, stop_every=every, design_only=a.design_only, parked=[], designed=[],
                   recovered=f'第 {cut[0]} 圈（{cut[1]}）' if cut else '')
     settings = json.dumps({'hooks': {'PreToolUse': [{'matcher': '*', 'hooks': [
         {'type': 'command', 'command': f'{sys.executable} {os.path.join(HERE, "auto_hook.py")}'}]}]}})
@@ -225,7 +235,7 @@ def run():
         stamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
         out = os.path.join(auto, 'runs', f'{stamp}_{n}.jsonl')
         STATE.save(round=n, log=os.path.basename(out), round_started=datetime.now().isoformat(timespec='seconds'))
-        prompt = RECOVER.format(n=cut[0], why=cut[1]) + PROMPT if cut else PROMPT
+        prompt = (RECOVER.format(n=cut[0], why=cut[1]) if cut else '') + PROMPT + (DESIGN_ONLY if a.design_only else '')
         cut = None
         cmd = [a.claude, '-p', prompt, '--output-format', 'stream-json', '--verbose',
                '--settings', settings, '--permission-mode', 'acceptEdits']
@@ -263,12 +273,15 @@ def run():
             continue
         if p.returncode != 0 and not kind:
             sys.exit(f'claude 結束碼 {p.returncode}，停下來；看 {out}')
-        if kind != '繼續':
+        if kind == '擱置':            # 只卡住一條切片：原因在那條切片的事後審查頁，接著做別條
+            STATE.save(parked=STATE.d['parked'] + [why or '（沒寫哪條）'])
+        elif kind != '繼續':
             sys.exit(0 if kind == '完成' else 1)
         # 新的設計完成切片，或已設計完成的切片回頭修改後 ⑤ 重新凍結（多了 <切片>/05-vN tag）
         new = (design_done(repo) - done_before) | {t.split('/')[0] for t in frozen5(repo) - tags_before}
-        if a.until_design_done and new:
-            sys.exit(f'{"、".join(sorted(new))} 設計完成（⑤ 凍結），照 --until-design-done 停下來；先看 AI 代答的審查頁')
+        STATE.save(designed=sorted(new))
+        if every and len(new) >= every:
+            sys.exit(f'{"、".join(sorted(new))} 設計完成（⑤ 凍結），累計 {len(new)} 條，照設定停下來；先看 AI 代答的審查頁')
         same = same + 1 if snapshot(repo) == before else 0
         if same >= 2:
             sys.exit('連續兩圈沒有任何改變（commit 與工作區都一樣），停下來；看 .domain-auto/runs.md')

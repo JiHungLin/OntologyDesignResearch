@@ -4,7 +4,7 @@ import { STEP_INFO } from './home.js';
 import { bindWaiting, openAi, runAi, runningCard, waitingCard } from './ai.js';
 import { markNav, narrow } from './nav.js';
 import { inputDialog, needFetch } from './plan.js';
-import { applyAutoLock, autoBadge, autoProgress, HANDOFF_STEPS, waitText } from './auto.js';
+import { applyAutoLock, autoBadge, autoProgress, RUN_EVERY, RUN_STEPS, waitText } from './auto.js';
 import { renderAiHead } from './ai.js';
 
 // ---------- 總覽：整個 domain 走到哪 ----------
@@ -144,7 +144,7 @@ export async function renderHub() {
       <p class="small">${esc((st.ended || '').replace('T', ' ').slice(0, 16))} 停下來：${inline(st.reason || '')}</p>
       ${rv.length ? `<p>這次 AI 代答的審查頁（不用作答，看看 AI 替你決定了什麼；有不同意的，用切片頁的「發現問題」交給 AI）：</p>
       <ul>${rv.map(r => `<li><a href="#/r/${enc(r.path)}">${esc(r.slice)}・${esc(r.steps.map(n => CIRCLED[n]).join(''))} ${esc(r.title)}</a></li>`).join('')}</ul>` : ''}
-      <p class="small muted">${nxt ? `繼續全自動會接著做 ${esc(nxt.f ? nxt.f.slice : nxt.row['切片'])}` : '繼續全自動會接著做地圖上的下一件事'}，下一條切片的 ⑤ 凍結時再停（最多 ${HANDOFF_STEPS} 圈）。第 ⑥ 步要系統實作好才做。想自己一步步做，到規劃頁把執行模式改回手動。</p></div>
+      <p class="small muted">${nxt ? `繼續全自動會接著做 ${esc(nxt.f ? nxt.f.slice : nxt.row['切片'])}` : '繼續全自動會接著做地圖上的下一件事'}，一路往下做，每 ${st.stop_every > 1 ? st.stop_every : RUN_EVERY} 條切片 ⑤ 凍結停一次、只做到 ⑤（在全自動頁可以改）；卡住的切片會擱置、做別條。想自己一步步做，到規劃頁把執行模式改回手動。</p></div>
       <div style="display:flex;flex-direction:column;gap:8px"><button class="btn big primary" id="autoGo">繼續全自動<span class="arr">›</span></button>
       <a class="btn" href="#/auto">看每一圈做了什麼</a></div></section>`;
   } else if (N.kind === 'auto') {
@@ -207,7 +207,8 @@ export async function renderHub() {
   const ag = $('#autoGo');
   if (ag) ag.onclick = async () => {
     ag.disabled = true;
-    try { await api('/api/auto/start', { max_steps: HANDOFF_STEPS, until_design_done: true }); toast('全自動開始了'); go('#/auto'); }
+    const st = P.autorun || {};
+    try { await api('/api/auto/start', { max_steps: RUN_STEPS, stop_every: st.stop_every > 1 ? st.stop_every : RUN_EVERY, design_only: st.design_only !== false }); toast('全自動開始了'); go('#/auto'); }
     catch (e) { toast(e.message); ag.disabled = false; }
   };
   $('#addInput').onclick = () => inputDialog({ folder: 'shared' });

@@ -93,7 +93,7 @@ def events(log, after=0):
     return {'events': evs[after:], 'n': len(evs), 'running': bool(st['running'] and st.get('log') == log)}
 
 
-def start(max_steps=40, until_design_done=True):
+def start(max_steps=40, stop_every=1, design_only=False):
     global _proc
     if not sessions.auto_mode():
         raise ValueError('執行模式不是全自動，先在規劃頁改成全自動')
@@ -104,8 +104,9 @@ def start(max_steps=40, until_design_done=True):
         raise RuntimeError(f'AI 正在做「{other["name"]}」，做完再開始全自動')
     os.makedirs(_dir(), exist_ok=True)
     cmd = [sys.executable, os.path.join(kit.repo(), 'tools', 'auto_run.py'), '--max-steps', str(int(max_steps))]
-    if until_design_done:
-        cmd.append('--until-design-done')
+    cmd += ['--stop-every', str(int(stop_every))]
+    if design_only:
+        cmd.append('--design-only')
     log = open(os.path.join(_dir(), 'runner.log'), 'a', encoding='utf-8')
     # 自己一個程序群組：伺服器重開不會帶走它，中斷時連同這一圈的 claude 一起結束
     _proc = subprocess.Popen(cmd, cwd=kit.repo(), stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
