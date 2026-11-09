@@ -45,18 +45,22 @@ def running():
     return state()['running']
 
 
-def rounds(limit=60):
-    """runs.md 每一圈一行（新到舊）。"""
+PER_PAGE = 25
+
+
+def rounds(page=1, per=PER_PAGE):
+    """runs.md 每一圈一行（新到舊），分頁：(這一頁的圈, 總共幾圈)。"""
     try:
         with open(os.path.join(_dir(), 'runs.md'), encoding='utf-8') as f:
             lines = [l.strip()[2:] for l in f if l.startswith('- ')]
     except OSError:
-        return []
+        return [], 0
     out = []
-    for l in lines[-limit:][::-1]:
+    start = (max(page, 1) - 1) * per
+    for l in lines[::-1][start:start + per]:
         log = l.rsplit('（runs/', 1)
         out.append({'text': log[0].strip(), 'log': log[1].rstrip('）') if len(log) > 1 else ''})
-    return out
+    return out, len(lines)
 
 
 def denied(limit=20):

@@ -6,6 +6,7 @@ import { loadProject, planSlices, showTopic } from './overview.js';
 import { route } from './main.js';
 
 let timer = null;
+let page = 1;   // 「每一圈」的第幾頁（一頁 25 圈，新到舊）
 
 // 碰到用量上限時跑步器等到重置再接著跑（tools/auto_run.py），state.json 的 waiting_until 是要等到幾點
 export const waitText = st => st && st.running && st.waiting_until
@@ -14,6 +15,12 @@ export const waitText = st => st && st.running && st.waiting_until
 export function autoBadge(st) {
   if (!st || !st.running) return '';
   return `<a class="brand-sub auto-live" href="#/auto" title="全自動正在跑，點這裡看進度">全自動執行中・第 ${st.round || 1} 圈${waitText(st) ? '（等用量重置）' : ''}${st.stopping ? '（這圈做完停）' : ''}</a>`;
+}
+
+function pager(pages) {
+  if (pages <= 1) return '';
+  const btn = (n, label) => `<button class="btn small-btn" data-page="${n}" ${n < 1 || n > pages || n === page ? 'disabled' : ''}>${label}</button>`;
+  return `<div class="row auto-pager">${btn(1, '最新')}${btn(page - 1, '‹ 較新')}<span class="small">第 ${page} / ${pages} 頁</span>${btn(page + 1, '較舊 ›')}${btn(pages, '最舊')}</div>`;
 }
 
 function stateLine(st) {
@@ -30,10 +37,12 @@ export async function renderAuto(log) {
   state.scope = '_plan';
   markNav();
   setTop(['#/plan', '規劃'], '<strong>全自動</strong>');
-  const [P, A] = await Promise.all([loadProject(), api('/api/auto')]);
+  const [P, A] = await Promise.all([loadProject(), api(`/api/auto?page=${page}`)]);
+  const pages = Math.max(1, Math.ceil(A.total / A.per));
+  if (page > pages) { page = pages; return renderAuto(log); }
   const st = A.state, auto = P.plan && P.plan.auto;
   const busy = (P.slices || []).some(x => x.session && x.session.running) || (P.plan_session && P.plan_session.running);
-  const cur = log || (st.running ? st.log : (A.rounds[0] || {}).log);
+  const cur = log || st.log || (A.rounds[0] || {}).log;
   $('#app').innerHTML = `
     <section class="card lift" id="a-ctl">
       <h2 style="margin:0">全自動</h2>
@@ -64,11 +73,12 @@ export async function renderAuto(log) {
       <div class="ai-log auto-log" id="aLog">${cur ? '' : '<p class="muted small">還沒有紀錄。</p>'}</div>
     </section>
     <section class="card" style="margin-top:12px">
-      <h2 style="margin:0 0 6px">每一圈（新到舊）</h2>
-      ${A.rounds.length ? `<ol class="auto-rounds small">${A.rounds.map(r => `<li${r.log === cur ? ' class="on"' : ''}>${r.log ? `<a href="#/auto/${encodeURIComponent(r.log)}">${inline(r.text)}</a>` : inline(r.text)}</li>`).join('')}</ol>` : '<p class="muted small">還沒有跑過。</p>'}
+      <div class="row spread"><h2 style="margin:0 0 6px">每一圈（新到舊${A.total ? `，共 ${A.total} 圈` : ''}）</h2>${pager(pages)}</div>
+      ${A.rounds.length ? `<ol class="auto-rounds small" reversed start="${A.total - (page - 1) * A.per}">${A.rounds.map(r => `<li${r.log === cur ? ' class="on"' : ''}>${r.log ? `<a href="#/auto/${encodeURIComponent(r.log)}">${inline(r.text)}</a>` : inline(r.text)}</li>`).join('')}</ol>${pager(pages)}` : '<p class="muted small">還沒有跑過。</p>'}
     </section>
     ${A.denied.length ? `<section class="card" style="margin-top:12px"><h2 style="margin:0 0 6px">被禁止清單擋下的（新到舊）</h2>
       <ul class="small">${A.denied.map(d => `<li>${esc((d.at || '').replace('T', ' ').slice(0, 19))}　<code>${esc(d.tool)}</code> ${esc(String(d.what || '').slice(0, 200))}<div class="muted">${esc(d.reason || '')}</div></li>`).join('')}</ul></section>` : ''}`;
+  $$('.auto-pager button').forEach(b => b.onclick = () => { page = +b.dataset.page; renderAuto(log); });
   const post = async (url, body, msg) => { try { await api(url, body || {}); toast(msg); renderAuto(); } catch (e) { toast(e.message); } };
   if ($('#aStart')) $('#aStart').onclick = () => post('/api/auto/start', { max_steps: +$('#aMax').value || 40, until_design_done: $('#aUntil').checked }, '全自動開始了');
   if ($('#aStop')) $('#aStop').onclick = () => post('/api/auto/stop', null, '這一圈做完就關閉全自動');

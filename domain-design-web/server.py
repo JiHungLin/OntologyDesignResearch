@@ -276,8 +276,10 @@ def post_mode(a: Mode):
 # ---- 全自動跑步器（tools/auto_run.py）：開始、停止、中斷、進度 ----
 
 @app.get('/api/auto')
-def get_auto():
-    return {'state': autorun.state(), 'rounds': autorun.rounds(), 'denied': autorun.denied()}
+def get_auto(page: int = 1):
+    rows, total = autorun.rounds(page)
+    return {'state': autorun.state(), 'rounds': rows, 'total': total, 'page': max(page, 1), 'per': autorun.PER_PAGE,
+            'denied': autorun.denied()}
 
 
 class AutoStart(BaseModel):

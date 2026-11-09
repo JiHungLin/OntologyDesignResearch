@@ -697,3 +697,15 @@ def test_auto_reviewed_after_stop(client, repo):
     os.utime(old, None)
     got = client.get('/api/project').json()['auto_reviewed']
     assert [r['path'] for r in got] == [REVIEW]
+
+
+def test_auto_rounds_paged(client, repo):
+    # 全自動頁的「每一圈」一頁 25 圈、新到舊（使用者：太多項目了）
+    d = repo / '.domain-auto'
+    d.mkdir(exist_ok=True)
+    (d / 'runs.md').write_text(''.join(f'- x 第 {i} 圈：繼續　做了 {i}　（runs/r_{i}.jsonl）\n' for i in range(1, 31)), encoding='utf-8')
+    a = client.get('/api/auto').json()
+    assert (a['total'], a['page'], a['per'], len(a['rounds'])) == (30, 1, 25, 25)
+    assert a['rounds'][0]['log'] == 'r_30.jsonl' and a['rounds'][-1]['log'] == 'r_6.jsonl'
+    b = client.get('/api/auto', params={'page': 2}).json()
+    assert [r['log'] for r in b['rounds']] == [f'r_{i}.jsonl' for i in range(5, 0, -1)]
