@@ -1,6 +1,6 @@
 // 全自動：開始、停止、中斷跑步器（tools/auto_run.py），看每一圈做了什麼
-import { $, $$, api, CIRCLED, esc, inline, md, setTop, state, toast } from './core.js';
-import { addStep, renderAi, renderAiHead, TOOL_NAME } from './ai.js';
+import { $, $$, api, CIRCLED, enc, esc, go, inline, md, setTop, state, toast } from './core.js';
+import { addStep, renderAi, renderAiHead, runAi, TOOL_NAME } from './ai.js';
 import { markNav, refreshNav } from './nav.js';
 import { loadProject, planSlices, showTopic } from './overview.js';
 import { route } from './main.js';
@@ -196,3 +196,36 @@ function lockControls() {
 // 有些頁面在 route 結束後還會非同步重畫（例：切片首頁讀完審查頁再畫一次）：#app 有變動就再套一次
 new MutationObserver(() => { if (autoOn() && !$('#autoBanner')) applyAutoLock(); else if (autoOn()) lockControls(); })
   .observe(document.getElementById('app'), { childList: true, subtree: true });
+
+// ---------- 全自動事後審查頁答完：一鍵交給 AI 處理（docs/01 0.2「待人決定」） ----------
+
+export const HANDOFF_STEPS = 25;   // 處理答案＋回頭修改 ①～⑤ 大約要的圈數；⑤ 重新凍結就停
+
+export function handoffBlock(r) {
+  const P = state.project || {};
+  if (P.autorun && P.autorun.running)
+    return `<p class="small">全自動正在跑，下一圈就會先處理你的答案。<a href="#/auto">看進度</a></p>`;
+  if (P.plan && P.plan.auto)
+    return `<div class="row"><button class="btn big primary" id="handoff">交給 AI 處理<span class="arr">›</span></button></div>
+      <p class="small muted">開始全自動：先處理你的答案（選 A 記成確認；其他的照你的話回頭修改），${esc(r.slice || '這條切片')} 的 ⑤ 重新凍結就停，最多 ${HANDOFF_STEPS} 圈。之後在全自動頁看進度。</p>`;
+  return `<div class="row"><button class="btn big primary" id="handoff">請 AI 處理<span class="arr">›</span></button></div>
+    <p class="small muted">手動模式：AI 會照你的答案回頭修改，改完照常送審給你。</p>`;
+}
+
+export function bindHandoff(r) {
+  const b = $('#handoff');
+  if (!b) return;
+  b.onclick = async () => {
+    b.disabled = true;
+    const P = state.project || {};
+    try {
+      if (P.plan && P.plan.auto) {
+        await api('/api/auto/start', { max_steps: HANDOFF_STEPS, until_design_done: true });
+        toast('全自動開始了：先處理你的答案');
+        go('#/auto');
+      } else {
+        await runAi(r.slice, '處理事後審查', `/domain-change 處理全自動事後審查頁 ${r.path}`);
+      }
+    } catch (e) { toast(e.message); b.disabled = false; }
+  };
+}

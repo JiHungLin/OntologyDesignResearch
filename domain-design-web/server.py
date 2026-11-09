@@ -5,6 +5,7 @@
 只綁 127.0.0.1，單人在本機使用。"""
 import argparse
 import base64
+import json
 import os
 import re
 import shutil
@@ -396,6 +397,57 @@ def get_review(path: str):
         if f and f['machines']:
             r['flows'] = flows.mark(f, r)
     return r
+
+
+class Draft(BaseModel):
+    path: str
+    n: int            # 第幾題（問題 n）
+    rough: str        # 人隨口打的想法
+
+
+DRAFT_PROMPT = """你在幫審查者把隨口說的想法整理成審查頁「你的回答」的一句話。不要修改任何檔案。
+規則：只保留審查者的意思與立場，不加入審查者沒說的決定或理由；意思和某個選項完全一樣時只回那個字母（例：B）；
+否則寫一句完整、看得懂的話（可以兩三句），開頭不用寫「其他：」。需要時可以讀題目指到的檔案理解脈絡。
+只輸出答案本身，不要任何說明、引號或 Markdown。
+
+審查頁：{path}
+題目（問題 {n}）：{question}
+例子：{example}
+背景：{background}
+選項：
+{options}
+來源：{source}
+影響：{impact}
+
+審查者隨口說的：{rough}"""
+
+
+@app.post('/api/review/draft')
+def post_draft(d: Draft):
+    """「AI 幫我整理」：把人隨口打的想法整理成一句答案，給人看過、可以改，再由人送出（這裡不寫檔）。
+    只讀檔（Read、Grep、Glob），全自動在跑時也能用。"""
+    p = _review_path(d.path)
+    if not d.rough.strip():
+        raise HTTPException(400, '先寫一點你的想法')
+    q = next((x for x in review.parse(p)['questions'] if x['n'] == d.n), None)
+    if q is None:
+        raise HTTPException(404, f'找不到問題 {d.n}')
+    prompt = DRAFT_PROMPT.format(path=kit.rel(p), n=d.n, question=q['question'], example=q['example'], background=q['background'],
+                                 options='\n'.join(f"{o['key']}{'（建議）' if o['recommended'] else ''}：{o['text']}" for o in q['options']),
+                                 source=q['source'] or '—', impact=q['impact'] or '—', rough=d.rough.strip())
+    try:
+        out = subprocess.run([sessions.CLAUDE, '-p', prompt, '--output-format', 'json', '--allowedTools', 'Read', 'Grep', 'Glob',
+                              '--disallowedTools', 'Bash', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Agent', 'Task'],
+                             cwd=kit.repo(), capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise HTTPException(502, f'AI 沒有回應：{e}')
+    try:
+        text = (json.loads(out.stdout).get('result') or '').strip()
+    except ValueError:
+        text = ''
+    if not text:
+        raise HTTPException(502, f'AI 沒有整理出答案：{(out.stderr or out.stdout)[-300:]}')
+    return {'text': text}
 
 
 class Answer(BaseModel):

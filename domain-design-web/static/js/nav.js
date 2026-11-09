@@ -64,7 +64,7 @@ export function renderNav() {
     const body = a(`#/s/${enc(x.code)}`, '切片首頁')
       + (f.review ? a(`#/r/${enc(f.review.path)}`, '審查（輪到你）', `${f.review.counts.open} 件`, 'hot')
         : f.answered ? a(`#/r/${enc(f.answered.path)}`, '審查頁', '已作答，可以改') : '')
-      + (f.auto_review ? a(`#/r/${enc(f.auto_review.path)}/decide/0`, '全自動留給你的決定',
+      + (f.auto_review ? a(`#/r/${enc(f.auto_review.path)}/all`, '全自動留給你的決定',
         f.auto_review.open ? `${f.auto_review.open} 題` : '答完，等處理', f.auto_review.open ? 'hot' : '') : '')
       + a(`#/eq/${enc(x.code)}`, '專家問題', f.eq_open ? `${f.eq_open} 題待答` : '')
       + `<div class="nav-steps">${steps}</div>`

@@ -650,3 +650,29 @@ def test_auto_review_page(client, repo, monkeypatch):
     p = repo / 'slices/demo/reviews/2026-11-09_auto.md'
     p.write_text(p.read_text(encoding='utf-8').replace('| 處理 | （人答完後，AI 處理時寫：日期、CHANGELOG 哪一筆） |', '| 處理 | 2026-11-10 CHANGELOG 第一筆 |'), encoding='utf-8')
     assert client.get('/api/home', params={'slice': 'demo'}).json()['auto_review'] is None
+
+
+def test_review_draft(client, repo, monkeypatch, tmp_path):
+    # 「AI 幫我整理成答案」：只讀檔的 claude -p，回一句答案；這裡不寫檔，全自動在跑時也能用
+    import autorun
+    import server
+    (repo / 'slices/demo/reviews/2026-11-09_auto.md').write_text(AUTO_PAGE, encoding='utf-8')
+    fake = tmp_path / 'fake_claude.py'
+    fake.write_text('import json, sys\n'
+                    'assert "--allowedTools" in sys.argv and "Edit" in sys.argv[sys.argv.index("--disallowedTools"):]\n'
+                    'p = sys.argv[sys.argv.index("-p") + 1]\n'
+                    'assert "問題 1" in p and "法人" in p\n'
+                    'print(json.dumps({"type": "result", "result": "以每個法人為範圍。"}, ensure_ascii=False))\n', encoding='utf-8')
+    wrapper = tmp_path / 'claude'
+    wrapper.write_text(f'#!/bin/sh\nexec {sys.executable} {fake} "$@"\n')
+    wrapper.chmod(0o755)
+    monkeypatch.setattr(server.sessions, 'CLAUDE', str(wrapper))
+    monkeypatch.setattr(autorun, 'running', lambda: True)
+    path = 'slices/demo/reviews/2026-11-09_auto.md'
+    before = (repo / path).read_text(encoding='utf-8')
+    res = client.post('/api/review/draft', json={'path': path, 'n': 1, 'rough': '每個法人自己一份'})
+    assert res.status_code == 200, res.text
+    assert res.json() == {'text': '以每個法人為範圍。'}
+    assert (repo / path).read_text(encoding='utf-8') == before
+    assert client.post('/api/review/draft', json={'path': path, 'n': 9, 'rough': 'x'}).status_code == 404
+    assert client.post('/api/review/draft', json={'path': path, 'n': 1, 'rough': ' '}).status_code == 400

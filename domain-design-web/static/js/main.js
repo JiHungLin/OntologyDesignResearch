@@ -1,7 +1,7 @@
 // 路由與啟動
 import { $, $$, go, loadReview, nextTask, state, toast } from './core.js';
 import { renderHome } from './home.js';
-import { renderDecide } from './decide.js';
+import { renderAllQuestions, renderDecide } from './decide.js';
 import { renderConfirm } from './confirm.js';
 import { renderGolden } from './golden.js';
 import { renderFinish } from './finish.js';
@@ -16,7 +16,7 @@ import { applyAutoLock, renderAuto } from './auto.js';
 
 // ---------- 路由 ----------
 // #/ 總覽　#/start 主題草案　#/plan 規劃　#/draft/<檔> 推想草稿　#/new/<切片> 開始切片　#/eq/<切片> 專家問題
-// #/auto[/<一圈的紀錄檔>] 全自動　#/core[/<分頁>/<項目>] 共用核心　#/s/<切片> 切片首頁　#/r/<審查頁>/decide/<n>　/confirm[/<Entity>]　/golden/<n>　/finish
+// #/auto[/<一圈的紀錄檔>] 全自動　#/core[/<分頁>/<項目>] 共用核心　#/s/<切片> 切片首頁　#/r/<審查頁>/decide/<n>　/all（全自動事後審查頁的全部題目）　/confirm[/<Entity>]　/golden/<n>　/finish
 
 export async function route() {
   $('#fileDrawer').hidden = true;
@@ -36,6 +36,7 @@ export async function route() {
       if (state.path !== path) await loadReview(path);
       const view = parts[2];
       if (view === 'decide') return await renderDecide(path, +parts[3] || 0);
+      if (view === 'all') return await renderAllQuestions(path);
       if (view === 'confirm') return await renderConfirm(path, parts[3] || null);
       if (view === 'golden') return await renderGolden(path, +parts[3] || 0);
       return await renderFinish(path, parts[3] || null);

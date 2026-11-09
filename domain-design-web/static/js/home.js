@@ -235,8 +235,9 @@ export async function renderHome(slice) {
       <span class="chip ${h.auto_review.open ? 'turn' : ''}">全自動留給你的決定</span>
       <p style="margin:8px 0 0">${h.auto_review.open
         ? `還有 <strong>${h.auto_review.open} / ${h.auto_review.total} 題</strong>。AI 代答時依據不夠或同一件事來回改的，先照設計目前的做法（A）往下做；選 A 就是確認，選別的 AI 會照你的答案回頭修改。全自動在跑時也能答。`
-        : '都答完了，等 AI 處理（全自動下一圈，或手動請 AI「處理事後審查頁」）。'}</p></div>
-      <a class="btn ${h.auto_review.open ? 'yellow' : ''}" href="#/r/${enc(h.auto_review.path)}/decide/0">${h.auto_review.open ? '去決定' : '看答案'}<span class="arr">›</span></a></div></section>` : ''}
+        : '都答完了，交給 AI 照你的答案處理。'}</p></div>
+      <span class="row"><a class="btn ghost" href="#/r/${enc(h.auto_review.path)}/all">全部題目</a>
+      <a class="btn ${h.auto_review.open ? 'yellow' : 'primary'}" href="#/r/${enc(h.auto_review.path)}/${h.auto_review.open ? 'decide/0' : 'all'}">${h.auto_review.open ? '去決定' : '交給 AI 處理'}<span class="arr">›</span></a></span></div></section>` : ''}
     ${hero}
     ${reopen}
     <div class="cols">

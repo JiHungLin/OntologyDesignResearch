@@ -1,7 +1,8 @@
 // 一次一個決定（審查頁的選擇題）
-import { $, $$, api, enc, esc, firstOpenQ, go, inline, loadReview, nextTask, setTop, state, write } from './core.js';
+import { $, $$, api, enc, esc, firstOpenQ, go, inline, loadReview, nextTask, setTop, state, toast, write } from './core.js';
 import { askAi } from './ai.js';
 import { narrow } from './nav.js';
+import { bindHandoff, handoffBlock } from './auto.js';
 
 // ---------- 一次一個決定 ----------
 
@@ -19,7 +20,8 @@ export async function renderDecide(path, i) {
   if (!qs[i]) i = 0;
   const q = qs[i];
   setTop([homeHref, '關卡'], progressSegs(qs, i, x => x.answer.trim(), k => `#/r/${p}/decide/${k}`) +
-    `<span class="count">${qs.length - r.counts.questions_open} / ${qs.length}</span>`);
+    `<span class="count">${qs.length - r.counts.questions_open} / ${qs.length}</span>` +
+    (r.auto ? ` <a class="small" href="#/r/${p}/all">全部題目</a>` : ''));
 
   const ans = q.answer.trim();
   const chosen = /^[A-Z]$/.test(ans) ? ans : null;
@@ -47,6 +49,9 @@ export async function renderDecide(path, i) {
           <div class="row" style="margin-top:10px"><input type="text" id="other" style="flex:1" value="${chosen || !ans ? '' : esc(ans)}" placeholder="寫一句，按 Enter 送出">
           <button class="btn" id="otherSave">送出</button></div>
         </label>
+        <div class="row small" style="gap:8px;margin-top:-8px"><button class="btn ghost" id="draftBtn">AI 幫我整理成答案</button>
+          <span class="muted">隨口打你的想法，AI 整理成一句；你看過、可以改，再送出。</span></div>
+        <div class="card soft-card" id="draftOut" hidden></div>
       </fieldset>
       <section class="card soft-card">
         <label class="label" for="ask" style="color:var(--ink);font-size:16px">看不懂？直接問 AI</label>
@@ -67,6 +72,7 @@ export async function renderDecide(path, i) {
   const after = async () => {
     const n = firstOpenQ(state.review, i);
     if (n >= 0 && n !== i) go(`#/r/${p}/decide/${n}`);
+    else if (n < 0 && state.review.auto) go(`#/r/${p}/all`);
     else if (n < 0) renderDone('決定', `${qs.length} 個決定都做完了`, nextTask(state.review));
     else renderDecide(path, i);
   };
@@ -74,6 +80,22 @@ export async function renderDecide(path, i) {
   $$('[data-opt]').forEach(b => b.onclick = () => save(b.dataset.opt));
   const other = () => { const v = $('#other').value.trim(); if (v) save(v); };
   $('#otherSave').onclick = other;
+  $('#draftBtn').onclick = async () => {
+    const rough = $('#other').value.trim();
+    if (!rough) { toast('先在上面的框隨口打你的想法'); $('#other').focus(); return; }
+    const box = $('#draftOut'), btn = $('#draftBtn');
+    btn.disabled = true; box.hidden = false; box.innerHTML = '<span class="tool">AI 整理中…（讀題目指到的檔案，約一兩分鐘）</span>';
+    try {
+      const { text } = await api('/api/review/draft', { path, n: q.n, rough });
+      box.innerHTML = `<div class="label">AI 整理的答案（可以直接改）</div>
+        <textarea id="draftText" rows="4" style="width:100%">${esc(text)}</textarea>
+        <div class="row" style="margin-top:8px"><button class="btn primary" id="draftUse">用這句送出</button>
+        <button class="btn ghost" id="draftBack">放回上面的框</button></div>`;
+      $('#draftUse').onclick = () => { const v = $('#draftText').value.trim(); if (v) save(v); };
+      $('#draftBack').onclick = () => { $('#other').value = $('#draftText').value.trim(); box.hidden = true; $('#other').focus(); };
+    } catch (e) { box.innerHTML = esc(e.message); }
+    btn.disabled = false;
+  };
   $('#other').onkeydown = e => { if (e.key === 'Enter') other(); };
   $('#skip').onclick = () => {
     const n = qs.findIndex((x, k) => k > i && !x.answer.trim());
@@ -100,4 +122,34 @@ export function renderDone(what, msg, nextHref) {
         <a class="btn big" href="#/s/${enc(state.review.slice)}">回關卡</a>
       </div>
     </section>`;
+}
+
+// ---------- 全自動事後審查頁：一頁看全部題目 ----------
+
+export async function renderAllQuestions(path) {
+  const r = await loadReview(path);
+  const p = enc(path);
+  const qs = r.questions;
+  const done = qs.length - r.counts.questions_open;
+  setTop([`#/s/${enc(r.slice)}`, '關卡'], `<span class="count">${done} / ${qs.length}</span>`);
+  const optText = (q, key) => { const o = q.options.find(x => x.key === key); return o ? (o.summary || o.text) : ''; };
+  $('#app').innerHTML = `
+    <div class="narrow">
+      <div><span class="chip">全自動留給你的決定</span><h1 class="qtitle">${esc(r.slice)}：${qs.length} 題，答了 ${done} 題</h1>
+        <p class="muted small">A 是設計目前的做法（全自動暫時照它做），選 A 就是確認。點一題可以作答或改答案。</p></div>
+      ${qs.map((q, k) => {
+        const ans = q.answer.trim();
+        const pick = /^[A-Z]$/.test(ans) ? ans : null;
+        return `<a class="card" href="#/r/${p}/decide/${k}" style="display:block;text-decoration:none;color:inherit">
+          <div class="row spread"><span class="chip">${esc(q.topic || `問題 ${q.n}`)}</span>
+            <span class="chip ${ans ? '' : 'turn'}">${ans ? (pick ? `選 ${pick}` : '寫了其他') : '還沒答'}</span></div>
+          <b style="display:block;margin:6px 0">${esc(q.question)}</b>
+          <div class="small muted">A（設計目前）：${inline(optText(q, 'A'))}</div>
+          ${ans ? `<div class="small">你的回答：${inline(pick ? `${pick}　${optText(q, pick)}` : ans)}</div>` : ''}
+        </a>`; }).join('')}
+      ${r.counts.questions_open ? `<a class="btn big yellow" href="#/r/${p}/decide/${Math.max(0, firstOpenQ(r))}">繼續回答<span class="arr">›</span></a>`
+        : r.counts.processed ? '<p class="muted">這一頁已經處理過了。</p>'
+        : `<section class="card lift"><h2 style="margin-top:0">都答完了</h2>${handoffBlock(r)}</section>`}
+    </div>`;
+  bindHandoff(r);
 }
