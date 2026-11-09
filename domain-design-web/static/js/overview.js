@@ -4,7 +4,7 @@ import { STEP_INFO } from './home.js';
 import { bindWaiting, openAi, runAi, runningCard, waitingCard } from './ai.js';
 import { markNav, narrow } from './nav.js';
 import { inputDialog, needFetch } from './plan.js';
-import { applyAutoLock, autoBadge, autoProgress } from './auto.js';
+import { applyAutoLock, autoBadge, autoProgress, waitText } from './auto.js';
 import { renderAiHead } from './ai.js';
 
 // ---------- 總覽：整個 domain 走到哪 ----------
@@ -136,7 +136,7 @@ export async function renderHub() {
   } else if (N.kind === 'auto') {
     const ad = list.find(x => x.f && x.f.auto_review && x.f.auto_review.open);
     hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">全自動</span>
-      <h1>全自動執行中・第 ${P.autorun.round || 1} 圈</h1><p>${esc(autoProgress(P))}</p>
+      <h1>全自動執行中・第 ${P.autorun.round || 1} 圈</h1><p>${waitText(P.autorun) || esc(autoProgress(P))}</p>
       <p class="small muted">人的關卡由 AI 代答並標「AI（自動）」，你事後再看、再改。這段時間網頁只能看${ad ? `，但<a href="#/r/${enc(ad.f.auto_review.path)}">全自動留給你的 ${ad.f.auto_review.open} 題決定</a>現在就能答` : ''}。</p></div>
       <a class="btn big primary" href="#/auto">看進度<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'verify') {

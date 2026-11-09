@@ -11,6 +11,9 @@
   要停下來又不改執行模式：建立 .domain-auto/stop（網頁的「關閉全自動」就是這樣做），這一圈做完就停。
   上一次是做到一半被切斷的（網頁強制中斷、用量上限、程序不在了），第一圈先收拾：
   提示詞多一段，要 AI 看 git status、diff、最後的 tag，把中斷時的那個動作做完或還原；留下的 .git/index.lock 先刪掉。
+  跑到一半碰到用量上限（「You've hit your … limit · resets 3:30pm (Asia/Taipei)」）：不停下來，等到重置時間再多 2 分鐘，
+  下一圈先收拾再往下；等的時候 state.json 的 waiting_until 寫要等到幾點，有人按停止（.domain-auto/stop）就不等了。
+  看不懂重置時間的每 30 分鐘試一次；累計等超過 --limit-wait-hours（預設 24）就停下來。
 
 紀錄（.domain-auto/，不提交）：
   runs/<時間>_<n>.jsonl  每一圈 claude 的完整輸出（stream-json）
@@ -24,7 +27,8 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -41,6 +45,10 @@ RECOVER = ('上一次全自動在第 {n} 圈做到一半被切斷（{why}）。�
            '真的做到一半的（例：規則改了 CHANGELOG 沒記、檔頭已凍結但沒有 commit 或 tag、core/ 只同步一部分），把那個動作做完；'
            '無法判斷怎麼做完的，才還原那一部分到最後一個 commit 的樣子。在這一圈的回報寫出做了哪一種、改了哪些檔案。'
            '沒有做到一半的東西就直接說沒有。\n\n')
+LIMIT = re.compile(r"hit your .*?limit", re.I)
+RESET = re.compile(r'resets\s+(?:([A-Z][a-z]{2})\s+(\d{1,2}),?\s+(?:at\s+)?)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)(?:\s*\(([^)]+)\))?', re.I)
+LIMIT_MARGIN = float(os.environ.get('DOMAIN_AUTO_LIMIT_MARGIN', 120))   # 重置時間之後再多等幾秒
+LIMIT_RETRY = float(os.environ.get('DOMAIN_AUTO_LIMIT_RETRY', 1800))    # 看不懂重置時間時，幾秒後再試
 MARK = re.compile(r'全自動：(繼續|完成|需要人)(?:（([^）]*)）)?')
 
 
@@ -71,6 +79,34 @@ def frozen5(repo):
     """⑤ 凍結的 tag（<切片>/05-vN）：回頭修改後重新凍結也會多一個。"""
     out = subprocess.run(['git', '-C', repo, 'tag', '-l', '*/05-v*'], capture_output=True, text=True).stdout
     return set(out.split())
+
+
+def reset_at(text, now=None):
+    """用量上限的訊息 → 重置的時間（本機時間，naive）；看不懂回傳 None。"""
+    m = RESET.search(text or '')
+    if not m:
+        return None
+    mon, day, h, mi, ap, tz = m.groups()
+    h = int(h) % 12 + (12 if ap.lower() == 'pm' else 0)
+    try:
+        from zoneinfo import ZoneInfo
+        zone = ZoneInfo(tz) if tz else None
+    except Exception:
+        zone = None
+    now_z = datetime.now(zone) if zone else (now or datetime.now())
+    if now and zone:
+        now_z = now.astimezone(zone) if now.tzinfo else now.replace(tzinfo=datetime.now().astimezone().tzinfo).astimezone(zone)
+    t = now_z.replace(hour=h, minute=int(mi or 0), second=0, microsecond=0)
+    if mon:
+        try:
+            t = t.replace(month=datetime.strptime(mon, '%b').month, day=int(day))
+        except ValueError:
+            return None
+        if t < now_z - timedelta(days=1):
+            t = t.replace(year=t.year + 1)
+    elif t <= now_z:
+        t += timedelta(days=1)
+    return t.astimezone().replace(tzinfo=None) if zone else t
 
 
 def snapshot(repo):
@@ -155,6 +191,7 @@ def run():
     ap.add_argument('--max-steps', type=int, default=30)
     ap.add_argument('--claude', default=os.environ.get('CLAUDE_BIN', 'claude'))
     ap.add_argument('--until-design-done', action='store_true', help='有一條切片的 ⑤ 凍結（設計完成）就停')
+    ap.add_argument('--limit-wait-hours', type=float, default=24, help='碰到用量上限時最多累計等幾小時')
     a = ap.parse_args()
     repo = os.path.realpath(os.getcwd())
     m = mode(repo)
@@ -174,9 +211,11 @@ def run():
     settings = json.dumps({'hooks': {'PreToolUse': [{'matcher': '*', 'hooks': [
         {'type': 'command', 'command': f'{sys.executable} {os.path.join(HERE, "auto_hook.py")}'}]}]}})
     env = dict(os.environ, DOMAIN_AUTO='1', DOMAIN_AUTO_REPO=repo)
-    same = 0
+    same, waited = 0, 0.0
     done_before, tags_before = design_done(repo), frozen5(repo)
-    for n in range(1, a.max_steps + 1):
+    n = 0
+    while n < a.max_steps:
+        n += 1
         if n > 1 and not mode(repo).startswith('全自動'):   # 跑到一半改回手動（網頁的規劃頁或直接改 PLAN.md）：這一圈之後停
             sys.exit('執行模式已改回手動，停下來；之後照手動的流程做')
         if os.path.exists(stop):
@@ -186,7 +225,8 @@ def run():
         stamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
         out = os.path.join(auto, 'runs', f'{stamp}_{n}.jsonl')
         STATE.save(round=n, log=os.path.basename(out), round_started=datetime.now().isoformat(timespec='seconds'))
-        prompt = RECOVER.format(n=cut[0], why=cut[1]) + PROMPT if cut and n == 1 else PROMPT
+        prompt = RECOVER.format(n=cut[0], why=cut[1]) + PROMPT if cut else PROMPT
+        cut = None
         cmd = [a.claude, '-p', prompt, '--output-format', 'stream-json', '--verbose',
                '--settings', settings, '--permission-mode', 'acceptEdits']
         with open(out, 'w', encoding='utf-8') as f:
@@ -201,6 +241,26 @@ def run():
         STATE.save(last=f'{kind or "沒有回報結果"}{f"（{why}）" if why else ""}　{first}')
         if kind in ('完成', '需要人'):
             STATE.save(reason=f'AI 回報「{kind}」{f"：{why}" if why else ""}')
+        if not kind and LIMIT.search(reply):
+            # 用量上限：等到重置再接著跑，下一圈先收拾這一圈做到一半的
+            until = reset_at(reply)
+            now = datetime.now()
+            until = until + timedelta(seconds=LIMIT_MARGIN) if until else now + timedelta(seconds=LIMIT_RETRY)
+            hours = (until - now).total_seconds() / 3600
+            if waited + hours > a.limit_wait_hours:
+                sys.exit(f'碰到用量上限（{reply.strip()[:80]}），要等到 {until:%m-%d %H:%M}，超過 --limit-wait-hours {a.limit_wait_hours:g}，停下來')
+            STATE.save(waiting_until=until.isoformat(timespec='minutes'), reason=f'碰到用量上限，等到 {until:%H:%M} 再接著跑')
+            print(f'碰到用量上限，等到 {until:%m-%d %H:%M} 再接著跑', flush=True)
+            while datetime.now() < until:
+                if os.path.exists(stop):
+                    os.remove(stop)
+                    sys.exit('有人按了停止（.domain-auto/stop），不等用量重置，停下來；下次開始時第一圈先收拾')
+                time.sleep(min(10, max(0.1, (until - datetime.now()).total_seconds())))
+            waited += hours
+            STATE.save(waiting_until=None, reason='')
+            cut = (n, '用量上限')
+            n -= 1                                   # 被上限切掉的這一圈不算進 --max-steps
+            continue
         if p.returncode != 0 and not kind:
             sys.exit(f'claude 結束碼 {p.returncode}，停下來；看 {out}')
         if kind != '繼續':

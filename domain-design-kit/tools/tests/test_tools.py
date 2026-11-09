@@ -1120,6 +1120,44 @@ class TestAuto(Base):
         self.assertNotIn('第 3 圈', out)
         self.assertIn('a 設計完成（⑤ 凍結），照 --until-design-done 停下來', out)
 
+    def test_runner_waits_for_usage_limit(self):
+        # 用量上限：不停下來，等到重置後接著跑，下一圈先收拾；被上限切掉的那一圈不算進 --max-steps（HR-Domain-Auto 第 3 圈）
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n')
+        claude = self.fake_claude(["You've hit your 5-hour limit · resets soon", '全自動：繼續', '全自動：需要人（停）'])
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('open("prompts.txt", "a").write(sys.argv[2].replace("\\n", " ") + "\\n")\n')
+        env = dict(os.environ, DOMAIN_AUTO_LIMIT_RETRY='0.2')
+        p = subprocess.run([sys.executable, os.path.join(TOOLS, 'auto_run.py'), '--claude', claude, '--max-steps', '2'],
+                           cwd=self.dir, capture_output=True, text=True, env=env)
+        out = p.stdout + p.stderr
+        self.assertIn('碰到用量上限，等到', out)
+        self.assertIn('第 2 圈：需要人（停）', out)
+        prompts = open(os.path.join(self.dir, 'prompts.txt'), encoding='utf-8').read().splitlines()
+        self.assertEqual(len(prompts), 3, prompts)
+        self.assertTrue(prompts[1].startswith('上一次全自動在第 1 圈') and '用量上限' in prompts[1], prompts[1])
+        self.assertFalse(prompts[2].startswith('上一次'))
+        # 等的時候按停止：不等了
+        self.write('.fake_n', '0')
+        claude = self.fake_claude(["You've hit your 5-hour limit · resets soon"] * 3)
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('open(".domain-auto/stop", "w").close()\n')
+        p = subprocess.run([sys.executable, os.path.join(TOOLS, 'auto_run.py'), '--claude', claude], cwd=self.dir,
+                           capture_output=True, text=True, env=dict(os.environ, DOMAIN_AUTO_LIMIT_RETRY='30'))
+        self.assertIn('不等用量重置', p.stdout + p.stderr)
+        # 累計要等的超過 --limit-wait-hours：停下來
+        p = subprocess.run([sys.executable, os.path.join(TOOLS, 'auto_run.py'), '--claude', claude, '--limit-wait-hours', '0'],
+                           cwd=self.dir, capture_output=True, text=True)
+        self.assertIn('超過 --limit-wait-hours', p.stdout + p.stderr)
+
+    def test_usage_limit_reset_time(self):
+        sys.path.insert(0, TOOLS)
+        import auto_run
+        from datetime import datetime
+        now = datetime(2026, 11, 9, 14, 44)
+        self.assertEqual(auto_run.reset_at('resets 3:30pm', now), datetime(2026, 11, 9, 15, 30))
+        self.assertEqual(auto_run.reset_at('resets 2:50am', now), datetime(2026, 11, 10, 2, 50))
+        self.assertIsNone(auto_run.reset_at('limit', now))
+
     def test_runner_stops_when_switched_to_manual(self):
         # 跑到一半改回手動：下一圈開始前檢查，停下來
         self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n')

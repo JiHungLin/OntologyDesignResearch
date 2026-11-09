@@ -7,12 +7,17 @@ import { route } from './main.js';
 
 let timer = null;
 
+// 碰到用量上限時跑步器等到重置再接著跑（tools/auto_run.py），state.json 的 waiting_until 是要等到幾點
+export const waitText = st => st && st.running && st.waiting_until
+  ? `用量到上限，等到 ${esc(st.waiting_until.replace('T', ' ').slice(5, 16))} 重置後接著跑` : '';
+
 export function autoBadge(st) {
   if (!st || !st.running) return '';
-  return `<a class="brand-sub auto-live" href="#/auto" title="全自動正在跑，點這裡看進度">全自動執行中・第 ${st.round || 1} 圈${st.stopping ? '（這圈做完停）' : ''}</a>`;
+  return `<a class="brand-sub auto-live" href="#/auto" title="全自動正在跑，點這裡看進度">全自動執行中・第 ${st.round || 1} 圈${waitText(st) ? '（等用量重置）' : ''}${st.stopping ? '（這圈做完停）' : ''}</a>`;
 }
 
 function stateLine(st) {
+  if (st.running && waitText(st)) return `<b>執行中・${waitText(st)}</b>${st.stopping ? '，<b>按了關閉，馬上停</b>' : ''}<div class="small muted">這一圈被上限切掉，重置後下一圈先收拾做到一半的；不想等就按「關閉全自動」。</div>`;
   if (st.running) return `<b>執行中</b>：第 ${st.round || 1} 圈（從 ${esc((st.round_started || st.started || '').replace('T', ' '))} 開始）${st.stopping ? '，<b>這一圈做完就停</b>' : ''}`
     + `${st.last ? `<div class="small muted">上一圈：${inline(st.last)}</div>` : ''}`;
   if (!st.started) return '還沒有從這裡跑過。';
@@ -126,7 +131,7 @@ setInterval(async () => {
     showTopic(state.project);
     if (was.running && !st.running) toast(`全自動停下來了：${st.reason || ''}`);
     // 在全自動頁上：開始、停下來、進到下一圈都重畫（跑步器不依賴網頁，網頁要自己看）
-    const changed = was.running !== st.running || was.round !== st.round || was.stopping !== st.stopping;
+    const changed = was.running !== st.running || was.round !== st.round || was.stopping !== st.stopping || was.waiting_until !== st.waiting_until;
     if (st.running) { await pullLatest(st); const el = $('#autoLatest'); if (el && latest.text) el.textContent = '正在：' + latest.text; }
     // 開始、停下來、進到下一圈：檔案的狀態變了，整頁重畫（橫幅、鎖、切片的狀態跟著更新）；抽屜開著就跟到下一圈
     // 正在答全自動事後審查頁：只更新導覽與頂列，不重畫頁面（「其他」打到一半的字不會被清掉）
@@ -168,7 +173,7 @@ async function pullLatest(st) {
 export function autoBanner() {
   const P = state.project, st = P.autorun;
   return `<section class="card auto-banner" id="autoBanner"><div class="row spread"><div>
-      <b>全自動執行中・第 ${st.round || 1} 圈</b>　${esc(autoProgress(P))}${st.stopping ? '　（這一圈做完就關閉）' : ''}
+      <b>全自動執行中・第 ${st.round || 1} 圈</b>　${waitText(st) || esc(autoProgress(P))}${st.stopping ? '　（這一圈做完就關閉）' : ''}
       <div class="small" id="autoLatest">${latest.log === st.log && latest.text ? '正在：' + esc(latest.text) : ''}</div>
       <div class="small muted">人的關卡由 AI 代答，這段時間網頁只能看、不能作答或交給 AI。</div></div>
     <a class="btn" href="#/auto">看進度、關閉全自動</a></div></section>`;
