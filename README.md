@@ -8,6 +8,16 @@
 
 ## 怎麼用
 
+**需要先裝好**
+
+| 依賴 | 用途 | 開發時測試的版本 |
+|---|---|---|
+| [Claude Code](https://docs.claude.com/en/docs/claude-code/overview)（`claude` 指令，已登入） | 跑工具包的規則與 skills | 2.1.321 |
+| Python 3.10 以上 | 工具包的檢查工具（`tools/lint.py`、`tools/check.py`…）與全自動跑步器 | 3.10.12 |
+| PyYAML（`pip install pyyaml`） | `tools/check.py`、`tools/check_env.py` 讀 YAML | 6.0.2 |
+| git | 每一步凍結時 commit、打 tag | 2.34.1 |
+| Docker（含 Compose） | 只有第 ⑥ 步需要：實作在隔離的驗證環境裡跑 | 29.4.3 |
+
 **1. 把工具包複製到一個新的 repo**
 
 複製的是 `domain-design-kit/` 資料夾**裡面的東西**，要放在新 repo 的**最上層**：
@@ -39,7 +49,7 @@ AI 會問你問題、找資料、和你一起決定分成哪幾段來做，每�
 
 不想在終端機打字，可以改用網頁：每個「輪到 AI」的地方是一個按鈕，AI 在背景跑；審查頁的題目變成選擇題卡片，模型與狀態圖畫成圖。網頁只是操作介面，設計內容都在設計 repo 的檔案裡，關掉網頁照樣能用終端機繼續。
 
-**需要**：Python 3.10 以上、已登入的 Claude Code（`claude` 指令）、Chrome 或 Firefox。
+**需要**：上面「需要先裝好」的全部，加上 Chrome 或 Firefox 的近期版本。網頁另外用到的 Python 套件（FastAPI、Uvicorn、Pydantic）在下一步安裝，版本固定在 [`requirements.txt`](domain-design-web/requirements.txt)。
 
 **1. 安裝**
 
