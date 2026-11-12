@@ -44,7 +44,7 @@ export async function renderFile(path) {
   const ext = (path.match(/\.([^./]+)$/) || [])[1] || '';
   $('#app').innerHTML = `
     <div class="file-view">
-      <div class="row spread"><div><div class="label">唯讀</div><h1 style="margin:0;font-size:26px">${esc(f.path)}</h1></div>
+      <div class="row spread page-head-row"><div class="page-head"><div class="label">唯讀</div><h1 class="ph-path">${esc(f.path)}</h1></div>
         ${f.binary ? '' : `<button class="btn small-btn" id="rawView">看行號</button>`}</div>
       ${f.binary ? `<div class="card dashed">這是原始檔（${Math.round(f.size / 1024)} KB），網頁不顯示內容。AI 會直接讀它。</div>`
         : ext === 'md' ? `<article class="card doc">${md(f.text)}</article>`

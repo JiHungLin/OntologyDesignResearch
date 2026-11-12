@@ -204,10 +204,13 @@ export function applyAutoLock() {
   lockControls();
 }
 
+// 只用來「看」的控制項不鎖：共用核心整頁（唯讀；搜尋、篩選、點名詞卡片）、圖的縮放按鈕、檔案頁「看行號」、規劃頁的跳轉
+const VIEW_ONLY = '#autoBanner, .core-view, .pz-ctl, #rawView, [data-jump]';
+
 function lockControls() {
   if (location.hash.startsWith('#/auto') || onAutoReview()) return;
   $$('#app button:not([disabled]), #app input:not([disabled]), #app textarea:not([disabled]), #app select:not([disabled])').forEach(el => {
-    if (el.closest('#autoBanner')) return;
+    if (el.closest(VIEW_ONLY)) return;
     el.disabled = true; el.title = '全自動執行中，只能看';
   });
 }

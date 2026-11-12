@@ -132,10 +132,10 @@ export async function renderGolden(path, i) {
   const pager = cs.length > 1 ? `<div class="row case-pager">${i > 0 ? `<a class="btn" href="${href(i - 1)}"><span class="arr">‹</span>上一題 ${esc(cs[i - 1].id)}</a>` : ''}<span style="flex:1"></span>${i < cs.length - 1 ? `<a class="btn" href="${href(i + 1)}">下一題 ${esc(cs[i + 1].id)}<span class="arr">›</span></a>` : ''}</div>` : '';
   $('#app').innerHTML = `
     ${caseTabs}
-    <div>
+    <div class="page-head">
       <span class="chip">${esc(rest.length ? kind : c.id)}</span>
-      <h1 style="margin:10px 0 4px;font-size:30px">${esc(rest.length ? rest.join('：') : c.title)}</h1>
-      <p class="muted" style="margin:0">需要的資料都在這頁，不用翻檔案。你先自己得出結果；三個都送出、交回審查頁後，AI 會依設計另外推一次，兩邊對不上的地方就是要討論的地方。</p>
+      <h1>${esc(rest.length ? rest.join('：') : c.title)}</h1>
+      <p class="lead">需要的資料都在這頁，不用翻檔案。你先自己得出結果；三個都送出、交回審查頁後，AI 會依設計另外推一次，兩邊對不上的地方就是要討論的地方。</p>
     </div>
     ${tl}
     ${wide ? cmp : ''}

@@ -146,7 +146,7 @@ def repo(tmp_path):
 
 
 HERO = ("const h=document.querySelector('.hero, .celebrate');"
-        "return {title:(h.querySelector('h1')||{}).innerText||'', text:h.innerText,"
+        "return {title:(h.querySelector('h1, h2')||{}).innerText||'', text:h.innerText,"
         "buttons:[...h.querySelectorAll('button, a.btn')].map(b=>b.innerText.trim())}")
 
 
@@ -363,8 +363,8 @@ def test_topic_in_header(browser, repo):
         no_plan = browser.run(f'http://127.0.0.1:{port}/#/', head, wait='.hero, .celebrate, main section')
     finally:
         srv.terminate(); srv.wait()
-    assert with_plan['brand'].startswith('銷售') and with_plan['title'] == '銷售｜Domain 設計', with_plan
-    assert no_plan['brand'] == 'DOMAIN 設計' and no_plan['title'] == 'Domain 設計', no_plan
+    assert with_plan['brand'].startswith('銷售') and with_plan['title'] == '銷售｜Lumori', with_plan
+    assert no_plan['brand'] == 'DOMAIN 設計' and no_plan['title'] == 'Lumori Domain 設計', no_plan
     assert '全自動' in auto['brand'] and '全自動' not in with_plan['brand'], auto
     assert toggle == '改回手動', toggle   # 規劃頁的執行模式切換
 

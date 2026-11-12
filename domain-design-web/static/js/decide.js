@@ -28,7 +28,7 @@ export async function renderDecide(path, i) {
   const topic = q.topic || (q.ref || '').replace(/^[①-⑥]\s*/, '');
   $('#app').innerHTML = `
     <div class="narrow">
-      <div>
+      <div class="page-head">
         <span class="chip">${esc(topic || `問題 ${q.n}`)}</span>
         <h1 class="qtitle">${esc(q.question)}</h1>
       </div>
@@ -135,7 +135,7 @@ export async function renderAllQuestions(path) {
   const optText = (q, key) => { const o = q.options.find(x => x.key === key); return o ? (o.summary || o.text) : ''; };
   $('#app').innerHTML = `
     <div class="narrow">
-      <div><span class="chip">全自動留給你的決定</span><h1 class="qtitle">${esc(r.slice)}：${qs.length} 題，答了 ${done} 題</h1>
+      <div class="page-head"><span class="chip">全自動留給你的決定</span><h1 class="qtitle">${esc(r.slice)}：${qs.length} 題，答了 ${done} 題</h1>
         <p class="muted small">A 是設計目前的做法（全自動暫時照它做），選 A 就是確認。點一題可以作答或改答案。</p></div>
       ${qs.map((q, k) => {
         const ans = q.answer.trim();

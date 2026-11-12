@@ -23,7 +23,7 @@ export function showTopic(P) {
   // 全自動模式（docs/01 0.2）：標在頂列，人一眼知道這裡的審查頁、黃金案例是 AI 代答的，要事後看
   const auto = P.plan && P.plan.auto ? '<span class="brand-sub" title="人的關卡由 AI 代答並標記 AI（自動），事後再看、再改">全自動</span>' : '';
   if (b) b.innerHTML = (name ? `${esc(name)}<span class="brand-sub">DOMAIN 設計</span>` : 'DOMAIN 設計') + (autoBadge(P.autorun) || auto);
-  document.title = name ? `${name}｜Domain 設計` : 'Domain 設計';
+  document.title = name ? `${name}｜Lumori` : 'Lumori Domain 設計';
 }
 
 export function planSlices(P) {
@@ -95,10 +95,10 @@ export async function renderHub() {
 
   let hero;
   if (N.kind === 'start') hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">從這裡開始</span>
-      <h1>想做什麼系統？</h1><p>先用幾句話寫下方向：給誰用、要解決什麼、明確不做什麼。不用懂這套流程，AI 會依它問清楚、盤點資料、提出怎麼切。</p></div>
+      <h2>想做什麼系統？</h2><p>先用幾句話寫下方向：給誰用、要解決什麼、明確不做什麼。不用懂這套流程，AI 會依它問清楚、盤點資料、提出怎麼切。</p></div>
       <a class="btn big yellow" href="#/start">寫主題草案<span class="arr">›</span></a></section>`;
   else if (N.kind === 'plan-ai') hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到 AI</span>
-      <h1>主題草案寫好了，請 AI 規劃</h1><p>AI 會盤點這個領域通常有哪些資料（你有的、公開找得到的、只能先推想的），把要做的事切成一條條情境（切片），並列出全局會用到的名詞。</p>
+      <h2>主題草案寫好了，請 AI 規劃</h2><p>AI 會盤點這個領域通常有哪些資料（你有的、公開找得到的、只能先推想的），把要做的事切成一條條情境（切片），並列出全局會用到的名詞。</p>
       <p class="muted small">之後輪到你：補資料、看推想草稿、看切片地圖，同意後才開始第一條。</p></div>
       <button class="btn big primary" id="doPlan">請 AI 規劃<span class="arr">›</span></button></section>`;
   else if (N.kind === 'running') hero = runningCard(N.scope, N.scope === '_plan' ? 'AI 正在規劃' : `AI 正在做 ${N.scope}`);
@@ -110,29 +110,29 @@ export async function renderHub() {
     if (toProvide - toFetch) parts.push(`<strong>${toProvide - toFetch} 份資料</strong>等你提供`);
     if (pq) parts.push(`<strong>${pq} 個待釐清</strong>`);
     hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到你</span>
-      <h1>看規劃：${plan.slices.length} 條切片、${P.sketch ? P.sketch.nouns.length : 0} 個名詞</h1>
+      <h2>看規劃：${plan.slices.length} 條切片、${P.sketch ? P.sketch.nouns.length : 0} 個名詞</h2>
       <p>${parts.length ? parts.join('、') + '；' : ''}看完切片地圖與名詞草圖，有意見就寫，沒問題就同意。</p></div>
       <a class="btn big yellow" href="#/plan">看規劃<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'review') {
     const f = N.item.f;
     hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到你</span>
-      <h1>審查 ${esc(f.slice)} ${esc(stepName(f.review))}</h1><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p>
+      <h2>審查 ${esc(f.slice)} ${esc(stepName(f.review))}</h2><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p>
       <p>還有 ${f.review.counts.open} 件事要做。</p></div><a class="btn big yellow" href="#/s/${enc(f.slice)}">去審查<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'slice') {
     const f = N.item.f;
     hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">進行中</span>
-      <h1>${esc(f.slice)}：${f.next.status === '凍結中' ? `${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}的凍結還沒做完` : f.next.status === '待檢查' ? `${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}審查填好了，看下一步（凍結、重做或回頭修改）` : `下一關 ${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}`}</h1><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p></div>
+      <h2>${esc(f.slice)}：${f.next.status === '凍結中' ? `${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}的凍結還沒做完` : f.next.status === '待檢查' ? `${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}審查填好了，看下一步（凍結、重做或回頭修改）` : `下一關 ${CIRCLED[f.next.n]} ${esc(STEP_INFO[f.next.n][0])}`}</h2><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p></div>
       <a class="btn big primary" href="#/s/${enc(f.slice)}">打開<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'pick') {
     const r = N.item.row;
     hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">下一條切片</span>
-      <h1>${esc(r['切片'])}</h1><p class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'])}</p>
+      <h2>${esc(r['切片'])}</h2><p class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'])}</p>
       <p class="small">建議順序 ${esc(r['建議順序'])}${r['依賴'] && r['依賴'] !== '—' ? `　依賴：${esc(r['依賴'])}` : ''}</p></div>
       <a class="btn big yellow" href="#/new/${enc(r['切片'])}">開始這一條<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'autodecide') {
     const a = N.item.f.auto_review;
     hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">輪到你</span>
-      <h1>全自動留給你的決定：${esc(N.item.f.slice)} ${a.open} 題</h1>
+      <h2>全自動留給你的決定：${esc(N.item.f.slice)} ${a.open} 題</h2>
       <p>AI 代答時依據不夠、或同一件事來回改了兩次的，先照設計目前的做法（A）往下做，收在這裡等你決定。選 A 就是確認；選別的，AI 會照你的答案回頭修改。</p></div>
       <a class="btn big yellow" href="#/r/${enc(a.path)}">去決定<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'autostopped') {
@@ -140,7 +140,7 @@ export async function renderHub() {
     const done = /設計完成/.test(st.reason || '');
     const nxt = list.find(x => x.f && x.f.next && x.f.next.n <= 5) || list.find(x => !x.f && x.row && x.row['狀態'] === '候選');
     hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">全自動・已停下來</span>
-      <h1>${done ? esc(st.reason.split(' ')[0]) + ' 設計完成，全自動停下來等你看一次' : '全自動停下來了'}</h1>
+      <h2>${done ? esc(st.reason.split(' ')[0]) + ' 設計完成，全自動停下來等你看一次' : '全自動停下來了'}</h2>
       <p class="small">${esc((st.ended || '').replace('T', ' ').slice(0, 16))} 停下來：${inline(st.reason || '')}</p>
       ${rv.length ? `<p>這次 AI 代答的審查頁（不用作答，看看 AI 替你決定了什麼；有不同意的，用切片頁的「發現問題」交給 AI）：</p>
       <ul>${rv.map(r => `<li><a href="#/r/${enc(r.path)}">${esc(r.slice)}・${esc(r.steps.map(n => CIRCLED[n]).join(''))} ${esc(r.title)}</a></li>`).join('')}</ul>` : ''}
@@ -150,22 +150,23 @@ export async function renderHub() {
   } else if (N.kind === 'auto') {
     const ad = list.find(x => x.f && x.f.auto_review && x.f.auto_review.open);
     hero = `<section class="hero idle"><div style="flex:999 1 480px;min-width:0"><span class="chip">全自動</span>
-      <h1>全自動執行中・第 ${P.autorun.round || 1} 圈</h1><p>${waitText(P.autorun) || esc(autoProgress(P))}</p>
+      <h2>全自動執行中・第 ${P.autorun.round || 1} 圈</h2><p>${waitText(P.autorun) || esc(autoProgress(P))}</p>
       <p class="small muted">人的關卡由 AI 代答並標「AI（自動）」，你事後再看、再改。這段時間網頁只能看${ad ? `，但<a href="#/r/${enc(ad.f.auto_review.path)}">全自動留給你的 ${ad.f.auto_review.open} 題決定</a>現在就能答` : ''}。</p></div>
       <a class="btn big primary" href="#/auto">看進度<span class="arr">›</span></a></section>`;
   } else if (N.kind === 'verify') {
     const f = N.item.f;
     hero = `<section class="hero"><div style="flex:999 1 480px;min-width:0"><span class="chip">還差 ⑥</span>
-      <h1>${esc(f.slice)}：${f.next.status === '未開始' ? '設計完成，接著做 ⑥ 驗證' : '⑥ 驗證還沒做完'}</h1><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p>
+      <h2>${esc(f.slice)}：${f.next.status === '未開始' ? '設計完成，接著做 ⑥ 驗證' : '⑥ 驗證還沒做完'}</h2><p>${scenario(N.item.row ? N.item.row['情境（起點 → 可驗證的結果）'] : '')}</p>
       <p class="small muted">地圖上的切片都開始過了；每條都做完 ⑥ 才算「設計完成」。</p></div>
       <a class="btn big yellow" href="#/s/${enc(f.slice)}">打開<span class="arr">›</span></a></section>`;
-  } else hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>設計完成：地圖上的切片都做完了（含 ⑥）</h1>
+  } else hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h2>設計完成：地圖上的切片都做完了（含 ⑥）</h2>
       <p class="muted">下一個階段「系統完成」——整合成可以使用的系統（介面、部署）——流程還沒定義。有新的情境或需求，到「規劃」補進地圖。</p><a class="btn big" href="#/plan">看規劃</a></section>`;
 
   const eqTotal = P.slices.reduce((n, x) => n + x.eq_open, 0);
   const started = list.filter(x => x.f), waiting = list.filter(x => !x.f);
   const doing = started.find(x => x.f.next && x.f.next.n <= 5);   // 一次只做一條：這條做完前不能開新的
   $('#app').innerHTML = `
+    <header class="page-head"><div class="label">總覽</div><h1>${esc(topicName(P) || 'Domain 設計')}</h1><p class="lead">從主題草案、規劃到每條切片的六步，現在走到哪裡、輪到誰。</p></header>
     <nav class="journey" aria-label="專案階段">${journey.map(([j, d], k) => `<div class="${k < stage ? 'done' : k === stage ? 'now' : ''}"><b>${k < stage ? '✓' : '階段 ' + (k + 1)}</b><span>${esc(j)}${d ? `<small>${esc(d)}</small>` : ''}</span></div>`).join('')}</nav>
     ${waitingCard('_plan')}
     ${hero}
@@ -233,7 +234,7 @@ export async function renderStart() {
   const P = state.project || await loadProject();
   $('#app').innerHTML = `
     <div class="narrow">
-      <div><span class="chip">第 1 步</span><h1 class="qtitle">寫下你想做的系統</h1>
+      <div class="page-head"><span class="chip">第 1 步</span><h1 class="qtitle">寫下你想做的系統</h1>
         <p class="muted">用自己的話寫，不用專業術語；空著的 AI 之後會用選擇題問。存成 <code>inputs/shared/主題草案.md</code>${P.topic ? '（已經有了，這次寫的會加成一節「補充」，不改舊的）' : ''}。</p>
         <p class="small muted" style="margin:0">寫到一半重新整理也不會不見（暫存在這個瀏覽器，存好後清掉）。</p></div>
       <section class="card lift" style="display:flex;flex-direction:column;gap:16px">

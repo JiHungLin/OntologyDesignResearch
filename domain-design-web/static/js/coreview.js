@@ -25,7 +25,7 @@ export async function renderCore(tab, item) {
   if (!state.core || !item) state.core = await api('/api/core');
   const C = state.core;
   tab = TABS.some(t => t[0] === tab) ? tab : 'entities';
-  const head = `<div class="row spread"><div><div class="label">唯讀・各切片 ②③④ 凍結後合併進來</div><h1 style="margin:0">共用核心</h1></div>
+  const head = `<div class="row spread page-head-row"><div class="page-head"><div class="label">唯讀・各切片 ②③④ 凍結後合併進來</div><h1>共用核心</h1></div>
     <nav class="tabs core-tabs">${TABS.map(([k, n]) => `<a href="#/core/${k}" class="${k === tab ? 'on' : ''}">${n}</a>`).join('')}</nav></div>`;
   if (C.empty) {
     $('#app').innerHTML = head + '<div class="card dashed">還沒有 core/。第一次凍結 ②③④ 時會建立。</div>';

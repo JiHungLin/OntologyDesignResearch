@@ -2,6 +2,7 @@
 import { $, api, CIRCLED, enc, esc, firstOpenQ, LEVEL_NAME, loadReview, nextTask, plain, setTop, state, stepName, stepNums, tasksOf } from './core.js';
 import { bindWaiting, openAi, pendingAsk, runAi, runningCard, sessionOf, waitingCard } from './ai.js';
 import { markNav, STEP_FILE } from './nav.js';
+import { scenario } from './overview.js';
 
 // ---------- 切片首頁：輪到你 ----------
 
@@ -57,7 +58,7 @@ export async function renderHome(slice) {
       <section class="hero">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>
-          <h1>${esc(title)}</h1>
+          <h2>${esc(title)}</h2>
           <p>${esc(plain(why.split('，依據')[0]))}</p>
           <p>過關條件：${parts.join('＋')}，還要大約 ${mins} 分鐘。</p>
         </div>
@@ -108,7 +109,7 @@ export async function renderHome(slice) {
       <section class="hero">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>
-          <h1>對答案：${off.length} 個黃金案例和設計推出的不一樣</h1>
+          <h2>對答案：${off.length} 個黃金案例和設計推出的不一樣</h2>
           <p>AI 依設計另外推了一次，${off.map(x => esc(x.c.id)).join('、')} 和你的答案對不上。逐一看差在哪：你的答案要改就直接改了再送出；你認為設計錯了，就不用改，交給 AI 時說明。</p>
           <p class="muted small">${off.map(x => `<a href="#/r/${p}/golden/${x.k}">${esc(x.c.id)}</a>`).join('　')}</p>
         </div>
@@ -121,7 +122,7 @@ export async function renderHome(slice) {
       <section class="hero">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>
-          <h1>第 ${CIRCLED[nStep]} 步重做到一半，AI 停下來了</h1>
+          <h2>第 ${CIRCLED[nStep]} 步重做到一半，AI 停下來了</h2>
           <p>AI 依審查頁重做第 ${CIRCLED[nStep]} 步，還沒做完（例：等你核准的指令逾時、session 太長）。請 AI 繼續做；做完會產生新的審查頁，那時再審查。</p>
           ${nextLine ? `<div class="hero-next"><b>AI 說下一步：</b>${esc(plain(nextLine))}</div>` : ''}
           <p class="muted small">按下面的按鈕時，網頁會問你要不要開新的 session（AI 建議開新的話就開）。</p>
@@ -143,7 +144,7 @@ export async function renderHome(slice) {
       <section class="hero">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>
-          <h1>AI 處理完了：${esc(stepName(stepOf))} 還不能凍結</h1>
+          <h2>AI 處理完了：${esc(stepName(stepOf))} 還不能凍結</h2>
           <p>${redo ? `你的答案要改的設計已經處理了，但第 ${CIRCLED[n]} 步的產出還是舊的：請 AI 重做第 ${CIRCLED[n]} 步，做完會產生新的審查頁。要你填的欄位（AI 對話裡列的）可以同時做。`
             : 'AI 依你的答案判斷，要先回頭修改設計（或補人才能填的欄位），這一輪才能凍結。'}詳細在右邊的 AI 對話。</p>
           ${said_}
@@ -157,7 +158,7 @@ export async function renderHome(slice) {
       <section class="hero">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>
-          <h1>AI 處理完了：${esc(stepName(stepOf))}</h1>
+          <h2>AI 處理完了：${esc(stepName(stepOf))}</h2>
           ${said_}
           <p>${more ? `這份審查頁說這一輪還要再送一份審查頁：請 AI 繼續第 ${CIRCLED[n]} 步，產生下一份。都通過後才凍結。` : '結論都是「通過」的話，請 AI 凍結（凍結＝之後的修改都要留紀錄）。'}</p>
           <p class="muted small">AI 的回覆在右邊的 AI 對話；按下面的按鈕時，網頁會問你要不要開新的 session。</p>
@@ -170,7 +171,7 @@ export async function renderHome(slice) {
       <section class="hero">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>
-          <h1>⑤ 第一段填好了</h1>
+          <h2>⑤ 第一段填好了</h2>
           <p>交給 AI 做第二段：處理你的答案、抄回你算的結果、產生 schema 與 API、做紙上推演，再送一份審查頁給你。第二段答完才凍結。</p>
         </div>
         <div class="row"><button class="btn big yellow" id="contStep">請 AI 做 ⑤ 第二段<span class="arr">›</span></button></div>
@@ -179,7 +180,7 @@ export async function renderHome(slice) {
       <section class="hero">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到你</span>
-          <h1>審查填好了：${esc(stepName(stepOf))}</h1>
+          <h2>審查填好了：${esc(stepName(stepOf))}</h2>
           <p>交給 AI 依你的答案修改；結論都是「通過」的話，請 AI 凍結（凍結＝之後的修改都要留紀錄）。</p>
         </div>
         <div class="row"><button class="btn big yellow" id="handover">交給 AI 處理答案</button><button class="btn big" id="freeze">請 AI 凍結</button></div>
@@ -194,7 +195,7 @@ export async function renderHome(slice) {
       <section class="hero idle">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到 AI</span>
-          <h1>第 ${CIRCLED[n]} 步的凍結還沒做完</h1>
+          <h2>第 ${CIRCLED[n]} 步的凍結還沒做完</h2>
           <p>檔頭已經寫「已凍結」，但還沒有 tag <code>${esc(h.next.version || `${slice}/0${n}-v?`)}</code>：CHANGELOG、合併進 core/、commit、打 tag 至少有一件還沒做。做完才能開始下一關。</p>
         </div>
         <button class="btn big primary" id="finishFreeze">請 AI 把凍結做完<span class="arr">›</span></button>
@@ -202,7 +203,7 @@ export async function renderHome(slice) {
       <section class="hero idle">
         <div style="flex:999 1 480px;min-width:0">
           <span class="chip">輪到 AI</span>
-          <h1>${going ? `第 ${CIRCLED[n]} 步還沒做完` : `下一關：${CIRCLED[n]} ${esc(info[0])}`}</h1>
+          <h2>${going ? `第 ${CIRCLED[n]} 步還沒做完` : `下一關：${CIRCLED[n]} ${esc(info[0])}`}</h2>
           <p>AI 會整理：${esc(info[1])}。做完後另開 AI 挑錯、核對，產生一份審查頁，這裡就會出現新的關卡。</p>
           ${lastSaid ? `<div class="hero-next"><b>AI 上次說：</b>${esc(plain(lastSaid))}</div>` : ''}
           ${going && n === 6 ? '<p class="small">AI 提到的問題（例：黃金案例的內容要補、系統結果和你算的不一致、缺 API）都在這一步裡處理：AI 能改的（案例情境、程式、測試）自己改，要你決定的（你的答案要不要改、要不要回頭改設計）會列在 ⑥ 的審查頁問你。</p>' : ''}
@@ -211,13 +212,13 @@ export async function renderHome(slice) {
         <button class="btn big primary" id="doStep">${going ? `請 AI 繼續第 ${CIRCLED[n]} 步` : `請 AI 開始第 ${CIRCLED[n]} 步`}<span class="arr">›</span></button>
       </section>`;
   } else {
-    hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>這條切片全部完成！</h1>
+    hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h2>這條切片全部完成！</h2>
       <p class="muted">①～⑥ 都凍結了。回總覽挑下一條。</p><a class="btn big primary" href="#/">回總覽</a></section>`;
   }
 
   const designDone = h.levels.slice(0, 5).every(l => l.state === 'frozen') && h.levels[5].state === 'locked';   // ⑥ 開始後（進行中、審查中、待凍結）照一般關卡顯示
   if (designDone && !(s && s.running) && !asking) {
-    hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h1>設計完成（待驗證）</h1>
+    hero = `<section class="card lift celebrate pop"><div class="stars">★ ★ ★</div><h2>設計完成（待驗證）</h2>
       <p class="muted">①～⑤ 都凍結了，這是一個設計版本。第 ⑥ 步等系統實作好再做；現在可以開始下一條切片。</p>
       <div class="row" style="justify-content:center"><a class="btn big primary" href="#/">挑下一條切片<span class="arr">›</span></a><button class="btn big" id="doStep">系統好了，開始 ⑥</button></div></section>`;
   }
@@ -228,7 +229,11 @@ export async function renderHome(slice) {
   // 審查頁都作答了、還沒凍結：留一個回去改答案的入口（左側的「審查（輪到你）」這時已經不見）
   const reopen = !cur && wait.length && h.reviews[0] && !h.reviews[0].error
     ? `<p class="small reopen"><a href="#/r/${enc(h.reviews[0].path)}">想改答案？回到審查頁（${esc(stepName(h.reviews[0]))}）<span class="arr">›</span></a></p>` : '';
+  const proj = state.project || await api('/api/project').catch(() => null);   // 只讀情境來顯示頁首區
+  const row = ((proj && proj.plan && proj.plan.slices) || []).find(x => x['切片'] === slice);
+  const scn = row ? row['情境（起點 → 可驗證的結果）'] || '' : '';
   app.innerHTML = `
+    <header class="page-head"><div class="label">切片</div><h1>${esc(slice)}</h1>${scn ? `<p class="lead">${scenario(scn)}</p>` : ''}</header>
     ${levelStrip(h.levels)}
     ${asking ? '' : waitingCard(slice)}
     ${h.auto_review ? `<section class="card ${h.auto_review.open ? 'lift' : 'soft-card'}"><div class="row spread"><div>

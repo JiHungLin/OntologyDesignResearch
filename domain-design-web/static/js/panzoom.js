@@ -1,4 +1,4 @@
-// 圖的縮放與平移（像 Miro、draw.io）：拖曳移動；Ctrl／⌘＋滾輪或觸控板捏合縮放；右上角 －／＋、全圖、1:1。
+// 圖的縮放與平移（像 Miro、draw.io）：拖曳移動；Ctrl／⌘＋滾輪、觸控板捏合或手機雙指縮放；右上角 －／＋、全圖、1:1。
 // 一般滾輪照樣捲頁面。#app 裡 .diagram 底下的 svg 出現時自動掛上（main.js），各圖的程式不用改。
 // 同一張圖重畫（例：點了另一個方塊）時保留目前的位置與倍率；svg 有 data-focus="x,y" 時，
 // 第一次打開以那一點為中心，之後那一點跑出畫面外才移過去。
@@ -64,7 +64,7 @@ export function attachPanZoom(svg) {
       <button type="button" data-pz="in" title="放大（Ctrl＋滾輪）">＋</button>
       <button type="button" data-pz="fit" title="整張圖放進框裡">全圖</button>
       <button type="button" data-pz="one" title="原本的大小">1:1</button></div>
-      <div class="pz-hint">拖曳移動・Ctrl＋滾輪縮放</div>`);
+      <div class="pz-hint">拖曳移動・雙指或 Ctrl＋滾輪縮放</div>`);
   }
   box.querySelectorAll('.pz-ctl [data-pz]').forEach(b => b.onclick = e => {
     e.stopPropagation();
@@ -82,13 +82,34 @@ export function attachPanZoom(svg) {
   }, { passive: false });
 
   // 拖曳平移：移動超過 4px 才算拖曳，放開時吞掉那一下 click（不會誤選到方塊）
-  let drag = null, moved = false;
+  // 手機雙指：兩指距離變化＝縮放（以兩指中間為中心），兩指一起移動＝平移；放開一指後接著用剩下那指拖曳
+  const pts = new Map();   // pointerId → 目前位置
+  let drag = null, moved = false, pinch = null;
+  const pair = () => {
+    const [a, b] = [...pts.values()];
+    return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+  };
+  const startDrag = p => { drag = { x: p.x, y: p.y, vx: v.x, vy: v.y }; };
   svg.addEventListener('pointerdown', e => {
-    if (e.button !== 0) return;
-    drag = { x: e.clientX, y: e.clientY, vx: v.x, vy: v.y };
-    moved = false;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) { startDrag(pts.get(e.pointerId)); moved = false; return; }
+    if (pts.size === 2) {   // 第二指放上來：改成捏合
+      pinch = pair(); drag = null; moved = true;
+      for (const id of pts.keys()) { try { svg.setPointerCapture(id); } catch { /* 那一指已經放開 */ } }
+      svg.classList.add('dragging');
+    }
   });
   svg.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pts.size >= 2) {
+      const now = pair(), r = svg.getBoundingClientRect();
+      v = { ...v, x: v.x - (now.mx - pinch.mx) / v.s, y: v.y - (now.my - pinch.my) / v.s };
+      zoomAt(now.d / pinch.d, now.mx - r.left, now.my - r.top);
+      pinch = now;
+      return;
+    }
     if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!moved && Math.hypot(dx, dy) < 4) return;
@@ -96,7 +117,12 @@ export function attachPanZoom(svg) {
     v = { ...v, x: drag.vx - dx / v.s, y: drag.vy - dy / v.s };
     apply();
   });
-  const end = () => { drag = null; svg.classList.remove('dragging'); };
+  const end = e => {
+    pts.delete(e.pointerId);
+    if (pts.size < 2) pinch = null;
+    if (pts.size === 1) { startDrag([...pts.values()][0]); return; }   // 剩一指：從它現在的位置接著拖
+    if (!pts.size) { drag = null; svg.classList.remove('dragging'); }
+  };
   svg.addEventListener('pointerup', end);
   svg.addEventListener('pointercancel', end);
   svg.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);

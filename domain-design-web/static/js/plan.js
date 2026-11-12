@@ -107,8 +107,8 @@ export async function renderPlan() {
   $('#app').innerHTML = `
     ${runningCard('_plan', 'AI 正在改規劃')}
     ${waitingCard('_plan')}
-    <div class="row spread"><div><span class="chip ${plan.agreed ? 'new' : ''}">${esc(plan.status || '討論中')}</span>
-      <h1 style="margin:8px 0 0">規劃</h1><p class="muted small clamp2" style="margin:6px 0 0;max-width:46em" title="${esc(plan.basis)}">${esc(plan.basis)}</p></div>
+    <div class="row spread page-head-row"><div class="page-head"><span class="chip ${plan.agreed ? 'new' : ''}">${esc(plan.status || '討論中')}</span>
+      <h1>規劃</h1><p class="muted small clamp2" title="${esc(plan.basis)}">${esc(plan.basis)}</p></div>
       <nav class="tabs"><button data-jump="p-data">資料</button><button data-jump="p-map">切片地圖</button><button data-jump="p-nouns">名詞</button><button data-jump="p-ask">待釐清與決定</button></nav></div>
 
     <section class="card fb-host"><div class="label">方向（整體目標）</div>
@@ -257,7 +257,7 @@ export async function renderDraft(path) {
   const body = f.text.split(/^## 內容\s*$/m);
   $('#app').innerHTML = `
     <div class="narrow">
-      <div><span class="chip ${d.pending ? 'turn' : 'new'}">${esc(d.status || '')}</span><h1 class="qtitle">${esc(d.title || path)}</h1>
+      <div class="page-head"><span class="chip ${d.pending ? 'turn' : 'new'}">${esc(d.status || '')}</span><h1 class="qtitle">${esc(d.title || path)}</h1>
         <p class="muted">這是 AI 依一般知識寫的，<b>不是</b>你們的實際做法。判斷標準：這個一般做法大致對嗎、能不能先當假設用？不用逐句確認；有了真實資料會取代它。</p></div>
       ${d.unsure ? `<section class="card hint"><b>AI 最不確定的地方：</b>${inline(d.unsure)}${d.who ? `<div class="small">需要誰確認：${inline(d.who)}</div>` : ''}</section>` : ''}
       <section class="card lift draft-body">${md(body.length > 1 ? body[1] : f.text)}</section>
@@ -313,7 +313,7 @@ export async function renderKickoff(code) {
   $('#app').innerHTML = `
     <div class="narrow">
 
-      <div><span class="chip">開始一條切片</span><h1 class="qtitle">${esc(code)}</h1>
+      <div class="page-head"><span class="chip">開始一條切片</span><h1 class="qtitle">${esc(code)}</h1>
         <p class="big-scn">${scenario(r['情境（起點 → 可驗證的結果）'] || '')}</p>
         <p class="muted">開工前先回答幾件事（知道的就寫，不知道空著）。AI 會建立切片資料夾，接著做第 ① 步：範圍與驗收問題。</p></div>
       <section class="card lift" style="display:flex;flex-direction:column;gap:14px">
@@ -347,7 +347,7 @@ export async function renderEq(slice) {
   const eqs = h.eqs.slice().sort((a, b) => (order[a['狀態']] ?? 9) - (order[b['狀態']] ?? 9) || a.line - b.line);
   const toAsk = eqs.filter(waitingEq);
   $('#app').innerHTML = `
-    <div><h1 style="margin:0">專家問題</h1><p class="muted" style="margin:4px 0 0">AI 答不了、要問 Domain 專家或客戶的事。不擋關卡：相關的地方先標「待專家確認」，答覆回來再交給 AI 回頭改。</p></div>
+    <div class="page-head"><div class="label">支線</div><h1>專家問題</h1><p class="lead">AI 答不了、要問 Domain 專家或客戶的事。不擋關卡：相關的地方先標「待專家確認」，答覆回來再交給 AI 回頭改。</p></div>
     ${toAsk.length ? `<div class="row"><button class="btn primary" id="copyAll">複製 ${toAsk.length} 題等回覆的（給專家）</button></div>` : ''}
     <div class="eqs">${eqs.map(e => {
       const st = e['狀態'], wait = waitingEq(e);

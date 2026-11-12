@@ -1,5 +1,6 @@
 // 路由與啟動
 import { $, $$, go, loadReview, nextTask, state, toast } from './core.js';
+import './theme.js';
 import { renderHome } from './home.js';
 import { renderAllQuestions, renderDecide } from './decide.js';
 import { renderConfirm } from './confirm.js';

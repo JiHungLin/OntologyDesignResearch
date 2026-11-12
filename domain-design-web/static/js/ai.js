@@ -524,7 +524,7 @@ export function runningCard(scope, what) {
   if (!s || !s.running) return '';
   return `<section class="hero idle working">
     <div style="flex:999 1 480px;min-width:0">
-      <span class="chip">輪到 AI</span><h1>${esc(what || `AI 正在做：${s.purpose}`)}</h1>
+      <span class="chip">輪到 AI</span><h2>${esc(what || `AI 正在做：${s.purpose}`)}</h2>
       <p class="muted small">做完畫面會自動更新。可以先去做別的事，或打開右上角的 AI 看過程。</p>
       <p class="small live"><span class="dot busy"></span> <span id="liveTool">${esc(state.lastTool || '準備中…')}</span></p>
     </div>
