@@ -56,7 +56,7 @@ export function openAi(scope) {
 
 export async function renderAi() {
   const box = $('#aiSession');
-  const warn = state.gitignored === false ? `<div class="small" style="background:var(--hint);padding:6px 10px;border-radius:10px">設計 repo 的 <code>.gitignore</code> 沒有排除 <code>.domain-web/</code>（AI session 的登記與紀錄放在這裡），請加上這一行。</div>` : '';
+  const warn = state.gitignored === false ? `<div class="small" style="background:var(--hint-soft);color:var(--hint-ink);padding:6px 10px;border-radius:8px">設計 repo 的 <code>.gitignore</code> 沒有排除 <code>.domain-web/</code>（AI session 的登記與紀錄放在這裡），請加上這一行。</div>` : '';
   if (state.pending) { box.innerHTML = warn + state.pending.html; state.pending.bind(); return; }
   const au = state.project && state.project.autorun;
   if (au && au.running) return renderAutoDrawer(au);

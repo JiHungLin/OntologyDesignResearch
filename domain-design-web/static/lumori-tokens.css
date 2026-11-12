@@ -1,0 +1,245 @@
+/* Lumori 色彩與字級變數：複製自 視覺識別/project/tokens.css（設計系統頁面產生），改顏色請改 tokens.json 後重新複製。
+   深色主題跟著系統（prefers-color-scheme），也可以在 <html> 設 data-theme="light"／"dark" 固定。 */
+:root, [data-theme="light"] {
+  --bg: #ffffff; /* 頁面底色；上面再疊 glow-* 光暈（見 README「頁面背景」）。 */
+  --bg-soft: #f3f9fd; /* 側欄、次要區塊、輸入框底、結論橫條。取自封面最淡的霧藍。 */
+  --surface: #ffffff; /* 卡片、選項、抽屜的底（不透明）。 */
+  --surface-glass: #ffffffcc; /* 疊在光暈上的玻璃卡片（80% 不透明）；上面的字對比以 surface 計算。 */
+  --line: #dce6f4; /* 卡片邊、表格線、分隔線（裝飾線，不承載意義）。 */
+  --line-strong: #8a94a8; /* 輸入框與次要按鈕的邊（要看得出是控制項，3:1 以上）。 */
+  --ink: #0b1533; /* 標題、正文；用在 bg、bg-soft、surface 與所有 *-soft 淡底上。 */
+  --ink-2: #55617a; /* 次要正文、表格、說明小字；用在 bg、bg-soft、surface 上。 */
+  --muted: #7a8294; /* 18px 以上的導言；淺色主題只能放大字（3.9:1）。 */
+  --faint: #a0a8b4; /* 頁碼、停用、裝飾性註記；不放要讀的字。 */
+  --accent: #3388f0; /* Lumori 藍（封面標題）：大字強調、圖示、進度、標題漸層起點；淺色主題不放 18px 以下的字。 */
+  --accent-strong: #1f64c8; /* 連結、eyebrow、小字強調、焦點框；bg、surface、accent-soft 上 4.5:1 以上。 */
+  --accent-fill: #2470d8; /* 主要按鈕的底。 */
+  --on-accent: #ffffff; /* 放在 accent-fill 上的字與圖示。 */
+  --accent-soft: #e7f1fc; /* 膠囊、選中的導覽列、推薦選項的底；上面放 accent-strong 或 ink。 */
+  --accent-2: #98a8f0; /* 長春花紫：標題漸層的終點；不單獨使用。 */
+  --sky-100: #e7f1fc; /* 封面色板：天藍 100（最淡）。 */
+  --sky-200: #d5e5f9; /* 封面色板：天藍 200。 */
+  --sky-300: #b8d7f8; /* 封面色板：天藍 300，光暈主色。 */
+  --sky-400: #a2c6f0; /* 封面色板：天藍 400，封面最深的背景藍。 */
+  --periwinkle-200: #c2d2f0; /* 封面色板：長春花紫。 */
+  --lavender-200: #ccc6f0; /* 封面色板：淡紫（光束右側）。 */
+  --lavender-100: #dddcea; /* 封面色板：灰紫（右下陰影）。 */
+  --apricot-200: #fcd8ba; /* 封面色板：杏桃（光源旁的暖光）。 */
+  --apricot-100: #fcf0e4; /* 封面色板：杏桃 100（暖白）。 */
+  --rose-200: #eaccc0; /* 封面色板：玫瑰（光源下方）。 */
+  --rose-100: #f6e4e4; /* 封面色板：玫瑰 100。 */
+  --glow-blue: #b8d7f8; /* 頁面光暈（藍），只當裝飾。 */
+  --glow-lavender: #ccc6f0; /* 頁面光暈（淡紫），只當裝飾。 */
+  --glow-peach: #fcd8ba; /* 頁面光暈（杏桃），只當裝飾。 */
+  --ring-sky: #8cbeef; /* 字標 O 圓環的上半（藍）。取樣自簡報封面。 */
+  --ring-mist: #aed4ea; /* 字標 O 圓環的右側（淡青），藍與蜜桃之間的過渡。 */
+  --ring-peach: #f3c89a; /* 字標 O 圓環的下半（蜜桃）。 */
+  --wordmark-top: #23446e; /* 字標 L U M R I 的上緣（鋼藍）；字母由上往下漸層。 */
+  --wordmark-mid: #071a37; /* 字標字母 42% 高度處，漸層集中在上半。 */
+  --wordmark-bottom: #020517; /* 字標字母的下緣（近黑）。 */
+  --ok: #2bb89a; /* 完成、凍結、通過的圖形（✓ 圓、圓點）。封面沒有綠色，狀態色獨立於色板。 */
+  --ok-soft: #e8f7f2; /* 完成狀態的淡底。 */
+  --ok-ink: #0f7a65; /* 完成狀態的字；用在 ok-soft、surface 上。 */
+  --turn: #f0985a; /* 輪到你：圖形與圓點（杏桃加深）。 */
+  --turn-soft: #fdf0e4; /* 輪到你的淡底。 */
+  --turn-ink: #a84f14; /* 輪到你的字；用在 turn-soft、surface 上。 */
+  --hint: #d8b98a; /* 提示、支線的圖形。 */
+  --hint-soft: #fcf6ea; /* 提示卡片的底（封面暖白）。 */
+  --hint-ink: #7e5118; /* 提示的字；用在 hint-soft、surface 上。 */
+  --bad: #e86a78; /* 錯誤、不通過、擋下的圖形（✕ 圓、⚠）。 */
+  --bad-soft: #fcebec; /* 錯誤卡片的底。 */
+  --bad-ink: #b3304a; /* 錯誤的字；用在 bad-soft、surface 上。 */
+  --c1: #a2c6f0; /* ① 範圍與驗收問題（天藍）：圖示與裝飾圖形；要讀的編號與字用 c1-ink。 */
+  --c1-soft: #e7f1fc; /* ① 的淡底。 */
+  --c1-ink: #1f64c8; /* ① 的編號與淡底上的小字。 */
+  --c2: #98a8f0; /* ② 名詞盤點（長春花紫）：圖示與裝飾圖形；要讀的用 c2-ink。 */
+  --c2-soft: #eceffc; /* ② 的淡底。 */
+  --c2-ink: #3a52c0; /* ② 的編號與淡底上的小字。 */
+  --c3: #b4ace8; /* ③ 流程與狀態（淡紫）：圖示與裝飾圖形；要讀的用 c3-ink。 */
+  --c3-soft: #f1effb; /* ③ 的淡底。 */
+  --c3-ink: #5a45b5; /* ③ 的編號與淡底上的小字。 */
+  --c4: #f5b98a; /* ④ 規則與限制（杏桃）：圖示與裝飾圖形；要讀的用 c4-ink。 */
+  --c4-soft: #fdf2e8; /* ④ 的淡底。 */
+  --c4-ink: #9a4e16; /* ④ 的編號與淡底上的小字。 */
+  --c5: #e2afa6; /* ⑤ 投影到實作（玫瑰）：圖示與裝飾圖形；要讀的用 c5-ink。 */
+  --c5-soft: #fbedea; /* ⑤ 的淡底。 */
+  --c5-ink: #9c3f36; /* ⑤ 的編號與淡底上的小字。 */
+  --c6: #6f8dbe; /* ⑥ 跑起來驗證（鋼藍，取自字標）：圖示與裝飾圖形；要讀的用 c6-ink。 */
+  --c6-soft: #eaf0f8; /* ⑥ 的淡底。 */
+  --c6-ink: #2f4e7e; /* ⑥ 的編號與淡底上的小字。 */
+  --shadow-card: 0 1px 2px rgba(11,21,51,0.04), 0 8px 24px rgba(11,21,51,0.06); /* 卡片、選項。 */
+  --shadow-pop: 0 12px 40px rgba(11,21,51,0.14); /* 抽屜、對話框、提示訊息。 */
+  --shadow-btn: 0 1px 2px rgba(11,21,51,0.08), 0 4px 12px rgba(36,112,216,0.22); /* 主要按鈕。 */
+}
+[data-theme="dark"] {
+  --bg: #0a1224;
+  --bg-soft: #111b32;
+  --surface: #16213a;
+  --surface-glass: #16213acc;
+  --line: #27334e;
+  --line-strong: #6b7894;
+  --ink: #e8edf8;
+  --ink-2: #a3aec6;
+  --muted: #8d98b2;
+  --faint: #5c6782;
+  --accent: #6fb0ff;
+  --accent-strong: #8cc0ff;
+  --accent-fill: #6fb0ff;
+  --on-accent: #0b1533;
+  --accent-soft: #15294a;
+  --accent-2: #a9b6f5;
+  --sky-100: #13243f;
+  --sky-200: #1a2f52;
+  --sky-300: #28466f;
+  --sky-400: #3a5c8a;
+  --periwinkle-200: #2a3766;
+  --lavender-200: #342e5e;
+  --lavender-100: #252338;
+  --apricot-200: #4a3322;
+  --apricot-100: #2c2119;
+  --rose-200: #43302c;
+  --rose-100: #2e2024;
+  --glow-blue: #1c3a66;
+  --glow-lavender: #2e2a5a;
+  --glow-peach: #3e2a1e;
+  --ring-sky: #8cbeef;
+  --ring-mist: #aed4ea;
+  --ring-peach: #f3c89a;
+  --wordmark-top: #ffffff;
+  --wordmark-mid: #dce6f5;
+  --wordmark-bottom: #afc0db;
+  --ok: #4fd6bd;
+  --ok-soft: #0f2e2a;
+  --ok-ink: #4fd6bd;
+  --turn: #ffb27a;
+  --turn-soft: #33221a;
+  --turn-ink: #ffb27a;
+  --hint: #e8c08f;
+  --hint-soft: #2b2418;
+  --hint-ink: #ebc896;
+  --bad: #ff8a9a;
+  --bad-soft: #351a22;
+  --bad-ink: #ff9aa8;
+  --c1: #6fb0ff;
+  --c1-soft: #132640;
+  --c1-ink: #8cc0ff;
+  --c2: #9fb0ff;
+  --c2-soft: #1a2244;
+  --c2-ink: #b3c0ff;
+  --c3: #bdb2ff;
+  --c3-soft: #221d40;
+  --c3-ink: #cbc1ff;
+  --c4: #ffb98a;
+  --c4-soft: #33231a;
+  --c4-ink: #ffc9a0;
+  --c5: #f0b4aa;
+  --c5-soft: #36201f;
+  --c5-ink: #f7c2b9;
+  --c6: #8faedf;
+  --c6-soft: #17243a;
+  --c6-ink: #a9c2ea;
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.30), 0 8px 24px rgba(0,0,0,0.35);
+  --shadow-pop: 0 12px 40px rgba(0,0,0,0.55);
+  --shadow-btn: 0 1px 2px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.4);
+}
+:root {
+  --space-1: 4px; /* 圖示和字之間。 */
+  --space-2: 8px; /* 膠囊內距、緊密列表。 */
+  --space-3: 12px; /* 按鈕內元素間距、表格內距。 */
+  --space-4: 16px; /* 卡片之間、手機邊界。 */
+  --space-6: 24px; /* 卡片內距、段落之間。 */
+  --space-8: 32px; /* 區塊內大段落。 */
+  --space-12: 48px; /* 標題區到內容。 */
+  --space-16: 64px; /* 頁面區塊之間。 */
+  --radius-sm: 8px; /* 膠囊以外的小元件：導覽列、標籤、程式碼。 */
+  --radius-md: 12px; /* 按鈕、輸入框。 */
+  --radius-lg: 16px; /* 卡片、選項、結論橫條。 */
+  --radius-xl: 24px; /* 抽屜、對話框、首頁大卡片。 */
+  --radius-pill: 999px; /* 膠囊、狀態圓、圖示圓。 */
+  --font-sans: Manrope, "Noto Sans TC", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-display: 900 40px/1.25 var(--font-sans); /* 首頁與步驟頁的大標，一頁一個。 */
+  --text-h1: 900 28px/1.3 var(--font-sans); /* 頁面標題。 */
+  --text-h2: 700 22px/1.35 var(--font-sans); /* 區塊標題。 */
+  --text-h3: 700 17px/1.4 var(--font-sans); /* 卡片標題、選項標題。 */
+  --text-lead: 400 18px/1.7 var(--font-sans); /* 標題下的一段說明，用 muted 或 ink-2。 */
+  --text-body: 400 16px/1.75 var(--font-sans); /* 正文。 */
+  --text-small: 400 14px/1.6 var(--font-sans); /* 表格、說明、依據。 */
+  --text-eyebrow: 700 13px/1.4 var(--font-sans); /* 標題上方的步驟編號與名稱，用 accent-strong。 */
+  --text-overline: 500 12px/1.5 var(--font-sans); /* 全大寫英文註記、頁碼，用 faint；不放要讀的內容。 */
+  --text-wordmark: 600 20px/1 var(--font-sans); /* 頂列字標，全大寫。 */
+  --text-code: 400 13px/1.6 var(--font-mono); /* 檔名、指令、編號（D-12、R04）。 */
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a1224;
+    --bg-soft: #111b32;
+    --surface: #16213a;
+    --surface-glass: #16213acc;
+    --line: #27334e;
+    --line-strong: #6b7894;
+    --ink: #e8edf8;
+    --ink-2: #a3aec6;
+    --muted: #8d98b2;
+    --faint: #5c6782;
+    --accent: #6fb0ff;
+    --accent-strong: #8cc0ff;
+    --accent-fill: #6fb0ff;
+    --on-accent: #0b1533;
+    --accent-soft: #15294a;
+    --accent-2: #a9b6f5;
+    --sky-100: #13243f;
+    --sky-200: #1a2f52;
+    --sky-300: #28466f;
+    --sky-400: #3a5c8a;
+    --periwinkle-200: #2a3766;
+    --lavender-200: #342e5e;
+    --lavender-100: #252338;
+    --apricot-200: #4a3322;
+    --apricot-100: #2c2119;
+    --rose-200: #43302c;
+    --rose-100: #2e2024;
+    --glow-blue: #1c3a66;
+    --glow-lavender: #2e2a5a;
+    --glow-peach: #3e2a1e;
+    --ring-sky: #8cbeef;
+    --ring-mist: #aed4ea;
+    --ring-peach: #f3c89a;
+    --wordmark-top: #ffffff;
+    --wordmark-mid: #dce6f5;
+    --wordmark-bottom: #afc0db;
+    --ok: #4fd6bd;
+    --ok-soft: #0f2e2a;
+    --ok-ink: #4fd6bd;
+    --turn: #ffb27a;
+    --turn-soft: #33221a;
+    --turn-ink: #ffb27a;
+    --hint: #e8c08f;
+    --hint-soft: #2b2418;
+    --hint-ink: #ebc896;
+    --bad: #ff8a9a;
+    --bad-soft: #351a22;
+    --bad-ink: #ff9aa8;
+    --c1: #6fb0ff;
+    --c1-soft: #132640;
+    --c1-ink: #8cc0ff;
+    --c2: #9fb0ff;
+    --c2-soft: #1a2244;
+    --c2-ink: #b3c0ff;
+    --c3: #bdb2ff;
+    --c3-soft: #221d40;
+    --c3-ink: #cbc1ff;
+    --c4: #ffb98a;
+    --c4-soft: #33231a;
+    --c4-ink: #ffc9a0;
+    --c5: #f0b4aa;
+    --c5-soft: #36201f;
+    --c5-ink: #f7c2b9;
+    --c6: #8faedf;
+    --c6-soft: #17243a;
+    --c6-ink: #a9c2ea;
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.30), 0 8px 24px rgba(0,0,0,0.35);
+    --shadow-pop: 0 12px 40px rgba(0,0,0,0.55);
+    --shadow-btn: 0 1px 2px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.4);
+  }
+}

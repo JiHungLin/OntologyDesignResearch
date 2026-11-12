@@ -339,9 +339,9 @@ export async function renderConfirm(path, sel) {
       </div>`;
     modelHtml = todo + `
       <div class="legend">
-        <span><i style="background:var(--done);border:3px solid var(--ink)"></i>這輪新增或改動</span>
-        <span><i style="background:#fff;border:2px solid var(--ink)"></i>本切片原本就有</span>
-        <span><i style="background:#fff;border:2px solid var(--faint)"></i>引用其他地方的</span>
+        <span><i style="background:var(--ok-soft);border:2px solid var(--ok)"></i>這輪新增或改動</span>
+        <span><i style="background:var(--surface);border:2px solid var(--ink-2)"></i>本切片原本就有</span>
+        <span><i style="background:var(--surface);border:1.5px solid var(--line-strong)"></i>引用其他地方的</span>
         <label class="small" style="font-weight:400"><input type="checkbox" id="showAll" ${state.showAll ? 'checked' : ''}> 顯示全部名詞</label>
       </div>
       <div class="model-split">
