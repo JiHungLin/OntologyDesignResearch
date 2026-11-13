@@ -2,7 +2,7 @@
 """工具測試：python3 tools/tests/test_tools.py
 用 tools/tests/fixture/（範例切片 leave-backfill）當測試資料：原樣要全部通過；
 每個測試改壞一處，確認工具抓得到。"""
-import os, shutil, subprocess, sys, tempfile, unittest
+import os, re, shutil, subprocess, sys, tempfile, unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.dirname(HERE)
@@ -128,6 +128,19 @@ class TestLint(Base):
         code, out = self.lint()
         self.assertEqual(code, 0, out)
         self.assertIn('引用檢查：紅燈 0 項', out)
+
+    def test_frozen_without_tag(self):
+        # 檔頭改了「已凍結」但 tag 還沒打：凍結做到一半，亮紅燈；打了 tag 就沒有
+        git = lambda *a: subprocess.run(['git', *a], cwd=self.dir, capture_output=True, text=True, check=True)
+        git('init', '-q')
+        git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x')
+        self.edit(self.slice_file('03_flows.md'), '# leave-backfill ③ 流程與狀態\n',
+                  '# leave-backfill ③ 流程與狀態\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 已凍結 |\n| 版本 | leave-backfill/03-v1 |\n')
+        code, out = self.lint()
+        self.assertIn('03_flows.md 檔頭是「已凍結」，但沒有 tag leave-backfill/03-v1', out)
+        git('tag', 'leave-backfill/03-v1')
+        code, out = self.lint()
+        self.assertNotIn('檔頭是「已凍結」', out)
 
     def test_cancelled_rule_still_referenced(self):
         self.edit(self.slice_file('03_flows.md'), '| 額度足夠 | R01 |', '| 額度足夠 | R01、R03 |')
@@ -388,6 +401,33 @@ class TestLint(Base):
         v.update(kw)
         self.write(self.slice_file('reviews/2026-10-27_03.md'), self.REVIEW.format(**v))
 
+    def test_old_checklist_while_submitted(self):
+        # 送審中（待檢查）的交付物還是舊格式的檢查紀錄：紅燈；已凍結的不管
+        old = '\n## 檢查紀錄\n\n| 完成標準 | AI 自評 | 審查者確認 |\n|---|---|---|\n| 每個事件都有觸發者 | ✓ | ✓（甲） |\n'
+        self.edit(self.slice_file('03_flows.md'), '# leave-backfill ③ 流程與狀態\n',
+                  '# leave-backfill ③ 流程與狀態\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 待檢查 |\n')
+        with open(os.path.join(self.dir, self.slice_file('03_flows.md')), 'a', encoding='utf-8') as f:
+            f.write(old)
+        code, out = self.lint()
+        self.assertIn('檢查紀錄還是舊格式', out)
+        self.edit(self.slice_file('03_flows.md'), '| 狀態 | 待檢查 |', '| 狀態 | 已凍結 |')
+        code, out = self.lint()
+        self.assertNotIn('檢查紀錄還是舊格式', out)
+
+    def test_review_golden_case_one_row(self):
+        # ⑥ 一個黃金案例拆成「你算的／設計推出的／系統跑出的」三列：沒作答時紅燈，作答完的舊頁不管
+        self.setup_review()
+        rp = os.path.join(self.dir, self.slice_file('reviews/2026-10-27_03.md'))
+        lines = open(rp, encoding='utf-8').read().split('\n')
+        k = next(i for i, l in enumerate(lines) if l.startswith('| 1 |'))
+        rows = [f'| {n} | ⑥ | GC01 {w} | 「x」 | `03_flows.md:1` | {{ok}} |' for n, w in ((2, '你算的'), (3, '設計推出的'), (4, '系統跑出的'))]
+        self.write(self.slice_file('reviews/2026-10-27_03.md'), '\n'.join(lines[:k + 1] + [r.format(ok='') for r in rows] + lines[k + 1:]))
+        code, out = self.lint()
+        self.assertIn('GC01 拆成 3 列', out)
+        self.write(self.slice_file('reviews/2026-10-27_03.md'), '\n'.join(lines[:k + 1] + [r.format(ok='✓') for r in rows] + lines[k + 1:]))
+        code, out = self.lint()
+        self.assertNotIn('拆成', out)
+
     def test_review_page_answered_before_freeze(self):
         self.setup_review()
         code, out = self.lint()
@@ -406,6 +446,32 @@ class TestLint(Base):
         code, out = self.lint('--freeze')
         self.assertNotIn('還沒作答', out)
         self.assertNotIn('    ✗', out.split('[審查頁]')[1].split('\n[')[0], out)
+
+    def test_review_old_verdict_of_step_reviewed_again(self):
+        # 同一份審查頁上，這一步之後改由更新的審查頁審查（檢查紀錄指到別份）：上一輪的「不通過」不擋凍結（HR-Domain-Auto hire-employee）
+        self.setup_review()
+        self.setup_review_filled()
+        p = self.slice_file('reviews/2026-10-27_03.md')
+        self.edit(p, '| ③ | 審查者甲 | 2026-10-27 | 通過 |', '| ② | 審查者甲 | 2026-10-27 | 不通過 |\n| ③ | 審查者甲 | 2026-10-27 | 通過 |')
+        code, out = self.lint('--freeze')
+        sec = out.split('[審查頁]')[1].split('\n[')[0]
+        self.assertNotIn('    ✗', sec, out)
+        self.assertIn('② 的結論是「不通過」：這一步已改由之後的審查頁審查', sec)
+        self.edit(p, '| ③ | 審查者甲 | 2026-10-27 | 通過 |', '| ③ | 審查者甲 | 2026-10-27 | 不通過 |')
+        code, out = self.lint('--freeze')
+        self.assertIn('③ 的結論是「不通過」，不是「通過」', out)
+
+    def test_superseded_relation_with_same_name(self):
+        # 同名關係一條已取代、一條仍有效：只算寫出已取代那條「從」的列（HR-Domain-Auto Person／Employer belongsToCustomer）
+        with open(os.path.join(self.dir, 'core/relations.md'), 'a', encoding='utf-8') as f:
+            f.write('| Person | belongsTo（歸屬） | Employment | 1 | 無 | 舊的歸屬 | [已取代: Person of，2026-11-09] |\n'
+                    '| Employer | belongsTo（歸屬） | Employment | 1 | 無 | 雇主的歸屬 | [候選] |\n')
+        with open(os.path.join(self.dir, self.slice_file('03_flows.md')), 'a', encoding='utf-8') as f:
+            f.write('\n雇主用 Employer belongsTo 找到客戶。\n\nbelongsTo 是租戶鍵。\n\n人用 Person belongsTo 找到客戶。\n')
+        code, out = self.lint()
+        sec = out.split('[已取消]')[1].split('\n[')[0]
+        self.assertEqual(sec.count('    ✗'), 1, sec)
+        self.assertIn('core/ 的 Person belongsTo 已取代', sec)
 
     def test_review_excerpt_must_match_line(self):
         self.setup_review(quote='CorrectLeaveOccurrence')
@@ -440,6 +506,198 @@ class TestLint(Base):
         self.assertNotIn('沒有「例子」', out)
         self.assertNotIn('沒有用「→」', out)
 
+    def test_golden_case_ask(self):
+        # 2026-11-04 起的審查頁：黃金案例要有逐項的「要得出」（編號、最後括號寫格式），情境與要得出不寫 Rnn、D-nn
+        self.setup_review()
+        old = os.path.join(self.dir, self.slice_file('reviews/2026-10-27_03.md'))
+        text = open(old, encoding='utf-8').read()
+        os.remove(old)
+        self.edit(self.slice_file('03_flows.md'), '- 審查頁：reviews/2026-10-27_03.md', '- 審查頁：reviews/2026-11-04_03.md')
+        gc = ('## 三、要你得出結果的黃金案例\n\n### GC01 正常流程\n- 驗證：Q01；R01\n- 情境：小王 3/1 請假，依 R01 核准\n'
+              '- 要得出：\n  - 2026-03-01 核准後：剩餘天數\n- 輸入：…\n- 預期結果：\n- 計算過程：\n- 計算者：\n\n')
+        head, tail = text.split('## 結論', 1)
+        self.write(self.slice_file('reviews/2026-11-04_03.md'), head + gc + '## 結論' + tail)
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('每一項要用 ①② 編號', out.replace('…', ''))
+        self.assertIn('沒有在最後的括號寫格式', out)
+        self.assertIn('的「情境」寫了 R01', out)
+        good = gc.replace('依 R01 ', '').replace('  - 2026-03-01 核准後：剩餘天數', '  - ① 2026-03-01 核准後：剩餘特休天數（日）\n  - ② 同一時點：會不會被擋下（擋下或允許）')
+        self.write(self.slice_file('reviews/2026-11-04_03.md'), head + good + '## 結論' + tail)
+        code, out = self.lint()
+        self.assertNotIn('要得出', out)
+        self.write(self.slice_file('reviews/2026-11-04_03.md'), head + good.replace('- 要得出：\n', '- 要算：\n') + '## 結論' + tail)
+        code, out = self.lint()
+        self.assertIn('沒有「要得出」', out)
+
+    def test_golden_case_copies_multiline(self):
+        # 審查頁的計算過程分好幾行寫：不算沒作答；golden_cases.md 逐字抄回後不報「不同」（原本每讀一行就清空，永遠報不同）
+        self.setup_review()
+        rv = self.slice_file('reviews/2026-10-27_03.md')
+        text = open(os.path.join(self.dir, rv), encoding='utf-8').read()
+        fields = '- 預期結果：① 6 日\n- 計算過程：\n  - 1. 10 - 4 = 6\n  - 2. 取整數\n- 計算者：○○\n'
+        head, tail = text.split('## 結論', 1)
+        self.write(rv, head + '## 三、要你算的黃金案例\n\n### GC01 正常流程\n- 驗證：Q01\n- 情境：…\n' + fields + '\n## 結論' + tail)
+        gc = self.GC.format('[未執行]', '[未執行]').replace('- 情境：…\n', '- 情境：…\n' + fields).replace('| GC02 |  |', '| GC01 | |')
+        self.write(self.slice_file('06_evidence/golden_cases.md'), gc)
+        code, out = self.lint()
+        self.assertNotIn('和 golden_cases.md 不同', out)
+        self.assertNotIn('GC01 的「計算過程」', out)
+        self.write(self.slice_file('06_evidence/golden_cases.md'), gc.replace('  - 2. 取整數', '  - 2. 四捨五入'))
+        code, out = self.lint()
+        self.assertIn('GC01 的「計算過程」和 golden_cases.md 不同', out)
+
+    def test_api_yaml_refs(self):
+        # ⑤ 的 api.yaml：讀得進來、$ref 都指得到（AI 不必自己寫 python 驗證）
+        api = ('openapi: 3.0.3\npaths:\n  /leaves:\n    post:\n      requestBody:\n        content:\n          application/json:\n'
+               '            schema: {$ref: "#/components/schemas/Leave"}\ncomponents:\n  schemas:\n    Leave: {type: object}\n')
+        self.write(self.slice_file('api.yaml'), api)
+        code, out = self.lint()
+        self.assertIn('檢查了 1 個 $ref', out)
+        self.write(self.slice_file('api.yaml'), api.replace('schemas/Leave"', 'schemas/Leaves"'))
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('#/components/schemas/Leaves 指不到（沒有「Leaves」）', out)
+        self.write(self.slice_file('api.yaml'), api + '  bad: [\n')
+        code, out = self.lint()
+        self.assertIn('不是合法的 YAML', out)
+
+    # ---------- ⑥ 執行紀錄與審查頁（2026-11-04） ----------
+    def run_evidence(self, name, *cmd, cwd=None):
+        env = dict(os.environ, DESIGN_REPO=self.dir)
+        p = subprocess.run([sys.executable, os.path.join(TOOLS, 'run_evidence.py'), SLICE, name, '--', *cmd],
+                           cwd=cwd or self.dir, capture_output=True, text=True, env=env)
+        return p.returncode, p.stdout + p.stderr
+
+    def test_run_evidence_writes_log(self):
+        code, out = self.run_evidence('golden', sys.executable, '-c', 'print("GC01 1.491"); raise SystemExit(3)')
+        self.assertEqual(code, 3, out)
+        rel = re.search(r'執行紀錄：(06_evidence/results/\S+\.log)', out).group(1)
+        log = open(os.path.join(self.dir, self.slice_file(rel)), encoding='utf-8').read()
+        self.assertTrue(log.startswith('# 執行紀錄（tools/run_evidence.py 產生，不手改）'), log)
+        self.assertIn('- 結束碼：3', log)
+        self.assertIn('GC01 1.491', log)
+        self.assertIn('- 實作版本：', log)
+        code, out = self.run_evidence('Bad Name', 'true')
+        self.assertNotEqual(code, 0)
+        self.assertIn('名稱只用英文小寫', out)
+
+    def test_run_evidence_dirty_ignores_step6_outputs(self):
+        # 設計和實作同一個 repo：改 06_evidence/、reviews/ 不算未 commit 的修改，改其他檔案才算
+        g = lambda *a: subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t', *a], cwd=self.dir, capture_output=True)
+        self.write(self.slice_file('06_evidence/signoff.md'), '# 簽核\n')
+        self.write(self.slice_file('reviews/2026-11-05_06.md'), '# 審查頁\n')
+        g('init', '-q'); g('add', '-A'); g('commit', '-qm', 'init')
+        ver = lambda: re.search(r'- 實作版本：(.*)', open(os.path.join(self.dir, self.slice_file(
+            re.search(r'執行紀錄：(06_evidence/results/\S+\.log)', self.run_evidence('t', 'true')[1]).group(1))), encoding='utf-8').read()).group(1)
+        self.assertIn('有未 commit 的修改：否', ver())
+        self.edit(self.slice_file('06_evidence/signoff.md'), '簽核', '簽核 改')
+        self.edit(self.slice_file('reviews/2026-11-05_06.md'), '審查頁', '審查頁 改')
+        self.assertIn('有未 commit 的修改：否', ver())
+        self.edit(self.slice_file('04_rules.md'), '|', '| ')
+        self.assertIn('有未 commit 的修改：是', ver())
+
+    def setup_evidence(self, header='# 執行紀錄（tools/run_evidence.py 產生，不手改）', ver='impl @ abc1234（有未 commit 的修改：否）',
+                       want='abc1234', cite='（results/2026-11-05_101500_golden.log:12）',
+                       env='compose.yaml：compose.yaml sha256:aaaa', chk='通過', env2=None):
+        self.write(self.slice_file('reviews/2026-11-05_06.md'), '# 審查頁\n')
+        self.write(self.slice_file('06_evidence/results/2026-11-05_101500_golden.log'),
+                   f'{header}\n- 切片：{SLICE}\n- 名稱：golden\n- 指令：pytest\n- 執行目錄：/x\n- 實作版本：{ver}\n- 環境：{env}\n- 環境檢查：{chk}\n\n## 輸出\nGC01 6 日\n')
+        self.write(self.slice_file('06_evidence/results/2026-11-05_101600_answers.log'),
+                   f'{header}\n- 實作版本：{ver}\n- 環境：{env2 or env}\n- 環境檢查：通過\n\n## 輸出\nQ01 6 天\n')
+        self.write(self.slice_file('06_evidence/answers.md'), '# answers\n\n| 驗收問題 | 能否回答 | 用哪個查詢或 API | 結果 | 判定 |\n|---|---|---|---|---|\n'
+                   '| Q01 | 能 | GET /x | 6 天（results/2026-11-05_101600_answers.log:5） | 通過 |\n')
+        self.write(self.slice_file('06_evidence/signoff.md'), f'# signoff\n\n- 實作版本：impl @ {want}（對應設計 tag：…）\n')
+        gc = self.GC.format('一致', '通過').replace('- 判定：通過', f'- 系統結果：6 日{cite}\n- 判定：通過').replace('| GC02 |  |', '| GC01 | |')
+        self.write(self.slice_file('06_evidence/golden_cases.md'), gc)
+        code, out = self.lint()
+        return out.split('[執行紀錄]')[1].split('\n[')[0]
+
+    def test_evidence_log_citations(self):
+        self.assertNotIn('✗', self.setup_evidence())
+        self.assertIn('沒有寫依據的 log 位置', self.setup_evidence(cite=''))
+        self.assertIn('不是 tools/run_evidence.py 產生的', self.setup_evidence(header='# 我自己寫的'))
+        self.assertIn('有未 commit 的修改時跑的', self.setup_evidence(ver='impl @ abc1234（有未 commit 的修改：是）'))
+        self.assertIn('和 signoff.md 的 def5678 不同', self.setup_evidence(want='def5678'))
+        self.assertIn('驗證環境沒有通過檢查', self.setup_evidence(chk='未檢查（沒有環境定義檔）'))
+        self.assertIn('不是在同一個驗證環境跑的', self.setup_evidence(env2='compose.yaml：compose.yaml sha256:bbbb'))
+
+    def test_check_env(self):
+        # ⑥ 的驗證環境：image 固定 digest、不和主機共用、不掛主機路徑與 docker.sock、port 只綁 127.0.0.1
+        d = os.path.join(self.dir, 'impl')
+        os.makedirs(d)
+        good = ('services:\n  db:\n    image: postgres:15@sha256:' + 'a' * 64 + '\n    ports: ["127.0.0.1:55432:5432"]\n'
+                '    volumes: ["pgdata:/var/lib/postgresql/data", "./schema.sql:/docker-entrypoint-initdb.d/1.sql:ro"]\n'
+                '  app:\n    build: .\n    volumes: ["./src:/app/src"]\nvolumes:\n  pgdata: {}\n')
+        with open(os.path.join(d, 'compose.yaml'), 'w', encoding='utf-8') as f: f.write(good)
+        with open(os.path.join(d, 'Dockerfile'), 'w', encoding='utf-8') as f:
+            f.write('FROM python:3.12-slim@sha256:' + 'b' * 64 + ' AS base\nFROM base\n')
+        code, out = run('check_env.py', os.path.join(d, 'compose.yaml'), cwd=self.dir)
+        self.assertEqual(code, 0, out)
+        self.assertIn('環境指紋：compose.yaml sha256:', out)
+        x = ('  x:\n    image: busybox@sha256:' + 'c' * 64 + '\n    privileged: true\n    network_mode: host\n'
+             '    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]\n')
+        bad = good.replace('@sha256:' + 'a' * 64, '').replace('127.0.0.1:55432', '55432').replace('./src', '/home/x') \
+                  .replace('volumes:\n  pgdata', x + 'volumes:\n  pgdata')
+        with open(os.path.join(d, 'compose.yaml'), 'w', encoding='utf-8') as f: f.write(bad)
+        code, out = run('check_env.py', os.path.join(d, 'compose.yaml'), cwd=self.dir)
+        self.assertEqual(code, 1, out)
+        for msg in ('沒有用 @sha256: 固定版本', '對外開放', 'repo 以外的主機路徑', 'privileged', 'network_mode 是 host', 'docker.sock'):
+            self.assertIn(msg, out)
+        # run_evidence 把環境與檢查結果寫進檔頭
+        with open(os.path.join(d, 'compose.yaml'), 'w', encoding='utf-8') as f: f.write(good)
+        code, out = self.run_evidence('golden', 'true', cwd=d)
+        rel = re.search(r'執行紀錄：(06_evidence/results/\S+\.log)', out).group(1)
+        log = open(os.path.join(self.dir, self.slice_file(rel)), encoding='utf-8').read()
+        self.assertIn('- 環境：compose.yaml：compose.yaml sha256:', log)
+        self.assertIn('- 環境檢查：通過', log)
+
+    def test_evidence_skipped_without_step6_review(self):
+        code, out = self.lint()
+        self.assertIn('沒有 ⑥ 的審查頁', out.split('[執行紀錄]')[1].split('\n[')[0])
+
+    def test_executor_is_not_signer(self):
+        self.setup_review(verdict='')
+        rv = self.slice_file('reviews/2026-10-27_03.md')
+        text = open(os.path.join(self.dir, rv), encoding='utf-8').read()
+        text = text.replace('| 步驟 | 審查者（非產出者） | 日期 | 結論 |\n|---|---|---|---|\n| ③ |  |  |  |',
+                            '| 步驟 | 執行者 | 審查者（非產出者） | 日期 | 結論 |\n|---|---|---|---|---|\n| ③ | 甲 | 甲 | 2026-11-05 | 通過 |')
+        self.assertIn('| ③ | 甲 | 甲 |', text)
+        self.write(rv, text)
+        code, out = self.lint()
+        self.assertIn('執行者和審查者（簽核者）是同一人「甲」', out)
+        self.write(rv, text.replace('| ③ | 甲 | 甲 |', '| ③ | 甲（一人團隊） | 甲 |'))
+        code, out = self.lint()
+        self.assertNotIn('的執行者和審查者（簽核者）是同一人', out)
+        self.assertIn('執行者和簽核者是同一人「甲」（一人團隊）', out)
+
+    def test_known_limit_needs_repro_test(self):
+        # ⑥ 設計問題處理成「已知限制」（不擋簽核）：要有重現測試、寫出程式暫時的做法
+        head = '# signoff\n\n## 實作時發現的設計問題\n\n| # | 問題 | 牽涉 | 實作暫時的做法 | 處理 |\n|---|---|---|---|---|\n'
+        self.write(self.slice_file('06_evidence/signoff.md'), head + '| 1 | 兩人同時決定 | R25 |  | 已知限制（審查頁問題 1 選 C） |\n')
+        code, out = self.lint()
+        part = out.split('[已知限制]')[1].split('\n[')[0]
+        self.assertIn('#1 處理為已知限制，但牽涉與處理都沒有重現測試', part)
+        self.assertIn('「實作暫時的做法」沒寫', part)
+        self.write(self.slice_file('06_evidence/signoff.md'), head + '| 1 | 兩人同時決定 | R25；tests/test_x.py test_dismiss_after_adopt | 照設計字面 | 已知限制（審查頁問題 1 選 C） |\n')
+        code, out = self.lint()
+        self.assertIn('✓ 通過（檢查了 1 個已知限制）', out.split('[已知限制]')[1].split('\n[')[0])
+
+    def test_spot_hint_format(self):
+        # 2026-11-05 起的審查頁：可挑的條目寫「③ 第 1、4 條」，不寫完成標準的文字（網頁對不回是哪幾條）
+        self.setup_review()
+        old = os.path.join(self.dir, self.slice_file('reviews/2026-10-27_03.md'))
+        text = open(old, encoding='utf-8').read()
+        os.remove(old)
+        self.edit(self.slice_file('03_flows.md'), '- 審查頁：reviews/2026-10-27_03.md', '- 審查頁：reviews/2026-11-05_03.md')
+        hint = lambda h: text.replace('## 四、抽查\n\n', f'## 四、抽查\n\n{h}\n\n')
+        self.write(self.slice_file('reviews/2026-11-05_03.md'), hint('可挑的條目（AI 不預選）：完成標準中——每個狀態都有更正方式；每個事件都有觸發者'))
+        code, out = self.lint()
+        self.assertIn('可挑的條目要寫成', out)
+        self.write(self.slice_file('reviews/2026-11-05_03.md'), hint('可挑的條目（AI 不預選）：③ 第 1、4 條'))
+        code, out = self.lint()
+        self.assertNotIn('可挑的條目要寫成', out)
+
     def test_review_lists_partial_self_check(self):
         self.setup_review(look='更正方式')
         code, out = self.lint()
@@ -454,6 +712,112 @@ class TestLint(Base):
         self.setup_review(xs='X-09')
         code, out = self.lint()
         self.assertIn('X-09 不在任何一步的「反例處理」', out)
+
+    def test_step6_challenge_rows(self):
+        # ⑥ 新範本有「反例處理」表：送審中要有 AI 挑錯的反例；舊的 signoff（沒有這張表）不檢查
+        base = ('# signoff\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 待檢查 |\n\n## 決定與理由\n\n### 反例處理\n\n'
+                '| # | 反例 | 來源 | 處理 | 理由或去向 |\n|---|---|---|---|---|\n{row}\n## 檢查紀錄\n\n- 審查頁：reviews/2026-11-07_06.md\n')
+        so = self.slice_file('06_evidence/signoff.md')
+        self.write(so, base.format(row=''))
+        code, out = self.lint()
+        self.assertIn('06_evidence/signoff.md 送審了，「反例處理」沒有來源為「AI 挑錯」的反例', out)
+        self.write(so, base.format(row='| X-01 | 同一次公告分次登錄 | AI 挑錯（領域實務） | 轉為設計問題 | 設計問題 #1 |\n'))
+        code, out = self.lint()
+        self.assertNotIn('沒有來源為「AI 挑錯」的反例', out)
+        self.write(so, base.format(row='').replace('## 決定與理由\n\n### 反例處理\n\n| # | 反例 | 來源 | 處理 | 理由或去向 |\n|---|---|---|---|---|\n', ''))
+        code, out = self.lint()
+        self.assertNotIn('signoff.md 送審了', out)
+
+    def test_step5_stage1_review_does_not_freeze(self):
+        # ⑤ 分兩段：頁首寫「⑤ 第一段」的審查頁答完也不能凍結；第二段才可以
+        self.write(self.slice_file('05_mapping.md'), '# leave-backfill ⑤\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 待檢查 |\n\n'
+                   '## 檢查紀錄\n\n- 審查頁：reviews/2026-11-07_05.md\n')
+        page = ('# 審查頁\n\n| 項目 | 內容 |\n|---|---|\n| 這輪審查的步驟 | {stage} |\n\n## 一、要你回答的問題\n\n（這輪沒有問題）\n\n'
+                '## 四、抽查\n\n| 抽查了哪幾條 | 結果 |\n|---|---|\n| ⑤ 第 1 條 | 符合 |\n\n'
+                '## 結論\n\n| 步驟 | 審查者（非產出者） | 日期 | 結論 |\n|---|---|---|---|\n| ⑤ | 甲 | 2026-11-07 | 通過 |\n')
+        self.write(self.slice_file('reviews/2026-11-07_05.md'), page.format(stage='⑤ 第一段'))
+        code, out = self.lint('--freeze')
+        self.assertIn('是 ⑤ 第一段的審查頁：答完不凍結', out)
+        self.write(self.slice_file('reviews/2026-11-07_05.md'), page.format(stage='⑤ 第二段'))
+        code, out = self.lint('--freeze')
+        self.assertNotIn('第一段的審查頁', out)
+
+    def test_ai_reviewer_only_in_auto_mode(self):
+        # 審查者寫 AI（自動）：手動模式紅燈；切片地圖的執行模式改成全自動就可以
+        self.setup_review(rev='AI（自動）', date='2026-11-07', verdict='通過')
+        code, out = self.lint()
+        self.assertIn('審查者是「AI（自動）」：手動模式的審查者是人', out)
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 已同意 |\n| 執行模式 | 全自動 |\n')
+        code, out = self.lint()
+        self.assertNotIn('審查者是「AI（自動）」', out)
+
+    AUTO_PAGE = ('# leave-backfill 全自動事後審查頁（2026-11-09）\n\n| 項目 | 內容 |\n|---|---|\n| 這輪審查的步驟 | 全自動事後審查 |\n| 處理 | {done} |\n\n'
+                 '## 一、要你回答的問題\n\n### 問題 1（④ D-01）\n- 來源：{src}\n- 背景：…\n- 例子：小明 2026-03-01 補登\n- 問題：要不要補登？\n'
+                 '- A（建議）：可以補登 → 設計不變\n- B：不補登 → 改 D-01\n- 其他：（寫一句）\n- 影響：04_rules.md D-01\n- 你的回答：{ans}\n')
+
+    def test_auto_review_page(self):
+        # 全自動事後審查頁（docs/01 0.2「待人決定」）：格式；審查頁寫了「待人決定」要收進來；答完提醒處理
+        self.write(self.slice_file('reviews/2026-11-09_04.md'),
+                   '# x\n\n## 一、要你回答的問題\n\n### 問題 2（④ D-01）\n- 問題：…\n- A（建議）：a → b\n- B：c → d\n- 你的回答：A（待人決定：依據只有推論）\n')
+        code, out = self.lint()
+        self.assertIn('問題 2（④ D-01） 寫了「待人決定」，沒有收進全自動事後審查頁', out)
+        self.write(self.slice_file('reviews/2026-11-09_auto.md'),
+                   self.AUTO_PAGE.format(src='reviews/2026-11-09_04.md 問題 2', ans='', done=''))
+        code, out = self.lint()
+        self.assertNotIn('沒有收進全自動事後審查頁', out)
+        self.assertIn('還有 1 題待人決定', out)
+        self.write(self.slice_file('reviews/2026-11-09_auto.md'),
+                   self.AUTO_PAGE.format(src='reviews/2026-11-09_04.md 問題 2', ans='B', done='').replace('- 影響：04_rules.md D-01\n', ''))
+        code, out = self.lint()
+        self.assertIn('沒有「影響」', out)
+        self.assertIn('都答完了、還沒處理', out)
+        self.write(self.slice_file('reviews/2026-11-09_auto.md'),
+                   self.AUTO_PAGE.format(src='reviews/2026-11-09_04.md 問題 2', ans='B', done='2026-11-10 CHANGELOG 第一筆'))
+        code, out = self.lint()
+        self.assertNotIn('還沒處理', out)
+        self.assertNotIn('[事後審查] 紅燈', out)
+        # 擱置（docs/01 0.2）：來源「擱置：…」的題目還沒答，列出這條切片擱置中
+        self.write(self.slice_file('reviews/2026-11-09-2_auto.md'),
+                   self.AUTO_PAGE.format(src='擱置：lint 把仍有效的同名關係報成已取代', ans='', done=''))
+        code, out = self.lint()
+        self.assertIn('這條切片擱置中（擱置：lint 把仍有效的同名關係報成已取代）', out)
+
+    def test_expected_result_change(self):
+        # 改黃金案例的預期結果：寫種類與依據，依據不能是被驗證的設計；AI 改的（全自動）要收進事後審查頁
+        gc = self.GC.format('一致', '[未執行]')
+        line = '- 判定：[未執行]\n\n## GC02'
+        def put(change):
+            self.write(self.slice_file('06_evidence/golden_cases.md'), gc.replace(line, f'- 判定：[未執行]\n- 預期結果修改：{change}\n\n## GC02', 1))
+            return self.lint()
+        code, out = put('2026-11-09 王小明：③ 1996-08-01 → 2026-01-01；種類：算錯；依據：R12 的起算日')
+        self.assertIn('依據指到被驗證的設計', out)
+        code, out = put('2026-11-09 王小明：③ 不通過 → 資料不足；種類：設計；依據：inputs/shared/a.md')
+        self.assertIn('只能是算錯、輸入補齊', out)
+        code, out = put('改成 2026-01-01')
+        self.assertIn('要寫成「<日期> <修改者>', out)
+        code, out = put('2026-11-09 王小明：③ 1996-08-01 → 2026-01-01；種類：輸入補齊；依據：inputs/shared/範圍釐清_員工編號.md')
+        self.assertNotIn('預期結果修改] 紅燈', out)
+        self.assertNotIn('golden_cases.md:', out.split('[預期結果修改]')[1].split('[')[0])
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 已同意 |\n| 執行模式 | 全自動 |\n')
+        code, out = put('2026-11-09 AI（自動）：③ 1996-08-01 → 2026-01-01；種類：輸入補齊；依據：inputs/shared/a.md')
+        self.assertIn('沒有收進全自動事後審查頁', out)
+        self.write(self.slice_file('reviews/2026-11-09_auto.md'), self.AUTO_PAGE.format(src='GC01 預期結果修改', ans='', done=''))
+        code, out = put('2026-11-09 AI（自動）：③ 1996-08-01 → 2026-01-01；種類：輸入補齊；依據：inputs/shared/a.md')
+        self.assertNotIn('沒有收進全自動事後審查頁', out)
+
+    def test_challenge_angle_required(self):
+        """這輪新增、來源是 AI 挑錯的反例要寫角度（2026-11-04 T27）"""
+        self.setup_review()
+        code, out = self.lint()
+        self.assertNotIn('沒有寫挑錯角度', out)
+        for bad in ('AI 挑錯', 'AI 挑錯（第二輪）'):
+            self.setup_review(src=bad)
+            code, out = self.lint()
+            self.assertEqual(code, 1, out)
+            self.assertIn('X-01 的來源「' + bad + '」沒有寫挑錯角度', out)
+        self.setup_review(src='AI 挑錯', xs='')               # 不在這輪的舊反例不檢查
+        code, out = self.lint()
+        self.assertNotIn('沒有寫挑錯角度', out)
 
     def test_user_agreement_reminder(self):
         self.setup_review()
@@ -498,6 +862,131 @@ class TestLint(Base):
         self.write(self.slice_file('CHANGELOG.md'), self.LOG.format(newer=newer, ref='other/03_flows D-04'))
         code, out = self.lint()
         self.assertIn('1 件都已處理', out)
+
+    PLAT = ''.join(f'| P{k} 約定 | 未定 | |\n' for k in range(1, 14))
+    ADR = ('### ADR-001　主資料庫類型\n\n| 項目 | 內容 |\n|---|---|\n| 判斷 | {kind} |\n| 狀態 | {status} |\n'
+           '| 背景與訊號 | {bg} |\n| 決定 | 關聯式 |\n| 沒採用的做法 | 文件型：跨 Entity 規則多 |\n'
+           '| 代價 | 結構改版要遷移 |\n| 重新評估的觸發 | 出現多跳查詢 |\n| 資安影響 | 無 |\n'
+           '| 提出／同意 | {who} |\n| 生效 | 2026-11-03 |\n| 受影響切片 | — |\n')
+
+    def write_decisions(self, status='採用', bg='leave-backfill/04_rules.md R01', who='AI／○○（2026-11-03）', plat=None,
+                        kind='S2'):
+        self.write('architecture/DECISIONS.md',
+                   '# 架構決定紀錄\n\n## 一、平台約定現況\n\n| 約定 | 現況 | 依據 |\n|---|---|---|\n'
+                   + (self.PLAT if plat is None else plat) + '\n## 二、選型\n\n'
+                   + self.ADR.format(status=status, bg=bg, who=who, kind=kind))
+
+    def write_mapping(self, status='待檢查', inputs='04_rules.md @ leave-backfill/04-v1；architecture/DECISIONS.md @ abc1234',
+                      rules=''):
+        self.write(self.slice_file('05_mapping.md'),
+                   f'# leave-backfill ⑤ 投影到實作\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | {status} |\n'
+                   f'| 讀取的輸入 | {inputs} |\n'
+                   + (f'\n## 三、規則 → 落實位置\n\n| 規則 | 落實位置 | 說明 |\n|---|---|---|\n{rules}' if rules else ''))
+
+    def test_s1_rules_cite_adr_in_mapping(self):
+        self.write_decisions(kind='S1', bg='other/04_rules.md R09；leave-backfill/04_rules.md R01～R02')
+        self.write_mapping(rules='| R01 | service | 跨表檢查 |\n')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('R01 在 ADR-001（S1）裡', out)
+        self.assertIn('第三區沒有 R02', out)
+        self.assertNotIn('R09', out.split('[架構決定]')[1].split('\n[')[0])
+        self.write_mapping(rules='| R01、R02 | service | 交易中先鎖同一人（ADR-001） |\n')
+        code, out = self.lint()
+        section = out.split('[架構決定]')[1].split('\n[')[0]
+        self.assertNotIn('✗', section, out)
+        self.write_mapping(status='已凍結', rules='| R01 | service | 跨表檢查 |\n')
+        code, out = self.lint()
+        self.assertNotIn('R01 在 ADR-001（S1）裡', out)
+
+    def test_architecture_record_passes(self):
+        self.write_decisions()
+        self.write_mapping()
+        code, out = self.lint()
+        section = out.split('[架構決定]')[1].split('\n[')[0]
+        self.assertNotIn('✗', section, out)
+        self.assertIn('✓ 通過', section)
+
+    def test_architecture_adr_fields_and_status(self):
+        self.write_decisions(status='決定了', bg='大家都用這個')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('ADR-001 的狀態「決定了」不是', out)
+        self.assertIn('ADR-001 的「背景與訊號」沒有寫交付物的檔名與編號', out)
+        self.write_decisions(status='已取代: ADR-009', plat=self.PLAT.replace('| P7 約定 | 未定 | |\n', ''))
+        code, out = self.lint()
+        self.assertIn('引用的 ADR-009 不存在', out)
+        self.assertIn('少了 P7', out)
+
+    def test_mapping_must_read_decisions(self):
+        self.write_decisions()
+        self.write_mapping(inputs='04_rules.md @ leave-backfill/04-v1')
+        code, out = self.lint()
+        self.assertEqual(code, 1, out)
+        self.assertIn('「讀取的輸入」沒有 architecture/DECISIONS.md', out)
+        self.write_mapping(status='已凍結', inputs='04_rules.md @ leave-backfill/04-v1')
+        code, out = self.lint()
+        self.assertNotIn('「讀取的輸入」沒有 architecture/DECISIONS.md', out)
+
+    def test_pending_adr_blocks_mapping_freeze(self):
+        self.write_decisions(who='AI／待確認')
+        self.write_mapping()
+        code, out = self.lint()
+        self.assertIn('ADR-001 待確認', out)
+        self.assertNotIn('還是待確認：⑤ 要凍結', out)
+        code, out = self.lint('--freeze')
+        self.assertIn('ADR-001 還是待確認：⑤ 要凍結', out)
+
+    def data_nature(self, out):
+        return out.split('[資料性質]')[1].split('\n[')[0]
+
+    def test_data_nature_required_when_platform_handles_personal_data(self):
+        # P11 資料性質（2026-11-04，T26）：沒有紀錄不檢查；未定時未凍結的 ② 亮紅燈；已採用時每個新增屬性都要標三種之一
+        code, out = self.lint()
+        self.assertIn('未檢查（沒有 architecture/DECISIONS.md）', self.data_nature(out))
+        self.write_decisions()
+        code, out = self.lint()
+        self.assertIn('「P11 資料性質」還沒決定', self.data_nature(out))
+        self.write_decisions(plat=self.PLAT + '| P11 資料性質 | 不同做法：不處理個資 | 只有匿名統計 |\n')
+        code, out = self.lint()
+        self.assertIn('未檢查（P11 資料性質：不處理個資）', self.data_nature(out))
+        self.write_decisions(plat=self.PLAT + '| P11 資料性質 | 已採用 | 處理員工個資 |\n')
+        code, out = self.lint()
+        sec = self.data_nature(out)
+        self.assertEqual(code, 1, out)
+        self.assertIn('Employment.start_date 沒有標資料性質', sec)
+        self.assertIn('LeaveOccurrence.balance_after 沒有標資料性質', sec)
+        f = self.slice_file('02_entities.md')
+        self.edit(f, '`start_date`（到職日）', '`start_date`（到職日）[性質: 可識別個人]')
+        self.edit(f, '`hours`（時數）', '`hours`（時數）[性質: 敏感]')
+        code, out = self.lint()
+        sec = self.data_nature(out)
+        self.assertNotIn('start_date 沒有標', sec)
+        self.assertIn('「[性質: 敏感]」不是 不含個資／可識別個人／特種個資', sec)
+        for old, new in [('`hours`（時數）[性質: 敏感]', '`hours`（時數）[性質: 可識別個人]'),
+                         ('`leave_type`（假別，分類值 LEAVE_TYPE）', '`leave_type`（假別，分類值 LEAVE_TYPE）[性質: 不含個資]'),
+                         ('`balance_after`（扣除後餘額）[推導]', '`balance_after`（扣除後餘額）[推導] [性質: 可識別個人]'),
+                         ('`requested_hours`（申請時數）', '`requested_hours`（申請時數）[性質: 特種個資]')]:
+            self.edit(f, old, new)
+        code, out = self.lint()
+        sec = self.data_nature(out)
+        self.assertNotIn('✗', sec, out)
+        self.assertIn('✓ 通過（檢查了 5 個屬性）', sec)
+
+    def test_data_nature_needs_decisions_before_step2(self):
+        # 還沒凍結的 ② 卻沒有 architecture/DECISIONS.md：② 開始前要先做 /domain-arch 初判（P11 資料性質）
+        self.edit(self.slice_file('02_entities.md'), '# leave-backfill ② 名詞盤點\n', '# leave-backfill ② 名詞盤點\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 草稿 |\n')
+        code, out = self.lint()
+        self.assertIn('沒有 architecture/DECISIONS.md：② 開始前先做 /domain-arch 初判', out)
+
+    def test_data_nature_frozen_entities_only_remind(self):
+        self.write_decisions(plat=self.PLAT + '| P11 資料性質 | 已採用 | 處理員工個資 |\n')
+        f = self.slice_file('02_entities.md')
+        self.edit(f, '# leave-backfill ② 名詞盤點\n', '# leave-backfill ② 名詞盤點\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 已凍結 |\n')
+        code, out = self.lint()
+        sec = self.data_nature(out)
+        self.assertNotIn('✗', sec, out)
+        self.assertIn('② 已凍結，5 處要補標', sec)
 
 class TestSyncCore(Base):
     def sync(self, *args, tags=None):
@@ -544,6 +1033,229 @@ class TestTable(Base):
         self.assertIn('答覆：（空）', out)
         self.assertIn('答覆日：2026-10-21', out)
         self.assertIn('影響：01_scope Q02', out)
+
+class TestAuto(Base):
+    """全自動模式（docs/01 0.2「全自動模式」）：auto_hook.py 放行並記錄、碰到禁止清單擋下；auto_run.py 一圈一個 session，照回報停下來。"""
+    def hook(self, tool, ti, auto='1'):
+        import json
+        env = dict(os.environ, DOMAIN_AUTO=auto, DOMAIN_AUTO_REPO=self.dir)
+        p = subprocess.run([sys.executable, os.path.join(TOOLS, 'auto_hook.py')], input=json.dumps({'tool_name': tool, 'tool_input': ti, 'cwd': self.dir}),
+                           capture_output=True, text=True, env=env)
+        return json.loads(p.stdout)['hookSpecificOutput']['permissionDecision'] if p.stdout.strip() else None
+
+    def test_hook_allows_and_blocks(self):
+        self.assertEqual(self.hook('Bash', {'command': 'docker compose up -d && python3 tools/run_evidence.py s n -- pytest'}), 'allow')
+        self.assertEqual(self.hook('Write', {'file_path': os.path.join(self.dir, 'slices/a.md')}), 'allow')
+        for ti in ({'command': 'git push origin main'}, {'command': 'sudo apt install x'}, {'command': 'cat ~/.ssh/id_rsa'},
+                   {'command': 'docker run -v /var/run/docker.sock:/s img'}, {'command': 'docker run --privileged img'},
+                   {'command': 'rm -rf /etc/x'}, {'command': 'echo x > /etc/hosts'}):
+            self.assertEqual(self.hook('Bash', ti), 'deny', ti)
+        self.assertEqual(self.hook('Edit', {'file_path': os.path.expanduser('~/.bashrc')}), 'deny')
+        self.assertEqual(self.hook('Read', {'file_path': os.path.expanduser('~/.ssh/config')}), 'deny')
+        # Claude Code 把太長的工具輸出存在 ~/.claude/projects/<repo>/…/tool-results/，可以讀、不能寫
+        import re as _re
+        sd = os.path.join(os.path.expanduser('~/.claude/projects'), _re.sub(r'[^A-Za-z0-9]', '-', os.path.realpath(self.dir)), 's', 'tool-results', 'x.txt')
+        self.assertEqual(self.hook('Read', {'file_path': sd}), 'allow')
+        self.assertEqual(self.hook('Write', {'file_path': sd}), 'deny')
+        self.assertEqual(self.hook('Read', {'file_path': os.path.expanduser('~/.claude/projects/other-repo/s/x.txt')}), 'deny')
+        log = open(os.path.join(self.dir, '.domain-auto', 'commands.jsonl'), encoding='utf-8').read()
+        self.assertIn('"allow": false', log)
+        self.assertIsNone(self.hook('Bash', {'command': 'git push'}, auto=''))   # 不是全自動：不表示意見
+
+    def fake_claude(self, replies):
+        """假的 claude：每次被呼叫依序回一個 result，並在 repo 裡改一個檔（模擬有進展）。"""
+        import json
+        state = os.path.join(self.dir, '.fake_n')
+        script = os.path.join(self.dir, 'fake_claude.py')
+        with open(script, 'w', encoding='utf-8') as f:
+            f.write('import json, os, sys\n'
+                    f'replies = {json.dumps(replies, ensure_ascii=False)}\n'
+                    f'st = {state!r}\n'
+                    'n = int(open(st).read()) if os.path.exists(st) else 0\n'
+                    'open(st, "w").write(str(n + 1))\n'
+                    'open("progress.txt", "a").write(str(n))\n'
+                    'assert os.environ.get("DOMAIN_AUTO") == "1" and "--settings" in sys.argv\n'
+                    'print(json.dumps({"type": "result", "result": replies[min(n, len(replies) - 1)]}, ensure_ascii=False))\n')
+        wrapper = os.path.join(self.dir, 'claude')
+        with open(wrapper, 'w') as f:
+            f.write(f'#!/bin/sh\nexec {sys.executable} {script} "$@"\n')
+        os.chmod(wrapper, 0o755)
+        subprocess.run(['git', 'init', '-q'], cwd=self.dir)
+        return wrapper
+
+    def test_runner_needs_auto_mode(self):
+        code, out = run('auto_run.py', cwd=self.dir)
+        self.assertNotEqual(code, 0)
+        self.assertIn('不是「全自動」', out)
+
+    def test_runner_stops_on_report(self):
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 狀態 | 已同意 |\n| 執行模式 | 全自動 |\n')
+        claude = self.fake_claude(['做完 ①\n全自動：繼續', '凍結 ①\n全自動：需要人（docker 起不來）'])
+        code, out = run('auto_run.py', '--claude', claude, cwd=self.dir)
+        self.assertEqual(code, 1, out)
+        self.assertIn('第 1 圈：繼續', out)
+        self.assertIn('第 2 圈：需要人（docker 起不來）', out)
+        self.assertIn('第 2 圈：需要人', open(os.path.join(self.dir, '.domain-auto', 'runs.md'), encoding='utf-8').read())
+
+    def test_runner_until_design_done(self):
+        # --until-design-done：地圖上出現新的「設計完成（待驗證）」切片就停
+        plan = '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n\n## 切片\n\n| 切片 | 狀態 |\n|---|---|\n| a | 進行中 |\n'
+        self.write('slices/PLAN.md', plan)
+        claude = self.fake_claude(['全自動：繼續'] * 5)
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('if n == 1:\n    p = "slices/PLAN.md"; t = open(p).read(); open(p, "w").write(t.replace("| a | 進行中 |", "| a | 設計完成（待驗證） |"))\n')
+        code, out = run('auto_run.py', '--claude', claude, '--until-design-done', cwd=self.dir)
+        self.assertIn('第 2 圈：繼續', out)
+        self.assertNotIn('第 3 圈', out)
+        self.assertIn('a 設計完成（⑤ 凍結），累計 1 條，照設定停下來', out)
+
+    def test_runner_park_and_stop_every(self):
+        # 一路做完所有切片（使用者選：擱置那條做別條、每 3 條停一次、只做到 ⑤）：擱置不停；累計 N 條 ⑤ 凍結才停；--design-only 提示詞多一句
+        plan = ('# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n\n## 切片\n\n| 切片 | 狀態 |\n|---|---|\n'
+                '| a | 進行中 |\n| b | 候選 |\n| c | 候選 |\n')
+        self.write('slices/PLAN.md', plan)
+        subprocess.run(['git', 'init', '-q'], cwd=self.dir, check=True)
+        claude = self.fake_claude(['全自動：擱置（c：lint 誤報）', '全自動：繼續', '全自動：繼續', '全自動：繼續', '全自動：繼續'])
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('open("prompts.txt", "a").write(sys.argv[2].replace("\\n", " ") + "\\n")\n'
+                    'open(f"round_{n}.txt", "w").close()\n'        # 每圈都有新檔：不會被「連續兩圈沒有改變」停下來
+                    'p = "slices/PLAN.md"; t = open(p).read()\n'
+                    'if n == 2: open(p, "w").write(t.replace("| a | 進行中 |", "| a | 設計完成（待驗證） |"))\n'
+                    'if n == 4: open(p, "w").write(t.replace("| b | 候選 |", "| b | 設計完成（待驗證） |"))\n')
+        code, out = run('auto_run.py', '--claude', claude, '--stop-every', '2', '--design-only', cwd=self.dir)
+        self.assertIn('第 1 圈：擱置（c：lint 誤報）', out)
+        self.assertIn('第 5 圈：繼續', out)
+        self.assertNotIn('第 6 圈', out)
+        self.assertIn('a、b 設計完成（⑤ 凍結），累計 2 條', out)
+        import json
+        st = json.load(open(os.path.join(self.dir, '.domain-auto', 'state.json'), encoding='utf-8'))
+        self.assertEqual((st['parked'], st['designed'], st['stop_every'], st['design_only']), (['c：lint 誤報'], ['a', 'b'], 2, True))
+        prompts = open(os.path.join(self.dir, 'prompts.txt'), encoding='utf-8').read().splitlines()
+        self.assertTrue(all('只做到第 ⑤ 步' in x for x in prompts))
+
+    def test_runner_until_design_done_refreeze(self):
+        # 已經設計完成的切片回頭修改後 ⑤ 重新凍結（多了 a/05-v2 tag）也停：地圖狀態沒變，看 tag
+        git = lambda *a: subprocess.run(['git', *a], cwd=self.dir, capture_output=True, text=True, check=True)
+        git('init', '-q')
+        git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x')
+        git('tag', 'a/05-v1')
+        plan = '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n\n## 切片\n\n| 切片 | 狀態 |\n|---|---|\n| a | 設計完成（待驗證） |\n'
+        self.write('slices/PLAN.md', plan)
+        claude = self.fake_claude(['全自動：繼續'] * 5)
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('if n == 1:\n    import subprocess; subprocess.run(["git", "tag", "a/05-v2"], check=True)\n')
+        code, out = run('auto_run.py', '--claude', claude, '--until-design-done', cwd=self.dir)
+        self.assertIn('第 2 圈：繼續', out)
+        self.assertNotIn('第 3 圈', out)
+        self.assertIn('a 設計完成（⑤ 凍結），累計 1 條，照設定停下來', out)
+
+    def test_runner_waits_for_usage_limit(self):
+        # 用量上限：不停下來，等到重置後接著跑，下一圈先收拾；被上限切掉的那一圈不算進 --max-steps（HR-Domain-Auto 第 3 圈）
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n')
+        claude = self.fake_claude(["You've hit your 5-hour limit · resets soon", '全自動：繼續', '全自動：需要人（停）'])
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('open("prompts.txt", "a").write(sys.argv[2].replace("\\n", " ") + "\\n")\n')
+        env = dict(os.environ, DOMAIN_AUTO_LIMIT_RETRY='0.2')
+        p = subprocess.run([sys.executable, os.path.join(TOOLS, 'auto_run.py'), '--claude', claude, '--max-steps', '2'],
+                           cwd=self.dir, capture_output=True, text=True, env=env)
+        out = p.stdout + p.stderr
+        self.assertIn('碰到用量上限，等到', out)
+        self.assertIn('第 2 圈：需要人（停）', out)
+        prompts = open(os.path.join(self.dir, 'prompts.txt'), encoding='utf-8').read().splitlines()
+        self.assertEqual(len(prompts), 3, prompts)
+        self.assertTrue(prompts[1].startswith('上一次全自動在第 1 圈') and '用量上限' in prompts[1], prompts[1])
+        self.assertFalse(prompts[2].startswith('上一次'))
+        # 等的時候按停止：不等了
+        self.write('.fake_n', '0')
+        claude = self.fake_claude(["You've hit your 5-hour limit · resets soon"] * 3)
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('open(".domain-auto/stop", "w").close()\n')
+        p = subprocess.run([sys.executable, os.path.join(TOOLS, 'auto_run.py'), '--claude', claude], cwd=self.dir,
+                           capture_output=True, text=True, env=dict(os.environ, DOMAIN_AUTO_LIMIT_RETRY='30'))
+        self.assertIn('不等用量重置', p.stdout + p.stderr)
+        # 累計要等的超過 --limit-wait-hours：停下來
+        p = subprocess.run([sys.executable, os.path.join(TOOLS, 'auto_run.py'), '--claude', claude, '--limit-wait-hours', '0'],
+                           cwd=self.dir, capture_output=True, text=True)
+        self.assertIn('超過 --limit-wait-hours', p.stdout + p.stderr)
+
+    def test_usage_limit_reset_time(self):
+        sys.path.insert(0, TOOLS)
+        import auto_run
+        from datetime import datetime
+        now = datetime(2026, 11, 9, 14, 44)
+        self.assertEqual(auto_run.reset_at('resets 3:30pm', now), datetime(2026, 11, 9, 15, 30))
+        self.assertEqual(auto_run.reset_at('resets 2:50am', now), datetime(2026, 11, 10, 2, 50))
+        self.assertIsNone(auto_run.reset_at('limit', now))
+
+    def test_runner_stops_when_switched_to_manual(self):
+        # 跑到一半改回手動：下一圈開始前檢查，停下來
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n')
+        claude = self.fake_claude(['全自動：繼續'] * 5)
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('p = "slices/PLAN.md"\nt = open(p).read()\nopen(p, "w").write(t.replace("全自動 |", "手動 |"))\n')
+        code, out = run('auto_run.py', '--claude', claude, cwd=self.dir)
+        self.assertIn('第 1 圈：繼續', out)
+        self.assertNotIn('第 2 圈', out)
+        self.assertIn('執行模式已改回手動', out)
+
+    def test_runner_recovers_after_cut(self):
+        # 上一次做到一半被切斷（網頁強制中斷；或舊紀錄 runs.md 最後一圈沒有回報結果，例：用量上限）：第一圈先收拾，留下的 index.lock 刪掉
+        import json
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n')
+        for prev, why in ((json.dumps({'running': False, 'interrupted': True, 'round': 4}), '網頁強制中斷'),
+                          (None, "You've hit your limit")):
+            for f in ('state.json', 'runs.md'):
+                if os.path.exists(os.path.join(self.dir, '.domain-auto', f)):
+                    os.remove(os.path.join(self.dir, '.domain-auto', f))
+            if prev:
+                self.write('.domain-auto/state.json', prev)
+            else:
+                self.write('.domain-auto/runs.md', "- x 第 13 圈：沒有回報結果　You've hit your limit　（runs/x_13.jsonl）\n")
+            claude = self.fake_claude(['全自動：繼續', '全自動：需要人（停）'])
+            with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+                f.write('open("prompts.txt", "a").write(sys.argv[2].replace("\\n", " ") + "\\n")\n')
+            self.write('.git/index.lock', '')
+            self.write('.fake_n', '0')
+            if os.path.exists(os.path.join(self.dir, 'prompts.txt')):
+                os.remove(os.path.join(self.dir, 'prompts.txt'))
+            run('auto_run.py', '--claude', claude, cwd=self.dir)
+            prompts = open(os.path.join(self.dir, 'prompts.txt'), encoding='utf-8').read().splitlines()
+            self.assertTrue(prompts[0].startswith('上一次全自動在第'), prompts[0])
+            self.assertIn(why, prompts[0])
+            self.assertFalse(prompts[1].startswith('上一次'))
+            self.assertFalse(os.path.exists(os.path.join(self.dir, '.git', 'index.lock')))
+        # 正常停下來的（需要人）：下一次不用收拾
+        claude = self.fake_claude(['全自動：需要人（停）'])
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('open("prompts.txt", "a").write(sys.argv[2].replace("\\n", " ") + "\\n")\n')
+        os.remove(os.path.join(self.dir, 'prompts.txt'))
+        run('auto_run.py', '--claude', claude, cwd=self.dir)
+        self.assertFalse(open(os.path.join(self.dir, 'prompts.txt'), encoding='utf-8').read().startswith('上一次'))
+
+    def test_runner_stop_file_and_state(self):
+        # 網頁的「停止」建立 .domain-auto/stop：這一圈做完就停，執行模式不變；state.json 記第幾圈、停下來的原因
+        import json
+        self.write('slices/PLAN.md', '# 切片地圖\n\n| 項目 | 內容 |\n|---|---|\n| 執行模式 | 全自動 |\n')
+        claude = self.fake_claude(['全自動：繼續'] * 5)
+        with open(os.path.join(self.dir, 'fake_claude.py'), 'a', encoding='utf-8') as f:
+            f.write('import os\nos.makedirs(".domain-auto", exist_ok=True)\nopen(".domain-auto/stop", "w").close()\n')
+        code, out = run('auto_run.py', '--claude', claude, cwd=self.dir)
+        self.assertIn('第 1 圈：繼續', out)
+        self.assertNotIn('第 2 圈', out)
+        self.assertIn('有人按了停止', out)
+        st = json.load(open(os.path.join(self.dir, '.domain-auto', 'state.json'), encoding='utf-8'))
+        self.assertFalse(st['running'])
+        self.assertEqual(st['round'], 1)
+        self.assertIn('有人按了停止', st['reason'])
+        self.assertTrue(st['log'].endswith('_1.jsonl'))
+        self.assertFalse(os.path.exists(os.path.join(self.dir, '.domain-auto', 'stop')))
+        self.assertIn('全自動 |', open(os.path.join(self.dir, 'slices', 'PLAN.md'), encoding='utf-8').read())
+
+    def write(self, rel, text):
+        p = os.path.join(self.dir, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, 'w', encoding='utf-8') as f:
+            f.write(text)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

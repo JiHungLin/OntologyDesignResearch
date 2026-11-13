@@ -5,8 +5,8 @@
   --freeze：準備凍結時使用，「提出／同意」有「待確認」就亮紅燈（平常只列出）。
   --baseline：上一版的切片資料夾（預設取各步驟最新的 git tag），用來找被刪除或改名的名稱。
   表格、EQ 影響、範圍外、佔位符、黃金案例（含事後才到的輸入）、連鎖、core 前綴（--freeze 時亮紅燈）、被引用也在這裡檢查；
-  審查頁（--freeze 時沒作答的亮紅燈）、挑錯反例、黃金案例自給自足也在這裡檢查；
-  跨切片引用（<切片>/<檔名> D-nn）也在這裡檢查；
+  審查頁（--freeze 時沒作答的亮紅燈）、挑錯反例、黃金案例自給自足、全自動事後審查頁、黃金案例的預期結果修改也在這裡檢查；
+  跨切片引用（<切片>/<檔名> D-nn）、架構決定紀錄（architecture/DECISIONS.md）、② 的資料性質（P11）也在這裡檢查；
   「用在」「舊版上游」「使用者同意」「其他切片要求」只列提醒，不算紅燈。
 只檢查引用與結構對不對得起來，不代表內容正確。"""
 import os, re, subprocess, sys, tempfile
@@ -15,6 +15,12 @@ import md2build as mb
 
 STEP_FILES = {2: '02_entities.md', 3: '03_flows.md', 4: '04_rules.md'}
 EXAMPLE_SINCE = '2026-10-28'   # 審查頁問題要有「例子」、選項要有「→」的起始日（之前的審查頁不回頭補）
+GOLDEN_ASK_SINCE = '2026-11-04'   # 黃金案例要有逐項的「要得出」的起始日（docs/02 ⑥，先試用）
+CODE_REF = re.compile(r'(?<![A-Za-z])(R\d{2,}|D-\d+|X-\d+)(?!\d)')
+SIGNOFF = '06_evidence/signoff.md'
+AUTO_REVIEW_SINCE = '2026-11-09'   # 審查頁的「待人決定」要收進全自動事後審查頁：從這天的審查頁起檢查（docs/01 0.2，先試用）
+SPOT_FORMAT_SINCE = '2026-11-05'   # 抽查可挑的條目寫「⑥ 第 n 條」：從這天的審查頁起檢查（規定 11-04 下午才加，當天已作答的頁不追溯）
+EVIDENCE_HEADER = '# 執行紀錄（tools/run_evidence.py 產生，不手改）'
 ALL_FILES = ['01_scope.md', '02_entities.md', '03_flows.md', '03_use_cases.md', '04_rules.md', '05_mapping.md']
 HISTORY_H2 = {'決定與理由', '檢查紀錄', '回填紀錄'}
 HISTORY_H3 = {'反例處理', '六問判斷紀錄'}
@@ -55,6 +61,8 @@ class Lint:
         self.dir = os.path.join(root, 'slices', slice_name)
         self.docs = {f: mb.Doc(os.path.join(self.dir, f)) for f in ALL_FILES
                      if os.path.exists(os.path.join(self.dir, f))}
+        so = os.path.join(self.dir, SIGNOFF)       # ⑥ 只在審查頁相關的檢查用，不混進 ①～⑤ 的內容檢查
+        self.signoff = mb.Doc(so) if os.path.exists(so) else None
         self.data = mb.build(root, slice_name)
         self.parse_problems = list(mb.problems)
         self.fails, self.skipped = [], []
@@ -229,10 +237,17 @@ class Lint:
                 if x.get('status') in ('superseded', 'retired')]
         for x in gone:
             pat = word(x['name'])
+            # 關係可以同名（Person belongsToCustomer 已取代、Employer belongsToCustomer 仍有效）：
+            # 同名的還有有效的，只算寫出這條關係的「從」、沒寫出有效那條「從」的列
+            live = {r['domain'] for r in self.data.get('relations') or []
+                    if r.get('domain') and r['name'] == x['name'] and r.get('status') not in ('superseded', 'retired')}
+            label = f"{x['domain']} {x['name']}" if live else x['name']
             for f, no, h2, h3, text in self.lines():
-                if pat.search(text or ''):
-                    self.red('已取消', f"core/ 的 {x['name']} 已{'取代' if x['status'] == 'superseded' else '停用'}，"
-                                     f"仍被引用：{f}:{no}")
+                if not pat.search(text or ''): continue
+                if live and (not word(x['domain']).search(text) or any(word(d).search(text) for d in live)):
+                    continue
+                self.red('已取消', f"core/ 的 {label} 已{'取代' if x['status'] == 'superseded' else '停用'}，"
+                                 f"仍被引用：{f}:{no}")
         if not cancelled and not gone:
             print("    ✓ 通過（沒有取消或停用的項目）")
         else:
@@ -364,19 +379,27 @@ class Lint:
         self.done('路徑', n, '個路徑')
 
     def check_versions(self):
-        print("\n[版本] 未凍結交付物的「讀取的輸入」是上游最新的 tag；每個 tag 在 CHANGELOG 都有一筆")
+        print("\n[版本] 未凍結交付物的「讀取的輸入」是上游最新的 tag；每個 tag 在 CHANGELOG 都有一筆；檔頭「已凍結」的版本有 tag")
         tags = self.tags()
         if tags is None:
             return self.done('版本', 0, '', skipped='不是 git repo')
         n = 0
         for f, d in self.docs.items():
             status = inputs = None
+            version = ''
             for h2, h3, header, rows in d.tables():
                 if header[:2] == ['項目', '內容']:
                     for no, c in rows:
                         if c[0] == '狀態': status = c[1]
                         if c[0] == '讀取的輸入': inputs = (no, c[1])
+                        if c[0] == '版本': version = c[1].strip('` ')
                     break
+            # 凍結＝打 tag（docs/01 0.2）：檔頭先改了、tag 沒打，是凍結做到一半
+            if status and status.startswith('已凍結'):
+                n += 1
+                if version not in tags:
+                    self.red('版本', f"{f} 檔頭是「已凍結」，但沒有 tag {version or '（版本沒填）'}：凍結沒做完"
+                                     "（正在凍結時，commit 並打 tag 後就會消失）")
             if not inputs or status == '已凍結': continue
             for step, ver in re.findall(rf'{re.escape(self.slice)}/0(\d)-v(\d+)', inputs[1]):
                 n += 1
@@ -422,10 +445,11 @@ class Lint:
 
     # ---------- 2026-10-21 新增（流程待處理清單 #1、#2、#11～#18） ----------
     def md_files(self):
-        """表格檢查的範圍：本切片、slices/ 根目錄、core/、inputs/ 的所有 Markdown。"""
+        """表格檢查的範圍：本切片、slices/ 根目錄、core/、architecture/、inputs/ 的所有 Markdown。"""
         out = []
         for base, recursive in ((self.dir, True), (os.path.join(self.root, 'slices'), False),
-                                (os.path.join(self.root, 'core'), True), (os.path.join(self.root, 'inputs'), True)):
+                                (os.path.join(self.root, 'core'), True), (os.path.join(self.root, 'architecture'), True),
+                                (os.path.join(self.root, 'inputs'), True)):
             if not os.path.isdir(base): continue
             if recursive:
                 for d, _, fs in os.walk(base):
@@ -459,7 +483,7 @@ class Lint:
         ('questions.md', None, '狀態'): ['待問', '已問', '暫依整理', '已回覆'],
         ('PLAN.md', '現實資料盤點', '狀態'): ['已有', '已蒐集', '推想草稿', '待提供', '找不到'],
         ('PLAN.md', '切片', '大小估計'): ['太小', '剛好', '太大'],
-        ('PLAN.md', '切片', '狀態'): ['候選', '進行中', '設計完成（待驗證）', '完成', '擱置', '已拆分', '已合併'],
+        ('PLAN.md', '切片', '狀態'): ['候選', '進行中', '設計完成（待驗證）', '完成（AI 自審）', '完成', '擱置', '已拆分', '已合併'],
         ('ENTITY_SKETCH.md', '名詞', '層'): ['core', 'shared', 'domain'],
         ('ENTITY_SKETCH.md', '名詞', '狀態'): ['草圖', '已定義', '已取消'],
     }
@@ -836,12 +860,17 @@ class Lint:
 
 
     # ---------- 2026-10-27 新增（流程待處理清單 #19～#38） ----------
-    STEP_OF = {'01_scope.md': 1, '02_entities.md': 2, '03_flows.md': 3, '04_rules.md': 4, '05_mapping.md': 5}
+    STEP_OF = {'01_scope.md': 1, '02_entities.md': 2, '03_flows.md': 3, '04_rules.md': 4, '05_mapping.md': 5, SIGNOFF: 6}
+    ANGLES = ('本體懷疑者', '領域實務', '時間與帳務', '隱私與濫用', '實作者')   # docs/01 0.5 挑錯角度（關卡判定由人擔任，不是 AI 挑錯）
+
+    def step_doc(self, f):
+        return self.signoff if f == SIGNOFF else self.docs[f]
 
     def review_refs(self):
         """各步檔案檢查紀錄的「審查頁」行：{檔名: (行號, [reviews/…])}；沒有這一行的是舊格式，不列入。"""
         out = {}
-        for f, d in self.docs.items():
+        docs = list(self.docs.items()) + ([(SIGNOFF, self.signoff)] if self.signoff else [])
+        for f, d in docs:
             if f not in self.STEP_OF: continue
             for no, h2, h3, line in d.items:
                 m = re.match(r'^- 審查頁[：:]\s*(.*)$', line or '')
@@ -853,7 +882,7 @@ class Lint:
     def parse_review(path):
         """審查頁：問題、確認列、抽查、結論、黃金案例、這輪的挑錯。"""
         lines = open(path, encoding='utf-8').read().split('\n')
-        r = {'questions': [], 'confirms': [], 'spot': None, 'verdicts': [], 'cases': [], 'x_ids': [], 'lines': lines}
+        r = {'questions': [], 'confirms': [], 'spot': None, 'verdicts': [], 'cases': [], 'x_ids': [], 'x_by_step': {}, 'lines': lines}
         h2 = h3 = None
         inside = False
         for i, l in enumerate(lines, 1):
@@ -868,7 +897,12 @@ class Lint:
                 if h3.startswith('問題'):
                     r['questions'].append({'no': i, 'title': h3, 'fields': {}, 'options': 0})
                 elif re.match(r'GC\d+', h3) and h2 and h2.startswith('三'):
-                    r['cases'].append({'no': i, 'id': h3.split()[0], 'fields': {}})
+                    r['cases'].append({'no': i, 'id': h3.split()[0], 'fields': {}, 'items': {}, 'last': None})
+                continue
+            sub = re.match(r'^\s+- (.*)$', l)   # 欄位底下縮排的條列（例：「要得出」的 ①②…）
+            if sub and h3 and r['cases'] and h3.split()[0] == r['cases'][-1]['id'] and r['cases'][-1]['last']:
+                gc = r['cases'][-1]
+                gc['items'].setdefault(gc['last'], []).append((i, sub.group(1).strip()))
                 continue
             m = re.match(r'^- ([^：:]+)[：:]\s*(.*)$', l)
             if m and h3:
@@ -879,10 +913,15 @@ class Lint:
                     if re.match(r'^[A-Z]（建議）$', k) or re.match(r'^[A-Z]$', k): q['options'] += 1
                 elif r['cases'] and h3.split()[0] == r['cases'][-1]['id']:
                     r['cases'][-1]['fields'][k] = (i, v)
+                    r['cases'][-1]['last'] = k
         for h2_, h3_, header, rows in mb.Doc(path).tables():
             if header[:2] == ['項目', '內容']:
                 for no, c in rows:
-                    if c[0] == '這輪的挑錯': r['x_ids'] = Lint.expand_ids(c[1])
+                    if c[0] == '這輪的挑錯':
+                        r['x_ids'] = Lint.expand_ids(c[1])
+                        for seg in re.split(r'[；;]', c[1]):
+                            m = re.match(r'\s*([①②③④⑤⑥])', seg)
+                            if m: r['x_by_step'].setdefault('①②③④⑤⑥'.index(m.group(1)) + 1, []).extend(Lint.expand_ids(seg))
             elif '原文' in header and '在哪裡' in header and '確認' in header:
                 r['confirms'] += [(no, dict(zip(header, c))) for no, c in rows]
             elif header[:1] == ['抽查了哪幾條']:
@@ -903,13 +942,20 @@ class Lint:
     def check_reviews(self):
         print("\n[審查頁] 送審的步驟有審查頁；問題附選項、原文對得上行號、自評部分與 ✗ 都在頁上" +
               ("（準備凍結：每一列都要已作答）" if self.freeze else "；列出還沒作答的"))
+        # 送審中的交付物還是舊格式的檢查紀錄（「完成標準｜AI 自評｜審查者確認」）：先照範本換成新格式，網頁與審查頁才讀得到
+        docs = list(self.docs.items()) + ([(SIGNOFF, self.signoff)] if self.signoff else [])
+        for f, d in docs:
+            if f not in self.STEP_OF or self.doc_status(d) != '待檢查': continue
+            for h2, h3, header, rows in d.tables():
+                if (h2 or '') == '檢查紀錄' and header[:1] == ['完成標準'] and '審查者確認' in header:
+                    self.red('審查頁', f"{f}:{rows[0][0] - 2 if rows else '?'} 檢查紀錄還是舊格式（有「審查者確認」欄）：送審前照範本換成「完成標準（AI 自評）」表（docs/08《舊專案相容》第一節）")
         refs = self.review_refs()
         if not refs:
             return self.done('審查頁', 0, '', skipped='沒有新格式（檢查紀錄有「審查頁」行）的交付物')
         n = 0
         pending = {}                                      # 審查頁 → [送審中的步驟檔]
         for f, (no, paths) in refs.items():
-            status = self.doc_status(self.docs[f])
+            status = self.doc_status(self.step_doc(f))
             if status != '待檢查': continue
             n += 1
             if not paths:
@@ -946,25 +992,57 @@ class Lint:
                 if not c.get('確認', '').strip():
                     unanswered.append(f"{rel}:{no} 確認第 {c.get('#', '?')} 列")
                 self.check_excerpt(rel, no, c)
+            # ⑥ 每個黃金案例只有一列：拆成「你算的／設計推出的／系統跑出的」三列，人看不出要確認什麼（HR hire-employee ⑥）
+            per_gc = {}
+            for no, c in r['confirms']:
+                m = re.match(r'^(?:黃金案例\s*)?(GC\d+)', c.get('要看的', '').strip())
+                if m: per_gc.setdefault(m.group(1), []).append((no, c))
+            for gc, rows in per_gc.items():
+                if len(rows) > 1 and any(not c.get('確認', '').strip() for no, c in rows):
+                    self.red('審查頁', f"{rel}:{rows[0][0]} {gc} 拆成 {len(rows)} 列：每個黃金案例只寫一列（要看的「黃金案例 {gc}（通過）」或「（失敗：差在哪一項；處理見問題 n）」，docs/02「第 ⑥ 步的審查頁」）")
             if r['spot'] is None:
                 self.red('審查頁', f"{rel} 沒有「抽查」表")
+            hint = next(((i, l) for i, l in enumerate(r['lines'], 1) if l.startswith('可挑的條目')), None)
+            if hint and os.path.basename(rel)[:10] >= SPOT_FORMAT_SINCE and \
+                    not re.search(r'[①-⑥]\s*第\s*\d', hint[1]) and not re.search(r'（[^）]*沒有[^）]*）|沒有可挑', hint[1]):
+                self.red('審查頁', f"{rel}:{hint[0]} 可挑的條目要寫成「⑥ 第 1、4、9 條」（步驟加完成標準表的第幾條，docs/02「審查頁」），不寫完成標準的文字")
             elif not any(c[0].strip() for no, c in r['spot']):
                 unanswered.append(f"{rel} 抽查")
             for no, c in r['verdicts']:
+                who = next((c[k].strip() for k in c if k.startswith('審查者')), '')
+                ex = c.get('執行者', '').strip()
+                solo = '一人團隊' in ex                            # 一人團隊可以同一人（docs/01 0.5），只提醒
+                if ex and who and re.sub(r'（一人團隊）$', '', ex).strip() == who:
+                    if solo:
+                        print(f"    • {rel}:{no} {c['步驟']} 執行者和簽核者是同一人「{who}」（一人團隊）：有第二個人時要分開")
+                    else:
+                        self.red('審查頁', f"{rel}:{no} {c['步驟']} 的執行者和審查者（簽核者）是同一人「{who}」（一人團隊時執行者寫「{who}（一人團隊）」，docs/01 0.5）")
                 miss = [k for k in c if k != '步驟' and not c[k].strip()]
                 if miss: unanswered.append(f"{rel}:{no} 結論（{c['步驟']}）")
                 elif self.freeze and not c.get('結論', '').strip().startswith('通過'):
-                    self.red('審查頁', f"{rel}:{no} {c['步驟']} 的結論是「{c.get('結論')}」，不是「通過」")
+                    step = next((i + 1 for i, ch in enumerate('①②③④⑤⑥') if ch in c['步驟']), None)
+                    if step and step not in {self.STEP_OF[f] for f in files}:
+                        # 這一步之後另有審查頁（檢查紀錄指到更新的那份），這一列是上一輪的結論
+                        print(f"    • {rel}:{no} {c['步驟']} 的結論是「{c.get('結論')}」：這一步已改由之後的審查頁審查，不算")
+                    else:
+                        self.red('審查頁', f"{rel}:{no} {c['步驟']} 的結論是「{c.get('結論')}」，不是「通過」")
             if not r['verdicts']:
                 self.red('審查頁', f"{rel} 沒有「結論」表")
+            # ⑤ 分兩段（docs/01 ⑤「兩段審查」）：第一段答完不凍結，第二段才凍結
+            stage = next((l for l in r['lines'] if re.match(r'^\|\s*這輪審查的步驟\s*\|', l)), '')
+            if self.freeze and '05_mapping.md' in files and re.search(r'⑤\s*第一段', stage):
+                self.red('審查頁', f"{rel} 是 ⑤ 第一段的審查頁：答完不凍結，接著做第二段（/domain-step 5：抄回預期結果、schema、API、紙上推演）")
+            if os.path.basename(rel)[:10] >= GOLDEN_ASK_SINCE:     # 逐項的「要得出」：2026-11-04 起的審查頁（先試用）
+                for gc in r['cases']:
+                    self.check_golden_ask(rel, gc)
             for gc in r['cases']:
                 for k in ('預期結果', '計算過程', '計算者'):
-                    if not gc['fields'].get(k, (0, ''))[1]:
+                    if not self.case_value(gc, k):
                         unanswered.append(f"{rel}:{gc['no']} {gc['id']} 的「{k}」"); break
             self.check_case_copies(rel, r)
             # 自評「部分」或 ✗ 的完成標準要在審查頁
             for f in files:
-                for h2, h3, header, rows in self.docs[f].tables():
+                for h2, h3, header, rows in self.step_doc(f).tables():
                     k = mb.col(header, 'AI 自評')
                     if h2 != '檢查紀錄' or k is None: continue
                     for no, c in rows:
@@ -979,7 +1057,7 @@ class Lint:
 
     def check_excerpt(self, rel, no, c):
         where, quote = c.get('在哪裡', ''), c.get('原文', '')
-        m = re.search(r'([\w./-]+\.(?:md|yaml|sql)):(\d+)', where)
+        m = re.search(r'([\w./-]+\.(?:md|yaml|sql|log)):(\d+)', where)
         if not m:
             self.red('審查頁', f"{rel}:{no} 「在哪裡」要寫 `檔名:行號`（現在是「{where}」）"); return
         frags = [x for part in re.findall(r'「([^」]*)」', quote) for x in part.split('…') if len(x.strip()) >= 2]
@@ -995,49 +1073,92 @@ class Lint:
         if missing:
             self.red('審查頁', f"{rel}:{no} 的原文「{missing[0][:30]}」在 {m.group(1)}:{line} 前後 2 行找不到（設計改了，或行號過期）")
 
+    def check_golden_ask(self, rel, gc):
+        """黃金案例的「要得出」：①②… 一項一行，每項有格式（括號裡的單位與位數或可能的答案）；情境與要得出不寫 Rnn、D-nn、X-nn（docs/02 ⑥）。"""
+        items = gc['items'].get('要得出', [])
+        if '要得出' not in gc['fields'] or not (items or gc['fields']['要得出'][1]):
+            self.red('審查頁', f"{rel}:{gc['no']} {gc['id']} 沒有「要得出」（逐項寫出時點、對象、單位與位數，docs/02 ⑥）")
+            return
+        for ln, t in items:
+            if not re.match(r'^[①-⑳]', t):
+                self.red('審查頁', f"{rel}:{ln} {gc['id']} 的「要得出」每一項要用 ①②… 編號")
+            if not re.search(r'（[^（）]+）\s*$', t):
+                self.red('審查頁', f"{rel}:{ln} {gc['id']} 的「要得出」這一項沒有在最後的括號寫格式（數字的單位與位數，或判斷可能的答案）")
+        for k in ('情境', '要得出'):
+            texts = [gc['fields'].get(k, (0, ''))] + (items if k == '要得出' else [])
+            for ln, t in texts:
+                m = CODE_REF.search(t or '')
+                if m:
+                    self.red('審查頁', f"{rel}:{ln} {gc['id']} 的「{k}」寫了 {m.group(1)}：情境與要得出用白話，編號放在「驗證」")
+                    break
+
+    @staticmethod
+    def case_value(gc, k):
+        """審查頁黃金案例一個欄位的內容：同一行的值加上底下縮排的子項（計算過程常分好幾行寫）。"""
+        head = gc['fields'].get(k, (0, ''))[1]
+        return '\n'.join([head] * bool(head) + [t for _, t in gc['items'].get(k, [])])
+
     def check_case_copies(self, rel, r):
         path = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
         if not r['cases'] or not os.path.exists(path): return
-        gold, cur = {}, None
+        gold, cur, key = {}, None, None
         for no, h2, h3, line in mb.Doc(path).items:
-            if h3 is None and h2 and re.match(r'GC\d+', h2): cur = h2.split()[0]; gold[cur] = {}
-            m = re.match(r'^- (預期結果|計算過程|計算者)[：:]\s*(.*)$', line or '')
-            if cur and m: gold[cur][m.group(1)] = m.group(2).strip()
+            gid = h2.split()[0] if h3 is None and h2 and re.match(r'GC\d+', h2) else None
+            if gid != cur: cur, key = gid, None     # 換到下一個案例才重來（原本每一行都清空，永遠比對不上）
+            if cur is None: continue
+            gold.setdefault(cur, {})
+            m = re.match(r'^- ([^：:]+)[：:]\s*(.*)$', line or '')
+            if m:
+                key = m.group(1) if m.group(1) in ('預期結果', '計算過程', '計算者') else None
+                if key: gold[cur][key] = m.group(2).strip()
+                continue
+            sub = re.match(r'^\s+- (.*)$', line or '')
+            if key and sub: gold[cur][key] = (gold[cur][key] + '\n' + sub.group(1).strip()).strip()
         for gc in r['cases']:
             for k in ('預期結果', '計算過程', '計算者'):
-                v = gc['fields'].get(k, (0, ''))[1]
+                v = self.case_value(gc, k)
                 if not v: continue
                 g = gold.get(gc['id'], {}).get(k, '')
                 if re.sub(r'\s+', '', g) != re.sub(r'\s+', '', v):
                     self.red('審查頁', f"{rel} {gc['id']} 的「{k}」和 golden_cases.md 不同（人填在審查頁的要逐字抄回）")
 
     def check_challenge(self):
-        print("\n[挑錯] 送審的 ①～⑤ 有「AI 挑錯」的反例；審查頁「這輪的挑錯」列的 X-nn 存在")
+        print("\n[挑錯] 送審的 ①～⑥ 有「AI 挑錯」的反例（⑥ 只看有「反例處理」表的新範本）；審查頁「這輪的挑錯」列的 X-nn 存在")
         refs = self.review_refs()
         n = 0
         for f, (no, paths) in refs.items():
-            d = self.docs[f]
+            d = self.step_doc(f)
+            if f == SIGNOFF and not any(h3 == '反例處理' for _, h3, _, _ in d.tables()): continue   # 舊的 signoff 沒有反例處理表
             if self.doc_status(d) != '待檢查': continue
             n += 1
-            xs, ai = set(), 0
+            xs, ai, src = set(), 0, {}
             for h2, h3, header, rows in d.tables():
                 if h3 == '反例處理' and header[:2] == ['#', '反例']:
                     k = mb.col(header, '來源')
                     for rno, c in rows:
                         xs.add(c[0].strip())
-                        if k is not None and c[k].strip().startswith('AI 挑錯'): ai += 1
+                        if k is not None:
+                            src[c[0].strip()] = (rno, c[k].strip())
+                            if c[k].strip().startswith('AI 挑錯'): ai += 1
             if not ai:
                 self.red('挑錯', f"{f} 送審了，「反例處理」沒有來源為「AI 挑錯」的反例（docs/01 該步完成標準）")
             if paths and os.path.exists(os.path.join(self.dir, paths[-1])):
-                listed = self.parse_review(os.path.join(self.dir, paths[-1]))['x_ids']
-                for x in listed:
-                    if not any(x in self.x_ids(g) for g in self.docs if g in self.STEP_OF):
+                review = self.parse_review(os.path.join(self.dir, paths[-1]))
+                for x in review['x_ids']:
+                    if not any(x in self.x_ids(g) for g in list(self.docs) + ([SIGNOFF] if self.signoff else []) if g in self.STEP_OF):
                         self.red('挑錯', f"{paths[-1]}「這輪的挑錯」的 {x} 不在任何一步的「反例處理」"); break
+                # 這輪新增、來源是 AI 挑錯的反例要寫角度（2026-11-04 T27：成效要分角度數；舊反例不檢查）
+                for x in review['x_by_step'].get(self.STEP_OF[f], []):
+                    rno, s = src.get(x, (None, ''))
+                    m = re.match(r'^AI 挑錯\s*(?:[（(]([^）)]*)[）)])?', s)
+                    if m and (m.group(1) or '').strip() not in self.ANGLES:
+                        self.red('挑錯', f"{f}:{rno} {x} 的來源「{s}」沒有寫挑錯角度（{'、'.join(self.ANGLES)}之一，"
+                                         f"例：AI 挑錯（隱私與濫用）；docs/01 0.5、docs/02 反例處理）")
         self.done('挑錯', n, '個送審的交付物', skipped=None if n else ('沒有送審中的新格式交付物' if refs else None))
 
     def x_ids(self, f):
         out = set()
-        for h2, h3, header, rows in self.docs[f].tables():
+        for h2, h3, header, rows in self.step_doc(f).tables():
             if h3 == '反例處理' and header[:2] == ['#', '反例']:
                 out |= {c[0].strip() for no, c in rows}
         return out
@@ -1159,6 +1280,429 @@ class Lint:
         else:
             print(f"    （{len(reqs)} 件，{pending} 件還沒處理）")
 
+    ADR_FIELDS = ['判斷', '狀態', '背景與訊號', '決定', '沒採用的做法', '代價', '重新評估的觸發',
+                  '資安影響', '提出／同意', '生效', '受影響切片']
+    PLATFORM_STATUS = re.compile(r'^(?:未定|已採用|不同做法[：:].+|見 ADR-\d{3}(?:[、，,]\s*ADR-\d{3})*)$')
+
+    def header_of(self, doc):
+        """交付物開頭區：(狀態, (行號, 讀取的輸入))。"""
+        status = inputs = None
+        for h2, h3, header, rows in doc.tables():
+            if header[:2] == ['項目', '內容']:
+                for no, c in rows:
+                    if c[0] == '狀態': status = c[1].strip()
+                    if c[0] == '讀取的輸入': inputs = (no, c[1])
+                break
+        return status, inputs
+
+    def check_evidence(self):
+        """⑥ 審查頁（2026-11-04 起）存在時：系統結果與回答表的「結果」寫 log 位置，log 是 run_evidence.py 產生、版本和 signoff.md 相同。"""
+        print("\n[執行紀錄] ⑥ 的系統結果與回答表寫出 results/…log 位置；log 是 tools/run_evidence.py 產生的、"
+              "沒有未 commit 的修改、實作版本和 signoff.md 相同；在通過檢查的同一個驗證環境裡跑")
+        rdir = os.path.join(self.dir, 'reviews')
+        if not (os.path.isdir(rdir) and any(re.match(r'\d{4}-\d{2}-\d{2}_06(-\d)?\.md$', n) for n in os.listdir(rdir))):
+            return self.done('執行紀錄', 0, '', skipped='沒有 ⑥ 的審查頁（2026-11-04 起的新做法）')
+        want = None
+        if self.signoff:
+            for no, h2, h3, line in self.signoff.items:
+                m = re.match(r'^- 實作版本[：:].*@\s*([0-9a-f]{7,40})', line or '')
+                if m: want = m.group(1)
+        cites = []                                    # (出處, 值)
+        gpath = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
+        if os.path.exists(gpath):
+            cur, seen = None, None
+            for no, h2, h3, line in mb.Doc(gpath).items:
+                gid = h2.split()[0] if h3 is None and h2 and re.match(r'GC\d+', h2) else None
+                if gid != seen: seen, cur = gid, ({'id': gid} if gid else None)   # 換案例才重來
+                m = re.match(r'^- (系統結果|判定)[：:]\s*(.*)$', line or '')
+                if cur is not None and m: cur[m.group(1)] = (no, m.group(2).strip())
+                if cur and '系統結果' in cur and '判定' in cur:
+                    v = cur['系統結果'][1]
+                    if not cur['判定'][1].startswith('不採用') and v and not v.startswith(('[未執行]', '（')):
+                        cites.append((f"06_evidence/golden_cases.md:{cur['系統結果'][0]} {cur['id']} 的系統結果", v))
+                    cur = None
+        apath = os.path.join(self.dir, '06_evidence', 'answers.md')
+        if os.path.exists(apath):
+            for h2, h3, header, rows in mb.Doc(apath).tables():
+                k, j = mb.col(header, '結果'), mb.col(header, '判定')
+                if k is None: continue
+                for no, c in rows:
+                    if c[k].strip() and not c[k].strip().startswith('[未執行]') and not (j is not None and c[j].strip().startswith('[未執行]')):
+                        cites.append((f"06_evidence/answers.md:{no} {c[0]} 的結果", c[k]))
+        n, envs, seen = 0, {}, set()
+        for where, v in cites:
+            n += 1
+            logs = re.findall(r'(results/[\w.-]+\.log)(?::\d+)?', v)
+            if not logs:
+                self.red('執行紀錄', f"{where} 沒有寫依據的 log 位置（results/<檔名>.log:行號）"); continue
+            for rel in logs:
+                if rel in seen: continue                   # 同一份 log 被好幾處引用，只檢查、只報一次
+                seen.add(rel)
+                path = os.path.join(self.dir, '06_evidence', rel)
+                if not os.path.exists(path):
+                    self.red('執行紀錄', f"{where} 的 {rel} 不存在"); continue
+                head = open(path, encoding='utf-8').read(2000).split('\n')
+                if head[0].strip() != EVIDENCE_HEADER:
+                    self.red('執行紀錄', f"06_evidence/{rel} 不是 tools/run_evidence.py 產生的（第一行不是執行紀錄的檔頭）"); continue
+                ver = next((l for l in head if l.startswith('- 實作版本：')), '')
+                if '有未 commit 的修改：是' in ver:
+                    self.red('執行紀錄', f"06_evidence/{rel} 是在有未 commit 的修改時跑的，不能當簽核依據；commit 後重跑")
+                m = re.search(r'@\s*([0-9a-f]{7,40})', ver)
+                if want and m and not (want.startswith(m.group(1)) or m.group(1).startswith(want)):
+                    self.red('執行紀錄', f"06_evidence/{rel} 的實作版本 {m.group(1)} 和 signoff.md 的 {want} 不同；改了程式要重跑")
+                env = next((l[len('- 環境：'):] for l in head if l.startswith('- 環境：')), '')
+                chk = next((l[len('- 環境檢查：'):] for l in head if l.startswith('- 環境檢查：')), '')
+                if not chk.startswith('通過'):
+                    self.red('執行紀錄', f"06_evidence/{rel} 的驗證環境沒有通過檢查（{chk or '檔頭沒有環境檢查'}）；照 docs/01 ⑥「驗證環境」用 compose.yaml 跑")
+                elif env:
+                    envs.setdefault(env, rel)
+        if len(envs) > 1:
+            self.red('執行紀錄', "簽核用的 log 不是在同一個驗證環境跑的：" + '、'.join(f"{r}（{e[:60]}）" for e, r in envs.items()))
+        self.done('執行紀錄', n, '個引用 log 的結果')
+
+    def run_mode(self):
+        """slices/PLAN.md 開頭區的「執行模式」（手動／全自動）；沒有這一列＝手動。"""
+        path = os.path.join(self.root, 'slices', 'PLAN.md')
+        if os.path.exists(path):
+            for h2, h3, header, rows in mb.Doc(path).tables():
+                if header[:2] == ['項目', '內容']:
+                    return next((c[1].strip() for no, c in rows if c[0].strip() == '執行模式'), '手動') or '手動'
+        return '手動'
+
+    def check_auto_marks(self):
+        """全自動模式的標記（審查者 AI（自動）、計算者 AI 獨立計算）只能出現在執行模式是全自動的 repo；手動時審查者、計算者不能是 AI。"""
+        print("\n[執行模式] 審查頁的審查者、黃金案例的計算者：手動模式不能是 AI；全自動模式寫 AI（自動）、AI 獨立計算（待人確認）")
+        auto = self.run_mode().startswith('全自動')
+        n = 0
+        rdir = os.path.join(self.dir, 'reviews')
+        for name in sorted(os.listdir(rdir)) if os.path.isdir(rdir) else []:
+            if not name.endswith('.md'): continue
+            rel = f'reviews/{name}'
+            r = self.parse_review(os.path.join(rdir, name))
+            for no, c in r['verdicts']:
+                who = next((c[k].strip() for k in c if k.startswith('審查者')), '')
+                if not who: continue
+                n += 1
+                if who.startswith('AI') and not (auto and who == 'AI（自動）'):
+                    self.red('執行模式', f"{rel}:{no} 審查者是「{who}」：" + ('全自動模式寫「AI（自動）」' if auto else '手動模式的審查者是人（全自動要先在 slices/PLAN.md 改執行模式）'))
+            for gc in r['cases']:
+                who = self.case_value(gc, '計算者') or ''
+                if who.strip().startswith('AI') and not (auto and who.strip().startswith('AI 獨立計算')):
+                    n += 1
+                    self.red('執行模式', f"{rel}:{gc['no']} {gc['id']} 的計算者是「{who.strip()}」：手動模式的預期結果由人算（docs/01 ⑥）")
+        gpath = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
+        if os.path.exists(gpath):
+            for no, h2, h3, line in mb.Doc(gpath).items:
+                m = re.match(r'^- 計算者[：:]\s*(AI.*)$', line or '')
+                if m and not (auto and m.group(1).startswith('AI 獨立計算')):
+                    n += 1
+                    self.red('執行模式', f"06_evidence/golden_cases.md:{no} 計算者是「{m.group(1)}」：手動模式的預期結果由人算")
+        self.done('執行模式', n, '個審查者與計算者', skipped=None if n else '沒有已填的審查者或計算者')
+
+    AUTO_FIELDS = ('來源', '例子', '問題', '影響', '你的回答')
+
+    def auto_reviews(self):
+        """全自動事後審查頁 reviews/<日期>_auto.md：[(相對路徑, parse_review 結果, 「來源」欄的全文)]。"""
+        rdir = os.path.join(self.dir, 'reviews')
+        out = []
+        for name in sorted(os.listdir(rdir)) if os.path.isdir(rdir) else []:
+            if not name.endswith('_auto.md'): continue
+            r = self.parse_review(os.path.join(rdir, name))
+            out.append((f'reviews/{name}', r, ' '.join(q['fields'].get('來源', (0, ''))[1] for q in r['questions'])))
+        return out
+
+    def check_auto_review(self):
+        """全自動事後審查頁（docs/01 0.2「待人決定」，先試用）：每題的格式；AI 審查者寫了「待人決定」的題目、AI 改的黃金案例預期結果都收進來；
+        答完還沒處理的提醒下一步。"""
+        print("\n[事後審查] 全自動事後審查頁每題有來源、例子、影響與選項；審查頁的「待人決定」都收進事後審查頁")
+        autos = self.auto_reviews()
+        n = 0
+        for rel, r, _ in autos:
+            open_ = []
+            for q in r['questions']:
+                n += 1
+                fl = q['fields']
+                for need in self.AUTO_FIELDS:
+                    if need not in fl:
+                        self.red('事後審查', f"{rel}:{q['no']} {q['title']} 沒有「{need}」（docs/02「全自動事後審查頁」）")
+                if not any(re.match(r'^A（建議）$', k) for k in fl):
+                    self.red('事後審查', f"{rel}:{q['no']} {q['title']} 沒有「A（建議）」（寫設計目前的做法，也就是 AI 暫時採用的）")
+                if q['options'] < 2:
+                    self.red('事後審查', f"{rel}:{q['no']} {q['title']} 除了 A（建議），至少還要一個選項（B…）")
+                if '你的回答' in fl and not fl['你的回答'][1]:
+                    open_.append(q['title'])
+                    if fl.get('來源', (0, ''))[1].startswith('擱置'):     # docs/01 0.2「擱置」：答之前這條切片不往下做
+                        print(f"    • {rel}:{q['no']} {q['title']}：這條切片擱置中（{fl['來源'][1]}），人答完才繼續；依賴它的切片也跳過")
+            done = next((l.split('|')[2].strip() for l in r['lines'] if re.match(r'^\|\s*處理\s*\|', l)), '')
+            if open_:
+                print(f"    • {rel}：還有 {len(open_)} 題待人決定（全自動照 A 往下做；人答完後處理）")
+            elif r['questions'] and not done:
+                print(f"    • {rel}：都答完了、還沒處理：下一步 /domain-change 處理事後審查頁（和 A 不同的照第 0 級回頭修改）")
+        # 2026-11-09 起的審查頁：AI 審查者寫了「待人決定」的題目，要收進某一份事後審查頁（來源寫「reviews/<檔名> 問題 n」）
+        sources = ' '.join(src for _, _, src in autos)
+        rdir = os.path.join(self.dir, 'reviews')
+        for name in sorted(os.listdir(rdir)) if os.path.isdir(rdir) else []:
+            if not name.endswith('.md') or name.endswith('_auto.md') or name[:10] < AUTO_REVIEW_SINCE: continue
+            r = self.parse_review(os.path.join(rdir, name))
+            for q in r['questions']:
+                ln, v = q['fields'].get('你的回答', (q['no'], ''))
+                if '待人決定' not in v: continue
+                n += 1
+                num = re.search(r'問題\s*(\d+)', q['title'])
+                if not num or not re.search(rf'reviews/{re.escape(name)}\s*問題\s*{num.group(1)}(?!\d)', sources):
+                    self.red('事後審查', f"reviews/{name}:{ln} {q['title']} 寫了「待人決定」，沒有收進全自動事後審查頁（reviews/<日期>_auto.md，來源寫「reviews/{name} 問題 {num.group(1) if num else 'n'}」）")
+        self.done('事後審查', n, '題', skipped=None if n else '沒有事後審查頁，也沒有待人決定的題目')
+
+    EXPECTED_CHANGE = re.compile(r'^(\d{4}-\d{2}-\d{2})\s+(.+?)[：:](.+?)；\s*種類[：:]\s*(\S+?)；\s*依據[：:]\s*(.+)$')
+
+    def check_expected_changes(self):
+        """黃金案例「預期結果修改」（docs/02 ⑥，先試用）：寫出日期、修改者、原答案 → 新答案、種類（算錯、輸入補齊）與依據；
+        依據不能是被驗證的設計（R、D、X、UC 編號）；設計錯了改設計，不改預期結果。AI 改的要收進事後審查頁。"""
+        print("\n[預期結果修改] 黃金案例改預期結果要寫種類與依據，依據不能是被驗證的設計；AI 改的收進事後審查頁")
+        path = os.path.join(self.dir, '06_evidence', 'golden_cases.md')
+        if not os.path.exists(path):
+            return self.done('預期結果修改', 0, '', skipped='沒有 golden_cases.md')
+        sources = ' '.join(src for _, _, src in self.auto_reviews())
+        n = 0
+        gc = None
+        for no, h2, h3, line in mb.Doc(path).items:
+            if h2 and re.match(r'GC\d+', h2): gc = h2.split()[0]
+            m = re.match(r'^- 預期結果修改[：:]\s*(.*)$', line or '')
+            if not m or not gc: continue
+            n += 1
+            e = self.EXPECTED_CHANGE.match(m.group(1).strip())
+            if not e:
+                self.red('預期結果修改', f"golden_cases.md:{no} {gc} 的「預期結果修改」要寫成「<日期> <修改者>：③ 原答案 → 新答案；種類：算錯 或 輸入補齊；依據：<inputs/… 或法條>」"); continue
+            date, who, what, kind, basis = e.groups()
+            if kind not in ('算錯', '輸入補齊'):
+                self.red('預期結果修改', f"golden_cases.md:{no} {gc} 的種類是「{kind}」：只能是算錯、輸入補齊（設計錯了改設計，不改預期結果）")
+            if '→' not in what:
+                self.red('預期結果修改', f"golden_cases.md:{no} {gc} 要寫出原答案 → 新答案")
+            if re.search(r'(?<![A-Za-z])(R\d+|D-\d+|X-\d+|UC-\d+)', basis):
+                self.red('預期結果修改', f"golden_cases.md:{no} {gc} 的依據指到被驗證的設計（{basis[:40]}）：預期結果要獨立於設計，依據寫 inputs/ 的原文或法條；是設計錯了就改設計")
+            if who.strip().startswith('AI') and self.run_mode().startswith('全自動') and gc not in sources:
+                self.red('預期結果修改', f"golden_cases.md:{no} {gc} 的預期結果由 AI 修改，沒有收進全自動事後審查頁（來源寫「{gc} 預期結果修改」）")
+        self.done('預期結果修改', n, '筆修改', skipped=None if n else '沒有修改紀錄')
+
+    def check_known_limits(self):
+        """⑥ 設計問題處理成「已知限制」（2026-11-06 起，先試用）：要有重現測試、寫出程式暫時的做法。"""
+        print("\n[已知限制] signoff.md 設計問題處理為「已知限制」的，牽涉或處理寫出重現測試（test_…），實作暫時的做法不空白")
+        if not self.signoff:
+            return self.done('已知限制', 0, '', skipped='沒有 signoff.md')
+        n = 0
+        for h2, h3, header, rows in self.signoff.tables():
+            k = mb.col(header, '處理')
+            if k is None or h2 != '實作時發現的設計問題': continue
+            j, t = mb.col(header, '牽涉'), mb.col(header, '實作暫時的做法')
+            for no, c in rows:
+                if '已知限制' not in c[k]: continue
+                n += 1
+                if not re.search(r'\btest_\w+', c[k] + (c[j] if j is not None else '')):
+                    self.red('已知限制', f"{SIGNOFF}:{no} #{c[0]} 處理為已知限制，但牽涉與處理都沒有重現測試（test_…）")
+                if t is not None and not c[t].strip():
+                    self.red('已知限制', f"{SIGNOFF}:{no} #{c[0]} 處理為已知限制，「實作暫時的做法」沒寫（程式現在怎麼做）")
+        self.done('已知限制', n, '個已知限制')
+
+    def check_api(self):
+        """⑤ 的 api.yaml：讀得進來，$ref 都指得到（AI 不必自己寫 python 驗證，網頁也會擋）。"""
+        print("\n[API] api.yaml 讀得進來；每個 $ref 都指得到（同檔的 #/…，或同資料夾的其他檔案）")
+        path = os.path.join(self.dir, 'api.yaml')
+        rel = self.rel(path)
+        if not os.path.exists(path):
+            return self.done('API', 0, '', skipped='沒有 api.yaml')
+        try:
+            with open(path, encoding='utf-8') as fh:
+                doc = mb.yaml.safe_load(fh)
+        except mb.yaml.YAMLError as e:
+            mark = getattr(e, 'problem_mark', None)
+            where = f"{rel}:{mark.line + 1}" if mark else rel
+            self.red('API', f"{where} 不是合法的 YAML：{getattr(e, 'problem', None) or e}")
+            return self.done('API', 1, '個檔案')
+        cache = {path: doc}
+
+        def resolve(ref):
+            file, _, ptr = ref.partition('#')
+            target = os.path.normpath(os.path.join(self.dir, file)) if file else path
+            if target not in cache:
+                if not os.path.exists(target): return f"找不到檔案 {file}"
+                try:
+                    with open(target, encoding='utf-8') as fh: cache[target] = mb.yaml.safe_load(fh)
+                except mb.yaml.YAMLError: return f"{file} 不是合法的 YAML"
+            o = cache[target]
+            for k in [x for x in ptr.split('/') if x]:
+                k = k.replace('~1', '/').replace('~0', '~')
+                if isinstance(o, dict) and k in o: o = o[k]
+                elif isinstance(o, list) and k.isdigit() and int(k) < len(o): o = o[int(k)]
+                else: return f"沒有「{k}」"
+            return None
+
+        n, bad = 0, {}
+        def walk(o):
+            nonlocal n
+            if isinstance(o, dict):
+                for k, v in o.items():
+                    if k == '$ref' and isinstance(v, str):
+                        n += 1
+                        why = resolve(v)
+                        if why: bad.setdefault(v, why)
+                    else: walk(v)
+            elif isinstance(o, list):
+                for v in o: walk(v)
+        walk(doc)
+        with open(path, encoding='utf-8') as fh: text = fh.read().split('\n')
+        for ref, why in bad.items():
+            no = next((i for i, l in enumerate(text, 1) if ref in l), 0)
+            self.red('API', f"{rel}:{no} 的 $ref {ref} 指不到（{why}）")
+        self.done('API', n or 1, '個 $ref' if n else '個檔案')
+
+    def check_architecture(self):
+        print("\n[架構決定] architecture/DECISIONS.md：ADR 欄位、狀態、背景有出處；平台約定 P1～P13；未凍結的 ⑤ 讀了紀錄"
+              + ("；⑤ 要凍結時沒有待確認的 ADR" if self.freeze else ""))
+        path = os.path.join(self.root, 'architecture', 'DECISIONS.md')
+        rel = 'architecture/DECISIONS.md'
+        if not os.path.exists(path):
+            return self.done('架構決定', 0, '', skipped='沒有 architecture/DECISIONS.md')
+        n, adrs, plat, refs, pending = 0, {}, set(), [], []
+        with open(path, encoding='utf-8') as fh:
+            for no, line in enumerate(fh, 1):
+                if '{{' in line and not line.lstrip().startswith('<!--'):
+                    self.red('架構決定', f"{rel}:{no} 還有範本的佔位符：{line.strip()[:60]}")
+        for h2, h3, header, rows in mb.Doc(path).tables():
+            if (h2 or '').startswith('一') and header[:2] == ['約定', '現況']:
+                for no, c in rows:
+                    n += 1
+                    m = re.match(r'P(\d+)\b', c[0].strip())
+                    if m: plat.add(int(m.group(1)))
+                    v = c[1].strip()
+                    if not self.PLATFORM_STATUS.match(v):
+                        self.red('架構決定', f"{rel}:{no} {c[0]} 的現況「{v}」不是 未定／已採用／不同做法：…／見 ADR-nnn")
+                    refs += [(no, r) for r in re.findall(r'ADR-\d{3}', ' '.join(c[1:]))]
+            m = re.match(r'(ADR-\d{3})', (h3 or '').strip())
+            if m and header[:2] == ['項目', '內容']:
+                aid = m.group(1)
+                if aid in adrs: self.red('架構決定', f"{rel} {aid} 重複")
+                fields = {c[0].strip(): (no, c[1].strip()) for no, c in rows}
+                adrs[aid] = fields
+        missing = sorted(set(range(1, 14)) - plat)
+        if plat and missing:
+            self.red('架構決定', f"{rel}「一、平台約定現況」少了 {'、'.join('P%d' % k for k in missing)}")
+        for aid, f in adrs.items():
+            n += 1
+            for k in self.ADR_FIELDS:
+                if not f.get(k, (0, ''))[1]:
+                    self.red('架構決定', f"{rel} {aid} 的「{k}」{'沒有這一欄' if k not in f else '沒填'}")
+            no, st = f.get('狀態', (0, ''))
+            m = re.match(r'^已取代[：:]\s*(ADR-\d{3})$', st)
+            if st and st not in ('暫定', '採用') and not m:
+                self.red('架構決定', f"{rel}:{no} {aid} 的狀態「{st}」不是 暫定／採用／已取代: ADR-nnn")
+            if m: refs.append((no, m.group(1)))
+            no, bg = f.get('背景與訊號', (0, ''))
+            if bg and '沒有訊號，用預設' not in bg and not re.search(r'\.md\b|PLAN|D-\d+', bg):
+                self.red('架構決定', f"{rel}:{no} {aid} 的「背景與訊號」沒有寫交付物的檔名與編號，也沒寫「沒有訊號，用預設」")
+            no, who = f.get('提出／同意', (0, ''))
+            if '待確認' in who: pending.append((f"{rel}:{no} {aid}", aid, f.get('判斷', (0, ''))[1]))
+        for no, r in refs:
+            if r not in adrs: self.red('架構決定', f"{rel}:{no} 引用的 {r} 不存在")
+        d5 = self.docs.get('05_mapping.md')
+        if d5:
+            status, inputs = self.header_of(d5)
+            n += 1
+            if status and not status.startswith('已凍結') and (not inputs or 'architecture/DECISIONS.md' not in inputs[1]):
+                self.red('架構決定', f"05_mapping.md:{inputs[0] if inputs else 1} 「讀取的輸入」沒有 architecture/DECISIONS.md @ <commit>")
+            if pending:
+                # ⑤ 要用的 ADR（docs/01 ⑤）：⑤ 有引用的，以及判斷 S1～S5（資料庫、交易、同步、讀模型、時點）的；其他的不擋本切片
+                text5 = '\n'.join(l or '' for _, _, _, l in d5.items)
+                for where, aid, judge in pending:
+                    used = aid in text5 or re.match(r'^S[1-5]\b', judge)
+                    if self.freeze and status == '待檢查' and used:
+                        self.red('架構決定', f"{where} 還是待確認：⑤ 要凍結，⑤ 用到的 ADR 要先由架構負責人同意")
+                    else:
+                        print(f"    • {where} 待確認")
+            if status and not status.startswith('已凍結'):
+                n += self.check_s1_mapping(adrs, d5)
+        self.done('架構決定', n, '個 ADR、約定與 ⑤ 檔頭')
+
+    NATURES = ('不含個資', '可識別個人', '特種個資')   # docs/03 P11 資料性質（2026-11-04，T26）
+
+    def data_nature_policy(self):
+        """architecture/DECISIONS.md 第一區「P11 資料性質」：None（沒有紀錄）／'未定'／'已採用'／'不處理'。"""
+        path = os.path.join(self.root, 'architecture', 'DECISIONS.md')
+        if not os.path.exists(path): return None
+        for h2, h3, header, rows in mb.Doc(path).tables():
+            if (h2 or '').startswith('一') and header[:2] == ['約定', '現況']:
+                for no, c in rows:
+                    if re.match(r'P11\s*資料性質', c[0].strip()):
+                        v = c[1].strip()
+                        if v == '已採用': return '已採用'
+                        if v.startswith('不同做法'): return '不處理'
+                        return '未定'
+        return '未定'
+
+    def check_data_nature(self):
+        print("\n[資料性質] 處理個資的平台（P11 資料性質 已採用），② 新增的每個屬性都標 [性質: 不含個資／可識別個人／特種個資]")
+        d = self.docs.get('02_entities.md')
+        if not d: return self.done('資料性質', 0, '', skipped='沒有 02_entities.md')
+        policy = self.data_nature_policy()
+        if policy is None:
+            status, _ = self.header_of(d)
+            if status and not status.startswith('已凍結'):   # ② 開始前要有初判（docs/01 0.5、/domain-arch 初判第 5 點）；已凍結的舊切片只提醒
+                self.red('資料性質', "沒有 architecture/DECISIONS.md：② 開始前先做 /domain-arch 初判，決定 P11 資料性質")
+                return self.done('資料性質', 1, '份 ②')
+            return self.done('資料性質', 0, '', skipped='沒有 architecture/DECISIONS.md')
+        if policy == '不處理': return self.done('資料性質', 0, '', skipped='P11 資料性質：不處理個資')
+        status, _ = self.header_of(d)
+        frozen = bool(status and status.startswith('已凍結'))
+        attrs, in_attrs = [], False
+        for no, h2, h3, line in d.items:
+            if line is None or h2 != '新增':
+                in_attrs = False; continue
+            if re.match(r'^- ', line):
+                in_attrs = bool(re.match(r'^- 主要屬性[：:]', line)); continue
+            m = re.match(r'^\s{2,}- `([A-Za-z][A-Za-z0-9_]*)', line)
+            if in_attrs and m: attrs.append((no, h3, m.group(1), line))
+        if not attrs: return self.done('資料性質', 0, '')
+        if policy == '未定':
+            msg = "architecture/DECISIONS.md「P11 資料性質」還沒決定（沒有這一列或是未定）：② 開始前要決定，用 /domain-arch 問人"
+            if frozen: print(f"    • {msg}（② 已凍結，只提醒）"); return self.done('資料性質', len(attrs), '個屬性')
+            self.red('資料性質', msg); return self.done('資料性質', len(attrs), '個屬性')
+        missing = []
+        for no, card, name, line in attrs:
+            vals = re.findall(r'(?<!`)\[性質:\s*([^\]]*)\]', line)
+            if not vals: missing.append(f"02_entities.md:{no} {card.split('（')[0].strip()}.{name} 沒有標資料性質")
+            for v in vals:
+                if v.strip() not in self.NATURES:
+                    missing.append(f"02_entities.md:{no} {name} 的「[性質: {v.strip()}]」不是 {'／'.join(self.NATURES)}")
+        if frozen and missing:
+            print(f"    • ② 已凍結，{len(missing)} 處要補標（用 /domain-change 回頭補標，只加標記）：")
+            for m in missing[:10]: print(f"      {m}")
+            if len(missing) > 10: print(f"      …另 {len(missing) - 10} 處")
+        else:
+            for m in missing: self.red('資料性質', m)
+        self.done('資料性質', len(attrs), '個屬性')
+
+    def check_s1_mapping(self, adrs, d5):
+        """S1 的 ADR 列到本切片的規則，⑤ 第三區那一列的說明要引用 ADR（2026-11-03，T05，先試用）。"""
+        s1 = {}
+        for aid, f in adrs.items():
+            if f.get('判斷', (0, ''))[1] != 'S1' or f.get('狀態', (0, ''))[1] not in ('暫定', '採用'): continue
+            for seg in re.split(r'[；;]', self.expand(f.get('背景與訊號', (0, ''))[1])):
+                if re.search(rf'(?<![\w-]){re.escape(self.slice)}/04_rules\.md', seg):
+                    for r in re.findall(r'(?<![A-Za-z0-9])R\d+\b', seg): s1.setdefault(r, set()).add(aid)
+        if not s1: return 0
+        seen = set()
+        for h2, h3, header, rows in d5.tables():
+            if header[:2] != ['規則', '落實位置'] or h3: continue
+            for no, c in rows:
+                ids = set(re.findall(r'(?<![A-Za-z0-9])R\d+\b', self.expand(c[0])))
+                for r in sorted(ids & set(s1)):
+                    seen.add(r)
+                    if not any(a in ' '.join(c[2:]) for a in s1[r]):
+                        self.red('架構決定', f"05_mapping.md:{no} {r} 在 {'、'.join(sorted(s1[r]))}（S1）裡，"
+                                           f"「說明」要寫靠什麼防同時送出並引用 ADR 編號")
+        for r in sorted(set(s1) - seen):
+            self.red('架構決定', f"05_mapping.md 第三區沒有 {r}（{'、'.join(sorted(s1[r]))} 的 S1 規則）")
+        return len(s1)
+
     def run(self):
         self.check_parse()
         self.check_residue(); self.check_cancelled(); self.check_ids(); self.check_glossary()
@@ -1167,7 +1711,8 @@ class Lint:
         self.check_tables(); self.check_placeholders(); self.check_eq_impact(); self.check_out_of_scope()
         self.check_golden(); self.check_late_inputs(); self.check_param_storage(); self.check_chain(); self.check_core_prefix(); self.check_referenced_by()
         self.check_reviews(); self.check_challenge(); self.check_golden_selfcontained(); self.check_user_agreement()
-        self.check_cross_refs(); self.check_requests()
+        self.check_cross_refs(); self.check_requests(); self.check_architecture(); self.check_data_nature(); self.check_api(); self.check_evidence(); self.check_known_limits(); self.check_auto_marks()
+        self.check_auto_review(); self.check_expected_changes()
         self.check_used_in(); self.check_stale_frozen()
         print(f"\n{'='*40}")
         print(f"引用檢查：紅燈 {len(self.fails)} 項、未檢查 {len(self.skipped)} 項")

@@ -1,0 +1,46 @@
+<!-- @dsCard height=300 -->
+<!doctype html>
+<html lang="zh-Hant">
+<head><meta charset="utf-8"><title>Cover</title>
+<style>
+  html, body { margin: 0; background: var(--bg); }
+  .cv { position: relative; width: 960px; height: 300px; overflow: hidden; background: var(--bg); display: flex; align-items: flex-end; box-sizing: border-box; padding: 0 0 36px 44px; }
+  /* 柔光：簡報封面右側的藍、蜜桃光暈，只用 tokens 的顏色 */
+  .glow { position: absolute; inset: 0; background:
+      radial-gradient(180px 140px at 72% 64%, var(--surface), transparent 70%),
+      radial-gradient(300px 240px at 82% 18%, var(--glow-blue), transparent 72%),
+      radial-gradient(260px 200px at 98% 92%, var(--glow-lavender), transparent 70%),
+      radial-gradient(240px 160px at 64% 100%, var(--glow-peach), transparent 72%),
+      radial-gradient(340px 260px at 55% 10%, var(--sky-100), transparent 75%),
+      radial-gradient(420px 200px at 20% 110%, var(--sky-200), transparent 72%); }
+  .cv svg { position: absolute; left: 480px; top: 0; }
+  .arc { fill: none; stroke: var(--surface); stroke-width: 1.5; opacity: .85; }
+  .ray { stroke: var(--surface); stroke-width: 2; opacity: .9; }
+  .txt { position: relative; display: flex; flex-direction: column; gap: 14px; max-width: 440px; }
+  .lm-wordmark b { font-size: 60px; letter-spacing: .3em; margin-right: -.3em; }
+  .lm-wordmark .o { margin-right: .3em; }
+  .lm-wordmark small { font-size: 14px; letter-spacing: .32em; margin-top: 6px; }
+  .tag { margin: 0; font-family: var(--font-sans); font-size: 14px; line-height: 1.6; color: var(--ink-2); }
+</style></head>
+<body>
+<div class="cv">
+  <div class="glow" aria-hidden="true"></div>
+  <svg width="480" height="300" viewBox="0 0 480 300" aria-hidden="true">
+    <!--
+      blocks: soft light fields taken from the deck cover background — glow-blue, glow-lavender, glow-peach, sky-100, sky-200, a surface-white light source
+      arrangement: light pooled at the top-right and bottom, fading into the ground toward the name
+      pattern: literal motif (light) → three sweeping arcs and one vertical ray in surface, like the deck cover's light lines
+      steps & radii: arcs at radius 192 / 240 / 288 (space-12 multiples) from a centre below the cover
+    -->
+    <circle class="arc" cx="250" cy="520" r="288"/>
+    <circle class="arc" cx="250" cy="520" r="336"/>
+    <circle class="arc" cx="250" cy="520" r="384"/>
+    <line class="ray" x1="214" y1="0" x2="214" y2="300"/>
+  </svg>
+  <div class="txt">
+    <a class="lm-wordmark" aria-label="Lumori Domain 設計"><b><span>LUM</span><span class="o" aria-hidden="true"></span><span>RI</span></b><small>DOMAIN 設計</small></a>
+    <p class="tag">白底、深藍字、一個藍色重點、淡彩分類、柔光點綴。</p>
+  </div>
+</div>
+</body>
+</html>

@@ -3,3 +3,6 @@ sean_ontology_conversation
 SeanHRSystemWay
 Sean會議記錄
 sean-materials
+
+# headless Chrome 測試用的設定檔（截圖、網頁測試時產生）
+domain-design-web/chrome-prof*/

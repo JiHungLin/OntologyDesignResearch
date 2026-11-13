@@ -8,6 +8,16 @@
 
 ## 怎麼用
 
+**需要先裝好**
+
+| 依賴 | 用途 | 開發時測試的版本 |
+|---|---|---|
+| [Claude Code](https://docs.claude.com/en/docs/claude-code/overview)（`claude` 指令，已登入） | 跑工具包的規則與 skills | 2.1.321 |
+| Python 3.10 以上 | 工具包的檢查工具（`tools/lint.py`、`tools/check.py`…）與全自動跑步器 | 3.10.12 |
+| PyYAML（`pip install pyyaml`） | `tools/check.py`、`tools/check_env.py` 讀 YAML | 6.0.2 |
+| git | 每一步凍結時 commit、打 tag | 2.34.1 |
+| Docker（含 Compose） | 只有第 ⑥ 步需要：實作在隔離的驗證環境裡跑 | 29.4.3 |
+
 **1. 把工具包複製到一個新的 repo**
 
 複製的是 `domain-design-kit/` 資料夾**裡面的東西**，要放在新 repo 的**最上層**：
@@ -32,6 +42,49 @@ claude
 AI 會問你問題、找資料、和你一起決定分成哪幾段來做，每做完一步就停下來等你審查。之後說「繼續」「現在做到哪？」「審查好了」「專家回覆了：……」就行。
 
 更多說法和你要負責的事，見 [`domain-design-kit/README.md`](domain-design-kit/README.md)。
+
+---
+
+## 用網頁操作（web-ui）
+
+不想在終端機打字，可以改用網頁：每個「輪到 AI」的地方是一個按鈕，AI 在背景跑；審查頁的題目變成選擇題卡片，模型與狀態圖畫成圖。網頁只是操作介面，設計內容都在設計 repo 的檔案裡，關掉網頁照樣能用終端機繼續。
+
+**需要**：上面「需要先裝好」的全部，加上 Chrome 或 Firefox 的近期版本。網頁另外用到的 Python 套件（FastAPI、Uvicorn、Pydantic）在下一步安裝，版本固定在 [`requirements.txt`](domain-design-web/requirements.txt)。
+
+**1. 安裝**
+
+```bash
+cd domain-design-web
+pip install -r requirements.txt
+```
+
+**2. 啟動**
+
+```bash
+# 新的 domain：在空資料夾建立設計 repo（會複製工具包、git init）
+python3 server.py --repo ~/projects/hr-domain-design --init
+
+# 已有的設計 repo（例如照上面「怎麼用」複製出來的）
+python3 server.py --repo ~/projects/hr-domain-design
+
+# 換 port，或讓同一個網路的其他電腦也能開
+python3 server.py --repo ~/projects/hr-domain-design --port 8768 --host 0.0.0.0
+```
+
+打開 http://127.0.0.1:8765/ （預設 port 8765）。用 `--host 0.0.0.0` 時，終端機會列出區網網址。網頁**沒有登入機制**，同一個網路的人都能打開、叫 AI 修改設計 repo，只在信任的網路上用。
+
+**3. 照總覽的大按鈕走**
+
+總覽最上面一律寫著「現在輪到誰、做什麼」，照著按就好：
+
+1. **主題草案**：用自己的話寫想做什麼、給誰用，交給 AI 規劃。
+2. **規劃**：補資料、看推想草稿、同意切片地圖。
+3. **一條一條切片**：每一步交給 AI 產出；輪到你時，在審查頁一題一題作答、算黃金案例、抽查、簽名，再請 AI 凍結。
+4. **專家問題**：可以複製給專家；專家回覆了，貼上原話交給 AI。
+
+**全自動**（先試用）：在「規劃」把執行模式切成全自動後，左側會出現「全自動」頁。AI 會一路做完所有切片，人的關卡由 AI 代答，不能自己決定的留在「全自動留給你的決定」。預設設定：每條只做到 ⑤、每 3 條停一次、最多 200 圈。碰到用量上限會等到重置後接著跑。
+
+畫面、全自動的細節與 API 見 [`domain-design-web/README.md`](domain-design-web/README.md)。
 
 ---
 

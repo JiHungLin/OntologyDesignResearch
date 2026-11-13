@@ -11,6 +11,9 @@ DOCS = {
     '平台架構約定.md': 'docs/03_平台架構約定.md',
     'Domain設計心法.md': 'docs/04_Domain設計心法.md',
     '本體論設計指南.md': 'docs/05_本體論設計指南.md',
+    '架構決策指南.md': 'docs/06_架構決策指南.md',
+    '資安設計指南.md': 'docs/07_資安設計指南.md',
+    '舊專案相容.md': 'docs/08_舊專案相容.md',
 }
 STEPS = ['① 範圍與驗收問題', '② 名詞盤點', '③ 流程與狀態', '④ 規則與限制', '⑤ 投影到實作', '⑥ 跑起來驗證']
 CLASS_RE = re.compile(r'〔(關鍵決定(?:（例外時）)?|修正線索|品質檢查)〕\s*$')  # 完成標準行尾的類別標記
@@ -19,6 +22,16 @@ TEMPLATE_STEP = {
     'templates/slice/03_flows.md': [3], 'templates/slice/04_rules.md': [4],
     'templates/slice/05_mapping.md': [5], 'templates/slice/06_evidence/signoff.md': [6],
 }
+
+OMIT_BLOCK = re.compile(r'^<!-- kit:omit -->\n.*?^<!-- /kit:omit -->\n?', re.S | re.M)   # 標記各占一行：整段
+OMIT = re.compile(r'<!-- kit:omit -->.*?<!-- /kit:omit -->', re.S)                         # 行內：幾句話
+ONLY = re.compile(r'<!-- kit:only (.*?) -->', re.S)
+
+def kit_copy(text):
+    """正本給研究資料夾的人讀，工具包副本給 AI 執行：<!-- kit:omit -->…<!-- /kit:omit --> 包起來的（修改經過、Sean 背景）去掉，
+    <!-- kit:only … --> 換成裡面的文字（只在副本出現的說明）。"""
+    text = ONLY.sub(lambda m: m.group(1).strip(), OMIT.sub('', OMIT_BLOCK.sub('', text)))
+    return re.sub(r'\n{3,}', '\n\n', text)
 
 def checklists(text):
     out = {}
@@ -42,7 +55,10 @@ def main():
     os.chdir(HERE)
     for src, dst in DOCS.items():
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        shutil.copyfile(os.path.join(SRC, src), dst)
+        with open(os.path.join(SRC, src), encoding='utf-8') as f:
+            text = kit_copy(f.read())
+        with open(dst, 'w', encoding='utf-8') as f:
+            f.write(text)
     cl = checklists(open(os.path.join(SRC, '團隊開發流程_精簡版.md'), encoding='utf-8').read())
     pat = re.compile(r'(<!-- CHECKLIST:START -->\n)(?:.*?\n)?(<!-- CHECKLIST:END -->)', re.S)
     for path, steps in TEMPLATE_STEP.items():

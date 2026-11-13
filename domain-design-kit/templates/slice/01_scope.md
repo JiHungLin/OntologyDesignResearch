@@ -7,7 +7,7 @@
 | 狀態 | 草稿 |
 | 版本 | （凍結後填 tag，例：{{切片}}/01-v1） |
 | 產出者 | AI（Claude）＋ |
-| 讀取的輸入 | 訪談紀錄：；既有 User Story：；core/ @ <commit> |
+| 讀取的輸入 | 訪談紀錄：；既有 User Story：；core/ @ <commit>（第一條切片的 core/ 是剛從範本建立、還沒 commit 的，寫「core/（空，第一條切片）」） |
 
 ## 範圍
 - 切片情境：

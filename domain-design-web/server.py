@@ -1,0 +1,721 @@
+#!/usr/bin/env python3
+"""Domain 設計流程網頁：從主題草案、規劃、開切片到每一步的審查與凍結。
+用法：python3 server.py --repo <設計 repo> [--port 8765] [--host 0.0.0.0]
+      python3 server.py --repo <空資料夾> --init   # 建立新的設計 repo（複製工具包、git init）
+只綁 127.0.0.1，單人在本機使用。"""
+import argparse
+import base64
+import json
+from datetime import datetime
+import os
+import re
+import shutil
+import subprocess
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+import autorun
+import core_view
+import evidence
+import kit
+import flows
+import model
+import project
+import review
+import sessions
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+app = FastAPI(title='Domain 設計流程網頁')
+app.mount('/static', StaticFiles(directory=os.path.join(HERE, 'static')), name='static')
+
+
+@app.middleware('http')
+async def revalidate(request, call_next):
+    # 頁面與 static/js 的模組改了要馬上生效：瀏覽器每次先問（沒改回 304，不重抓）
+    resp = await call_next(request)
+    if request.url.path == '/' or request.url.path.startswith('/static/'):
+        resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+TEXT_EXT = {'.md', '.txt', '.yaml', '.yml', '.json', '.js', '.csv', '.py', '.log', '.sql', ''}
+# <日期>_<步驟>.md；同一天第二份全自動事後審查頁是 <日期>-2_auto.md（docs/02「全自動事後審查頁」）
+REVIEW_NAME = re.compile(r'^(\d{4}-\d{2}-\d{2})(?:-(?:\d+))?_(.+)\.md$')
+
+
+def _review_order(n):
+    """新到舊排序用：日期、同一天的第幾份（<日期>-2_…）。"""
+    m = re.match(r'^(\d{4}-\d{2}-\d{2})(?:-(\d+))?_', n)
+    return (m.group(1), int(m.group(2) or 1), n) if m else ('', 0, n)
+
+
+@app.get('/')
+def index():
+    return FileResponse(os.path.join(HERE, 'static', 'index.html'))
+
+
+def _no_autorun():
+    # 全自動在跑時，網頁不改設計檔（審查頁作答、接受草稿、開 AI 工作）：兩邊共用同一份工作目錄與 git
+    if autorun.running():
+        raise HTTPException(409, '全自動正在跑（規劃頁看進度），停下來之後才能在網頁上改')
+
+
+def _review_path(rel):
+    p = kit.resolve(rel)
+    if not p or os.sep + 'reviews' + os.sep not in p or not p.endswith('.md'):
+        raise HTTPException(404, '找不到審查頁')
+    return p
+
+
+def _slice_of(path):
+    parts = kit.rel(path).split(os.sep)
+    return parts[1] if len(parts) > 2 and parts[0] == 'slices' else None
+
+
+@app.get('/api/status')
+def status():
+    out = []
+    for s in kit.slices():
+        rdir = os.path.join(kit.repo(), 'slices', s, 'reviews')
+        reviews = []
+        if os.path.isdir(rdir):
+            for n in sorted(os.listdir(rdir), key=_review_order, reverse=True):
+                m = REVIEW_NAME.match(n)
+                if not m:
+                    continue
+                p = os.path.join(rdir, n)
+                try:
+                    r = review.parse(p)
+                    reviews.append({'path': kit.rel(p), 'date': m.group(1), 'step': m.group(2),
+                                    'steps': sorted(_review_steps(m.group(2), r['meta'])),
+                                    'title': r['title'], 'counts': r['counts'], 'auto': r['auto']})
+                except Exception as e:  # 看不懂的審查頁照樣列出，讓人知道
+                    reviews.append({'path': kit.rel(p), 'date': m.group(1), 'step': m.group(2),
+                                    'steps': sorted(_review_steps(m.group(2))), 'title': n, 'error': str(e), 'auto': review.is_auto(p)})
+        out.append({'slice': s, 'reviews': reviews, 'session': sessions.active(s)})
+    return {'repo': kit.repo(), 'slices': out, 'gitignored': sessions.gitignored()}
+
+
+def _auto_review(reviews):
+    """這條切片的全自動事後審查頁（docs/02「全自動事後審查頁」）：還有題目沒答的，或答完還沒處理的那一份；沒有就 None。"""
+    for r in reviews:                       # 新到舊
+        c = r.get('counts')
+        if r.get('auto') and c and (c['questions_open'] or not c.get('processed')):
+            return {'path': r['path'], 'open': c['questions_open'], 'total': c['questions'], 'processed': c.get('processed', False),
+                    'parked': c.get('parked', 0)}
+    return None
+
+
+STEPS = [('01', '範圍', '01_scope.md'), ('02', '名詞', '02_entities.md'), ('03', '流程', '03_flows.md'),
+         ('04', '規則', '04_rules.md'), ('05', '對照', '05_mapping.md'), ('06', '驗收', '06_evidence')]
+
+
+CIRCLED = '①②③④⑤⑥'
+
+
+def _review_steps(step, meta=None):
+    """審查頁涵蓋的步驟。先看「這輪審查的步驟」列出的 ①～⑥（回頭修改的步驟也在這裡）；
+    沒有時看檔名：「02」或「02-05」（合成一份，含中間各步）。檔名只認兩位數，「05-2」的 2 是第 2 份，不是第 ② 步。"""
+    v = next((m['value'] for m in meta or [] if m['key'] == '這輪審查的步驟'), '')
+    got = {CIRCLED.index(c) + 1 for c in re.findall(r'(?:^|[；;、，,]\s*)([①-⑥])', v)}
+    if got:
+        return got
+    nums = [int(x) for x in re.findall(r'(?<!\d)\d{2}(?!\d)', step)]
+    return set(range(nums[0], nums[-1] + 1)) if nums else set()
+
+
+def _tags(slice_name):
+    try:
+        out = subprocess.run(['git', '-C', kit.repo(), 'tag', '-l', f'{slice_name}/*'],
+                             capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return out.split()
+
+
+@app.get('/api/home')
+def home(slice: str):
+    if slice not in kit.slices():
+        raise HTTPException(404, f'沒有這條切片：{slice}')
+    st = status()
+    s = next(x for x in st['slices'] if x['slice'] == slice)
+    current = next((r for r in s['reviews'] if not r.get('auto') and r.get('counts') and r['counts']['open']), None)
+    on = set(current['steps']) if current else set()
+    steps = project.steps(slice)
+    levels = []
+    for x in steps:
+        state = ('review' if x['n'] in on else 'frozen' if x['status'].startswith('已凍結')
+                 else 'freezing' if x['status'] == '凍結中' else 'wait' if x['status'] == '待檢查' else 'draft' if x['status'] != '未開始' else 'locked')
+        levels.append({'n': x['n'], 'name': x['name'], 'state': state, 'status': x['status'], 'tag': x['version']})
+    nxt = project.next_step(steps)
+    eqs = project.eqs(slice)
+    out = {'slice': slice, 'levels': levels, 'reviews': s['reviews'], 'current': None,
+           'next': nxt, 'eqs': eqs, 'eq_open': len([e for e in eqs if e.get('狀態') != '已回覆']),
+           'session': s['session'], 'auto_review': _auto_review(s['reviews'])}
+    if current:
+        r = get_review(current['path'])
+        out['current'] = {'path': r['path'], 'title': r['title'], 'step': current['step'], 'steps': current['steps'], 'counts': r['counts'],
+                          'meta': r['meta'], 'model': bool(r.get('model'))}
+    return out
+
+
+# ---- 整個 domain：主題草案 → 規劃 → 切片 ----
+
+def _auto_reviewed(st, slices):
+    """全自動停下來之後：這次（從開始到停）AI 代答過的審查頁，給總覽列出來讓人事後看；在跑或沒跑過是 []。"""
+    if st.get('running') or not st.get('started'):
+        return []
+    try:
+        since = datetime.fromisoformat(st['started']).timestamp()
+    except ValueError:
+        return []
+    out = []
+    for s in slices:
+        for r in s.get('reviews', []):
+            p = os.path.join(kit.repo(), r['path'])
+            if not r.get('auto') and os.path.exists(p) and os.path.getmtime(p) >= since:
+                out.append({'slice': s['slice'], 'path': r['path'], 'title': r.get('title', ''), 'steps': r.get('steps', [])})
+    return out
+
+
+@app.get('/api/project')
+def get_project():
+    p = project.plan()
+    slices = []
+    st_all, au = status(), autorun.state()
+    for sl in kit.slices():
+        steps = project.steps(sl)
+        st = next((x for x in st_all['slices'] if x['slice'] == sl), {})
+        cur = next((r for r in st.get('reviews', []) if not r.get('auto') and r.get('counts') and r['counts']['open']), None)
+        eqs = project.eqs(sl)
+        # 全部作答完、這幾步還沒凍結：左側仍留審查頁的入口，想改答案回得去
+        last = next((r for r in st.get('reviews', []) if not r.get('auto')), None)
+        answered = last if last and not cur and last.get('counts') and any(
+            not x['status'].startswith('已凍結') for x in steps if x['n'] in last.get('steps', [])) else None
+        slices.append({'slice': sl, 'steps': steps, 'next': project.next_step(steps), 'review': cur, 'answered': answered,
+                       'eq_open': len([e for e in eqs if e.get('狀態') != '已回覆']),
+                       'eq_answered': len([e for e in eqs if e.get('狀態') == '已回覆' and not e.get('處理')]),
+                       'session': sessions.active(sl), 'files': project.slice_files(sl),
+                       'auto_review': _auto_review(st.get('reviews', []))})
+    return {'repo': kit.repo(), 'gitignored': sessions.gitignored(), 'topic': project.topic(),
+            'plan': p, 'sketch': project.sketch(), 'drafts': project.drafts(), 'inputs': project.inputs(),
+            'core': project.files_under('core'),
+            'slices': slices, 'plan_session': sessions.active('_plan'), 'autorun': au,
+            'auto_reviewed': _auto_reviewed(au, st_all['slices'])}
+
+
+class Topic(BaseModel):
+    fields: dict
+
+
+@app.post('/api/topic')
+def post_topic(t: Topic):
+    try:
+        return {'path': project.write_topic({k: str(v) for k, v in t.fields.items()})}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class NewInput(BaseModel):
+    folder: str = 'shared'
+    name: str
+    text: str = ''
+    b64: str = ''
+
+
+@app.post('/api/inputs')
+def post_input(n: NewInput):
+    try:
+        if n.b64:
+            return {'path': project.add_upload(n.folder, n.name, base64.b64decode(n.b64))}
+        if not n.text.strip():
+            raise ValueError('內容是空的')
+        return {'path': project.add_input(n.folder, n.name, n.text)}
+    except FileExistsError as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class Accept(BaseModel):
+    path: str
+    who: str
+    digest: str = ''
+
+
+@app.post('/api/draft/accept')
+def post_accept(a: Accept):
+    _no_autorun()
+    if not a.who.strip() or re.fullmatch(r'(?i)ai|claude', a.who.strip()):
+        raise HTTPException(400, '接受者要寫人的名字')
+    try:
+        return {'digest': project.accept_draft(a.path, a.who.strip(), a.digest or None)}
+    except review.Conflict:
+        raise HTTPException(409, '草稿在你打開之後被改過，請重新載入')
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class Mode(BaseModel):
+    mode: str
+    who: str
+
+
+@app.post('/api/plan/mode')
+def post_mode(a: Mode):
+    _no_autorun()   # 跑的時候用「停止」：改執行模式會寫 PLAN.md、CHANGELOG，和這一圈的 AI 同時改
+    if not a.who.strip() or re.fullmatch(r'(?i)ai|claude', a.who.strip()):
+        raise HTTPException(400, '要寫人的名字')
+    try:
+        return {'mode': project.set_mode(a.mode, a.who.strip())}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+# ---- 全自動跑步器（tools/auto_run.py）：開始、停止、中斷、進度 ----
+
+@app.get('/api/auto')
+def get_auto(page: int = 1):
+    rows, total = autorun.rounds(page)
+    return {'state': autorun.state(), 'rounds': rows, 'total': total, 'page': max(page, 1), 'per': autorun.PER_PAGE,
+            'denied': autorun.denied()}
+
+
+class AutoStart(BaseModel):
+    max_steps: int = 40
+    until_design_done: bool = True
+    stop_every: Optional[int] = None    # 累計幾條切片 ⑤ 凍結停一次；沒給時照 until_design_done（1 或 0）
+    design_only: bool = False           # 只做到 ⑤
+
+
+@app.post('/api/auto/start')
+def post_auto_start(a: AutoStart):
+    try:
+        every = a.stop_every if a.stop_every is not None else (1 if a.until_design_done else 0)
+        return autorun.start(max(1, min(a.max_steps, 1000)), max(0, every), a.design_only)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.post('/api/auto/{what}')
+def post_auto_stop(what: str):
+    if what not in ('stop', 'interrupt'):
+        raise HTTPException(404, '沒有這個動作')
+    try:
+        (autorun.stop if what == 'stop' else autorun.interrupt)()
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    return {'state': autorun.state()}
+
+
+@app.get('/api/auto/events')
+def get_auto_events(log: str, after: int = 0):
+    try:
+        return autorun.events(log, after)
+    except KeyError:
+        raise HTTPException(404, '找不到這一圈的紀錄')
+
+
+def _criteria(f):
+    """某個交付物的「完成標準（AI 自評）」表：[(行號, [完成標準, 類, AI 自評])]。"""
+    mb = kit.md2build()
+    rows = []
+    for _, h3, header, trs in mb.Doc(f).tables():
+        if header and header[0].strip() == '完成標準' and (h3 or '').startswith('完成標準'):
+            rows = trs
+    mb.problems.clear()
+    return rows
+
+
+def _spot_items(r, p):
+    """抽查可挑的條目，取出每一條的文字、類別與 AI 自評。兩種寫法：
+    docs/02 的「③ 第 1、4 條；④ 第 2、6 條」（步驟對到該步的交付物），以及舊的「`02_entities.md` 完成標準表…第 1、2 條」。"""
+    hint, sdir = r['spot_hint'], os.path.dirname(os.path.dirname(p))
+    groups = []
+    m = re.search(r'`?([\w.-]+\.md)`?\s*完成標準表[^第]*第\s*([\d、，, ]+)\s*條', hint)
+    if m:
+        groups.append(('', m.group(1), m.group(2)))
+    else:
+        files = {n: fn for n, _, fn in project.STEP_FILES}
+        for c, nums in re.findall(r'([①-⑥])\s*第\s*([\d、，, ]+)\s*條', hint):
+            n = '①②③④⑤⑥'.index(c) + 1
+            groups.append((c, files[n], nums))
+    if not groups and '：' in hint:
+        # AI 沒照格式、直接寫完成標準的文字（「signoff.md『完成標準』中——每筆黃金案例…；每條 P0…」）：
+        # 用文字比對這一輪各步的完成標準，找回是第幾條
+        norm = lambda t: re.sub(r'[\s`「」『』（）()，、。；：:—-]', '', re.sub(r'（[^）]*）|\([^)]*\)', '', t))   # 括號裡的例子常被省略
+        frags = [norm(x) for x in re.split(r'[；;]', hint.split('：', 1)[1].split('——')[-1]) if len(norm(x)) >= 6]
+        steps = _review_steps((REVIEW_NAME.match(os.path.basename(p)) or [None, None, ''])[2], r.get('meta'))
+        files = {n: fn for n, _, fn in project.STEP_FILES}
+        for n in sorted(steps):
+            f = kit.resolve(files[n], sdir)
+            rows = _criteria(f) if f else []
+            hit = [i for i, (_, c) in enumerate(rows, 1) if any(fr[:10] in norm(c[0]) or norm(c[0])[:10] in fr for fr in frags)]
+            if hit:
+                groups.append(('①②③④⑤⑥'[n - 1], files[n], '、'.join(map(str, hit))))
+    out = []
+    for step, fn, nums in groups:
+        f = kit.resolve(fn, sdir)
+        rows = _criteria(f) if f else []
+        for k in re.findall(r'\d+', nums):
+            i = int(k)
+            if 0 < i <= len(rows):
+                cells = rows[i - 1][1]
+                out.append({'id': f'{step}{i}', 'step': step, 'n': i, 'text': cells[0],
+                            'kind': cells[1] if len(cells) > 2 else '', 'self': cells[-1],
+                            'line': rows[i - 1][0], 'file': kit.rel(f),
+                            'evidence': evidence.find(cells[-1], kit.rel(f), cells[0])})
+    return out
+
+
+PAPER_KEYS = ('紙上推演', '紙上判定')
+GOLDEN_KEYS = ('預期結果', '紙上判定', '系統結果', '判定')
+
+
+def _paper(slice_name, keys=PAPER_KEYS):
+    """06_evidence/golden_cases.md 每個案例的「紙上推演」「紙上判定」（AI 依設計推的，人填完審查頁之後才有），給「對答案」用。
+    ⑥ 的審查頁另外拿「預期結果」「系統結果」「判定」，三欄並排（keys）。"""
+    path = os.path.join(kit.repo(), 'slices', slice_name, '06_evidence', 'golden_cases.md')
+    if not os.path.isfile(path):
+        return {}
+    out, cur, key = {}, None, None
+    with open(path, encoding='utf-8') as f:
+        for line in f.read().split('\n'):
+            m = re.match(r'^#{2,3} (GC\d+)', line)
+            if m:
+                cur, key = out.setdefault(m.group(1), {}), None
+                continue
+            if line.startswith('#'):
+                cur = key = None
+                continue
+            if cur is None:
+                continue
+            m = re.match(r'^- ([^：]+)：\s*(.*)$', line)
+            if m:
+                key = m.group(1) if m.group(1) in keys else None
+                if key:
+                    cur[key] = m.group(2).strip()
+            elif key and line.startswith('  ') and line.strip():   # 續行（含 1. 2. 這種逐項）
+                cur[key] = (cur[key] + '\n' + line.strip()).strip()
+    return {k: v for k, v in out.items() if any(x and not x.startswith(('[未執行]', '（')) for x in v.values())}
+
+
+@app.get('/api/review')
+def get_review(path: str):
+    p = _review_path(path)
+    r = review.parse(p)
+    r['path'] = kit.rel(p)
+    r['slice'] = _slice_of(p)
+    r['spot_items'] = _spot_items(r, p)
+    for c in r['confirms']:
+        c['context'] = evidence.context(c['cells'].get('在哪裡', ''), p)
+    paper = _paper(r['slice']) if r['slice'] and r['cases'] else {}
+    for c in r['cases']:
+        c['paper'] = paper.get(c['id'], {})
+    r['model'] = r['flows'] = None
+    steps = _review_steps((REVIEW_NAME.match(os.path.basename(p)) or [None, None, ''])[2], r['meta'])
+    r['steps'] = sorted(steps)
+    if r['slice'] and 2 in steps:
+        m = model.load(r['slice'])
+        if m:
+            r['model'] = model.mark_changed(m, r)
+    # ⑥：黃金案例一列，網頁從 golden_cases.md 拿你算的、設計推出的、系統跑出的並排（docs/02「第 ⑥ 步的審查頁」）
+    r['golden'] = _paper(r['slice'], GOLDEN_KEYS) if r['slice'] and 6 in steps else {}
+    if r['slice'] and 3 in steps:
+        f = flows.load(r['slice'])
+        if f and f['machines']:
+            r['flows'] = flows.mark(f, r)
+    return r
+
+
+class Draft(BaseModel):
+    path: str
+    n: int            # 第幾題（問題 n）
+    rough: str        # 人隨口打的想法
+
+
+DRAFT_PROMPT = """你在幫審查者把隨口說的想法整理成審查頁「你的回答」的一句話。不要修改任何檔案。
+規則：只保留審查者的意思與立場，不加入審查者沒說的決定或理由；意思和某個選項完全一樣時只回那個字母（例：B）；
+否則寫一句完整、看得懂的話（可以兩三句），開頭不用寫「其他：」。需要時可以讀題目指到的檔案理解脈絡。
+只輸出答案本身，不要任何說明、引號或 Markdown。
+
+審查頁：{path}
+題目（問題 {n}）：{question}
+例子：{example}
+背景：{background}
+選項：
+{options}
+來源：{source}
+影響：{impact}
+
+審查者隨口說的：{rough}"""
+
+
+@app.post('/api/review/draft')
+def post_draft(d: Draft):
+    """「AI 幫我整理」：把人隨口打的想法整理成一句答案，給人看過、可以改，再由人送出（這裡不寫檔）。
+    只讀檔（Read、Grep、Glob），全自動在跑時也能用。"""
+    p = _review_path(d.path)
+    if not d.rough.strip():
+        raise HTTPException(400, '先寫一點你的想法')
+    q = next((x for x in review.parse(p)['questions'] if x['n'] == d.n), None)
+    if q is None:
+        raise HTTPException(404, f'找不到問題 {d.n}')
+    prompt = DRAFT_PROMPT.format(path=kit.rel(p), n=d.n, question=q['question'], example=q['example'], background=q['background'],
+                                 options='\n'.join(f"{o['key']}{'（建議）' if o['recommended'] else ''}：{o['text']}" for o in q['options']),
+                                 source=q['source'] or '—', impact=q['impact'] or '—', rough=d.rough.strip())
+    try:
+        out = subprocess.run([sessions.CLAUDE, '-p', prompt, '--output-format', 'json', '--allowedTools', 'Read', 'Grep', 'Glob',
+                              '--disallowedTools', 'Bash', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Agent', 'Task'],
+                             cwd=kit.repo(), capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise HTTPException(502, f'AI 沒有回應：{e}')
+    try:
+        text = (json.loads(out.stdout).get('result') or '').strip()
+    except ValueError:
+        text = ''
+    if not text:
+        raise HTTPException(502, f'AI 沒有整理出答案：{(out.stderr or out.stdout)[-300:]}')
+    return {'text': text}
+
+
+class Answer(BaseModel):
+    path: str
+    digest: str
+    line: int
+    value: str = ''
+    cells: dict = {}
+
+
+def _write(fn, a, *args):
+    p = _review_path(a.path)
+    if not review.is_auto(p):   # 全自動事後審查頁在跑時也能答：跑步器照 A 往下做，答案由之後的一圈處理（docs/01 0.2「待人決定」）
+        _no_autorun()
+    try:
+        return {'digest': fn(p, a.line, *args, expect_digest=a.digest)}
+    except review.Conflict:
+        raise HTTPException(409, '審查頁在你打開之後被改過（可能是 AI 正在修改），請重新載入')
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post('/api/review/answer')
+def post_answer(a: Answer):
+    return _write(review.set_answer, a, a.value)
+
+
+@app.post('/api/review/cells')
+def post_cells(a: Answer):
+    return _write(review.set_cells, a, a.cells)
+
+
+class CaseField(BaseModel):
+    path: str
+    digest: str
+    line: int
+    key: str
+    value: str = ''
+
+
+@app.post('/api/review/case')
+def post_case(a: CaseField):
+    return _write(review.set_case_field, a, a.key, a.value)
+
+
+@app.post('/api/review/spot-row')
+def post_spot_row(a: Answer):
+    p = _review_path(a.path)
+    try:
+        return {'digest': review.add_spot_row(p, expect_digest=a.digest)}
+    except review.Conflict:
+        raise HTTPException(409, '審查頁在你打開之後被改過，請重新載入')
+
+
+@app.get('/api/core')
+def get_core():
+    """共用核心的閱讀頁（唯讀）：名詞、關係、狀態機與事件、規則、詞彙、變更紀錄。"""
+    return core_view.load() or {'path': 'core', 'empty': True}
+
+
+@app.get('/api/file')
+def get_file(path: str, base: str = ''):
+    """查閱檔案（唯讀）。base 是審查頁所在的切片資料夾，用來解析「02_entities.md:150」這種相對路徑。"""
+    p = kit.resolve(path, os.path.join(kit.repo(), base) if base else None)
+    if not p:
+        raise HTTPException(404, f'找不到 {path}')
+    if os.path.splitext(p)[1].lower() not in TEXT_EXT:
+        return {'path': kit.rel(p), 'binary': True, 'size': os.path.getsize(p)}
+    with open(p, encoding='utf-8', errors='replace') as f:
+        text = f.read()
+    return {'path': kit.rel(p), 'text': text, 'digest': review.digest(text)}
+
+
+# ---- AI session ----
+
+@app.get('/api/sessions')
+def list_sessions():
+    items = [dict(s, running=sessions.busy(s['id'])) for s in sessions.load()]
+    return {'sessions': items, 'gitignored': sessions.gitignored()}
+
+
+@app.get('/api/handoff')
+def get_handoff(slice: str, purpose: str, review: str = ''):
+    return {'text': sessions.handoff(slice, purpose, review or None)}
+
+
+class NewSession(BaseModel):
+    slice: str
+    purpose: str
+    handoff: str
+
+
+@app.post('/api/sessions')
+def new_session(n: NewSession):
+    planned = [x.get('切片', '') for x in (project.plan() or {}).get('slices', [])]
+    if n.slice != '_plan' and n.slice not in kit.slices() and n.slice not in planned:
+        raise HTTPException(400, f'沒有這條切片：{n.slice}')
+    busy = [x for x in project.in_progress() if x != n.slice]
+    if n.slice != '_plan' and n.slice not in kit.slices() and busy:
+        raise HTTPException(409, f'{"、".join(busy)} 還沒做完（①～⑤ 還沒都凍結）。網頁一次只做一條切片，做完再開下一條')
+    return sessions.create(n.slice, n.purpose, n.handoff)
+
+
+@app.post('/api/sessions/{sid}/end')
+def end_session(sid: str):
+    sessions.end(sid)
+    return {'ok': True}
+
+
+class Message(BaseModel):
+    text: str
+
+
+@app.post('/api/sessions/{sid}/send')
+async def send(sid: str, m: Message):
+    """在背景交給 AI；進度用 /events 取（重新整理頁面也接得回來）。"""
+    _no_autorun()
+    try:
+        sessions.start(sid, m.text)
+    except KeyError:
+        raise HTTPException(404, '找不到這個 session')
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    return {'ok': True}
+
+
+@app.get('/api/sessions/{sid}/events')
+def get_events(sid: str, after: int = 0):
+    if sessions.get(sid) is None:
+        raise HTTPException(404, '找不到這個 session')
+    return sessions.events(sid, after)
+
+
+@app.get('/api/sessions/{sid}/approvals')
+def get_approvals(sid: str):
+    """AI 在等人核准的指令（第 ⑥ 步的實作指令等，docs/01 ⑥「實作指令與執行紀錄」）。"""
+    if sessions.get(sid) is None:
+        raise HTTPException(404, '找不到這個 session')
+    return {'pending': sessions.pending_approvals(sid)}
+
+
+class Decision(BaseModel):
+    allow: bool
+    message: str = ''
+    by: str = ''
+
+
+@app.post('/api/sessions/{sid}/approvals/{rid}')
+def post_approval(sid: str, rid: str, d: Decision):
+    if sessions.get(sid) is None:
+        raise HTTPException(404, '找不到這個 session')
+    try:
+        return sessions.decide_approval(sid, rid, d.allow, d.message.strip(), d.by.strip())
+    except KeyError:
+        raise HTTPException(404, '找不到這個核准請求（可能已經逾時）')
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+
+
+KIT = os.path.join(HERE, '..', 'domain-design-kit')
+
+
+def init_repo(path):
+    """建立新的設計 repo：複製工具包的檔案（照 CLAUDE.md 同步工具包的清單）、建立 slices/ 與 inputs/、git init、初始 commit。"""
+    path = os.path.realpath(path)
+    if os.path.isdir(path) and [n for n in os.listdir(path) if not n.startswith('.')]:
+        raise SystemExit(f'{path} 不是空的資料夾')
+    files = subprocess.run(['git', '-c', 'core.quotepath=off', 'ls-files', '--', 'CLAUDE.md', 'README.md', '.gitignore',
+                            'docs', 'templates', 'tools', '.claude'], cwd=KIT, capture_output=True, text=True, check=True).stdout.split('\n')
+    for f in filter(None, files):
+        dst = os.path.join(path, f)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(os.path.join(KIT, f), dst)
+    for d in ('slices', 'inputs/shared', 'inputs/research', 'inputs/drafts'):
+        os.makedirs(os.path.join(path, d), exist_ok=True)
+        open(os.path.join(path, d, '.gitkeep'), 'a').close()
+    with open(os.path.join(path, '.gitignore'), 'a', encoding='utf-8') as f:
+        f.write('\n# 流程網頁的 AI session 登記表與紀錄（不是設計內容）\n.domain-web/\n')
+    subprocess.run(['git', 'init', '-q'], cwd=path, check=True)
+    # 初始 commit：之後凍結打 tag、AI commit 都有起點。沒設定 git 使用者時只提醒，不中斷
+    subprocess.run(['git', 'add', '-A'], cwd=path, check=True)
+    r = subprocess.run(['git', 'commit', '-q', '-m', '建立設計 repo：複製設計工具包'], cwd=path, capture_output=True, text=True)
+    if r.returncode:
+        print(f'初始 commit 沒做成（{(r.stderr or r.stdout).strip()}）；設定好 git 使用者後自己 commit 一次')
+    return path
+
+
+# 虛擬網卡的名稱開頭（Docker、VM、VPN 橋接）；用開頭比對，免得 wlo1 這類無線網卡被「lo」誤判
+VIRTUAL_IF = ('lo', 'docker', 'br-', 'veth', 'virbr', 'vmnet', 'vboxnet', 'vethernet', 'wsl')
+
+
+def lan_addresses():
+    """綁 0.0.0.0 時列出其他電腦可以連的 IPv4 位址：略過沒啟用的與虛擬網卡（Docker、VM）。有 psutil 就逐張網卡看，沒有就用預設路由那張。"""
+    import socket
+    try:
+        import psutil
+    except ImportError:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            try:
+                s.connect(('10.255.255.255', 1))   # 不會真的送出封包，只是讓系統選出預設路由的位址
+                return [s.getsockname()[0]]
+            except OSError:
+                return []
+    stats = psutil.net_if_stats()
+    return [addr.address
+            for name, addrs in psutil.net_if_addrs().items()
+            if name in stats and stats[name].isup and not name.lower().startswith(VIRTUAL_IF)
+            for addr in addrs if addr.family == socket.AF_INET and not addr.address.startswith('127.')]
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--repo', default=os.environ.get('DOMAIN_REPO', os.getcwd()), help='切片 repo（工具包攤平在根目錄）')
+    ap.add_argument('--port', type=int, default=8765)
+    ap.add_argument('--host', default='127.0.0.1',
+                    help='綁定的位址；預設只有本機能開，0.0.0.0 讓同一個網路的其他電腦也能開（沒有登入機制，只在信任的網路上用）')
+    ap.add_argument('--init', action='store_true', help='在 --repo 指定的空資料夾建立新的設計 repo')
+    a = ap.parse_args()
+    if a.init:
+        print(f'已建立設計 repo：{init_repo(a.repo)}')
+    kit.set_repo(a.repo)
+    if not os.path.isdir(os.path.join(kit.repo(), 'slices')) and not os.path.isdir(os.path.join(kit.repo(), 'templates')):
+        ap.error(f'{kit.repo()} 不是設計 repo（沒有 slices/ 也沒有 templates/）；新的 domain 請加 --init')
+    import uvicorn
+    print(f'切片 repo：{kit.repo()}')
+    if a.host in ('0.0.0.0', '::'):
+        print(f'打開 http://127.0.0.1:{a.port}/（本機）')
+        for ip in lan_addresses():
+            print(f'　　 http://{ip}:{a.port}/（同一個網路的其他電腦）')
+        print('注意：同一個網路的人都能打開這個網頁、叫 AI 修改設計 repo；只在信任的網路上使用。')
+    else:
+        print(f'打開 http://{a.host}:{a.port}/')
+    uvicorn.run(app, host=a.host, port=a.port, log_level='warning')
+
+
+if __name__ == '__main__':
+    main()
