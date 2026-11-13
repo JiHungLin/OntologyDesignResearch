@@ -90,7 +90,7 @@ export async function renderHub() {
   const pq = plan ? plan.pending.filter(x => x['狀態'] !== '已回覆' && !x['答覆']).length : 0;
   // 整個專案的五個階段（不是切片的 ①～⑥）：切片各自往前走，每條做到哪裡看下面的切片卡片
   const stage = { start: 0, 'plan-ai': 1, plan: 1, running: N.scope === '_plan' ? 1 : 2, pick: 2, slice: 2, review: 2, verify: 2, done: 4, autodecide: 2, autostopped: 2, auto: plan && plan.agreed ? 2 : 1 }[N.kind];
-  const journey = [['主題草案', ''], ['規劃', '資料、切片地圖、名詞'], ['做切片', '每條 ①～⑤ 設計、⑥ 驗證'],
+  const journey = [['主題草案', '給誰用、要解決什麼'], ['規劃', '資料、切片地圖、名詞'], ['做切片', '每條 ①～⑤ 設計、⑥ 驗證'],
     ['設計完成', '地圖上的切片都完成（含 ⑥）'], ['系統完成', '整合成可以使用的系統（流程還沒定義）']];
 
   let hero;
@@ -167,20 +167,24 @@ export async function renderHub() {
   const doing = started.find(x => x.f.next && x.f.next.n <= 5);   // 一次只做一條：這條做完前不能開新的
   $('#app').innerHTML = `
     <header class="page-head"><div class="label">總覽</div><h1>${esc(topicName(P) || 'Domain 設計')}</h1><p class="lead">從主題草案、規劃到每條切片的六步，現在走到哪裡、輪到誰。</p></header>
-    <nav class="journey" aria-label="專案階段">${journey.map(([j, d], k) => `<div class="${k < stage ? 'done' : k === stage ? 'now' : ''}"><b>${k < stage ? '✓' : '階段 ' + (k + 1)}</b><span>${esc(j)}${d ? `<small>${esc(d)}</small>` : ''}</span></div>`).join('')}</nav>
+    <nav class="journey" aria-label="專案階段">${journey.map(([j, d], k) => `<div class="${k < stage ? 'done' : k === stage ? 'now' : ''}"${k === stage ? ' aria-current="step"' : ''}><b>${k < stage ? '✓' : k + 1}</b><span>${esc(j)}${d ? `<small>${esc(d)}</small>` : ''}</span></div>`).join('')}</nav>
     ${waitingCard('_plan')}
     ${hero}
     ${list.length ? `<section><div class="row spread"><h2 style="margin:0">切片</h2>${plan ? `<a href="#/plan">切片地圖${plan.agreed ? '（已同意）' : '（討論中）'}</a>` : ''}</div>
       ${started.length ? `<div class="slices">${started.map(x => {
         const r = x.row || {};
-        const st = P.autorun && P.autorun.running && (x.f.review || (x.f.next && (x.f.next.n <= 5 || x.f.next.status !== '未開始'))) ? '全自動進行中' : x.f.review ? '輪到你審查' : x.f.session && x.f.session.running ? 'AI 進行中' : !x.f.next ? '完成' : x.f.next.n === 6 ? (x.f.next.status === '未開始' ? '設計完成（待驗證）' : '⑥ 驗證中') : x.f.next.status === '凍結中' ? `${CIRCLED[x.f.next.n]} 凍結中` : `下一關 ${CIRCLED[x.f.next.n]}`;
+        const ar = x.f.auto_review && x.f.auto_review.open;   // 全自動留給你的決定：和側欄一樣顯示在狀態，卡片標成輪到你
+        const turn = x.f.review || ar;
+        const st = P.autorun && P.autorun.running && (x.f.review || (x.f.next && (x.f.next.n <= 5 || x.f.next.status !== '未開始'))) ? '全自動進行中' : x.f.review ? '輪到你審查' : ar ? `${x.f.auto_review.parked ? '擱置中・' : ''}${ar} 題待你決定` : x.f.session && x.f.session.running ? 'AI 進行中' : !x.f.next ? '完成' : x.f.next.n === 6 ? (x.f.next.status === '未開始' ? '設計完成（待驗證）' : '⑥ 驗證中') : x.f.next.status === '凍結中' ? `${CIRCLED[x.f.next.n]} 凍結中` : `下一關 ${CIRCLED[x.f.next.n]}`;
         const sc = r['情境（起點 → 可驗證的結果）'] || '';
-        return `<a class="slice ${x.f.review ? 'turn' : ''}" href="#/s/${enc(x.code)}" title="${esc(sc)}">
-          <span class="row spread"><b>${esc(x.code)}</b><span class="chip ${x.f.review ? 'turn' : ''}">${esc(st)}</span></span>
-          <span class="small clamp3">${scenario(sc)}</span>
+        return `<a class="slice ${turn ? 'turn' : ''}" href="#/s/${enc(x.code)}" title="${esc(sc)}">
+          <span class="slice-head"><b>${esc(x.code)}</b><span class="chip ${turn && st !== '全自動進行中' ? 'turn' : ''}">${esc(st)}</span></span>
+          <span class="slice-scn small clamp3">${scenario(sc)}</span>
           ${miniSteps(x.f)}
-          ${x.f.auto_review ? `<span class="small ${x.f.auto_review.open ? '' : 'muted'}">${x.f.auto_review.open ? `全自動留給你的決定：${x.f.auto_review.open} 題` : '全自動的決定答完了，等 AI 處理'}</span>` : ''}
+          <span class="slice-foot">
           ${x.f.eq_open || x.f.eq_answered ? `<span class="small muted">專家問題：${x.f.eq_open} 題等答覆${x.f.eq_answered ? `、${x.f.eq_answered} 題答覆了待處理` : ''}</span>` : ''}
+          ${x.f.auto_review && !ar ? `<span class="small muted">全自動的決定答完了，等 AI 處理</span>` : ''}
+          </span>
         </a>`;
       }).join('')}</div>` : ''}
       ${waiting.length ? `<div class="sub-h"><h3>還沒開始（${waiting.length}）</h3><span class="small muted">${doing ? `等 ${esc(doing.code)} 做完（①～⑤ 都凍結）才能開始下一條；點一條看地圖上的說明` : `照建議順序；點一條看地圖上的說明${plan && plan.agreed ? '或開始' : ''}`}</span></div>

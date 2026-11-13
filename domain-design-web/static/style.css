@@ -472,19 +472,34 @@ main.wide { max-width: 1640px; }
 
 /* ---- 總覽與規劃 ---- */
 /* 旅程：主題草案 → 規劃 → 做切片 → …，做完綠勾、現在這一格藍框 */
-.journey { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-.journey div { position: relative; display: flex; gap: 10px; align-items: center; background: var(--bg-soft); border: 1px dashed var(--line-strong); border-radius: var(--radius-lg); padding: 10px 14px; color: var(--muted); font-size: 14px; font-weight: 700; }
-.journey div + div::before { content: ''; position: absolute; left: -11px; top: 50%; width: 10px; height: 1px; background: var(--line-strong); }
-.journey b { font-family: Manrope, var(--font-sans); font-size: 12px; font-weight: 800; white-space: nowrap; }
-.journey span { display: flex; flex-direction: column; min-width: 0; }
-.journey small { font-size: 12px; font-weight: 500; color: var(--ink-2); }
-.journey .done { background: var(--ok-soft); border: 1px solid transparent; color: var(--ok-ink); }
-.journey .done small { color: var(--ink-2); }
-.journey .now { background: var(--accent-soft); border: 2px solid var(--accent-strong); padding: 9px 13px; color: var(--accent-strong); box-shadow: var(--shadow-card); }
-.journey .now small { color: var(--ink); }
+/* 專案階段：一條橫向進度線。圓點（✓／編號）→ 名稱 → 一行說明；做完綠、目前藍、之後灰 */
+.journey { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 18px 20px 16px; background: var(--surface-glass); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.journey div { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-right: 14px; min-width: 0; }
+.journey div + div::before { content: ''; position: absolute; top: 13px; left: -100%; width: calc(100% - 34px); margin-left: 30px; height: 2px; border-radius: 1px; background: var(--line); }
+.journey div.done + div::before { background: var(--ok); }
+.journey b { position: relative; z-index: 1; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center; font-family: Manrope, var(--font-sans); font-size: 13px; font-weight: 800; background: var(--surface); border: 1.5px dashed var(--line-strong); color: var(--faint); }
+.journey span { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 15px; font-weight: 700; color: var(--ink-2); line-height: 1.4; }
+.journey small { font-size: 12.5px; font-weight: 500; color: var(--muted); line-height: 1.5; }
+.journey .done b { background: var(--ok); border: 1.5px solid var(--ok); color: #fff; }
+.journey .done span { color: var(--ink); }
+.journey .now b { background: var(--accent-strong); border: 1.5px solid var(--accent-strong); color: #fff; box-shadow: 0 0 0 4px var(--accent-soft); }
+.journey .now span { color: var(--accent-strong); }
+.journey .now small { color: var(--ink-2); }
 .slices { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 20px; margin-top: 16px; }
 .slice { display: flex; flex-direction: column; gap: 12px; background: var(--surface-glass); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 20px 22px; box-shadow: var(--shadow-card); color: var(--ink); text-decoration: none; transition: border-color .15s; }
 .slice.turn { background: var(--turn-soft); border-color: transparent; }
+/* 每張卡同一個骨架：名稱 → 狀態（一律在名稱下一行）→ 情境（固定三行高）→ 六步 → 底部附註（全自動決定、專家問題） */
+.slice-head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.slice-head b { font-size: 17px; line-height: 1.5; max-width: 100%; overflow-wrap: anywhere; }
+.slice-scn { line-height: 1.6; min-height: calc(3 * 1.6em); }
+.slice-foot { display: flex; flex-direction: column; gap: 4px; }
+.slice-foot:has(span) { padding-top: 10px; border-top: 1px solid var(--line); }
+/* 同一列的卡片四段對齊（名稱換行的卡也一樣） */
+@supports (grid-template-rows: subgrid) {
+  .slices { row-gap: 20px; }
+  .slices > .slice { display: grid; grid-row: span 4; grid-template-rows: subgrid; row-gap: 12px; }
+  .slices > .slice > .mini, .slices > .slice > .slice-foot { align-self: start; }
+}
 .scn { display: inline; }
 .scn i { font-style: normal; font-weight: 700; color: var(--accent); margin: 0 4px; }
 .scn .from { font-weight: 400; }
@@ -584,8 +599,13 @@ dialog::backdrop { background: color-mix(in srgb, var(--wordmark-bottom) 40%, tr
 @container page (max-width: 860px) {
   .levels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .level:nth-child(4)::before { display: none; }
-  .journey { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .journey div::before { display: none; }
+  /* 窄畫面改成直的：圓點在左、線往下接 */
+  .journey { grid-template-columns: minmax(0, 1fr); row-gap: 14px; }
+  .journey div { flex-direction: row; align-items: flex-start; gap: 12px; padding-right: 0; }
+  .journey div + div::before { display: none; }
+  .journey div:not(:last-child)::after { content: ''; position: absolute; left: 13px; top: 32px; bottom: -12px; width: 2px; border-radius: 1px; background: var(--line); }
+  .journey div.done:not(:last-child)::after { background: var(--ok); }
+  .journey span { padding-top: 3px; }
 }
 
 @container page (max-width: 680px) {
